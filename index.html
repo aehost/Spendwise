@@ -14,26 +14,24 @@
 :root{
   --bg:#0A0A0F;--card:#13131A;--card2:#1A1A25;--border:#1E1E2E;
   --accent:#6C63FF;--green:#22C55E;--red:#EF4444;--amber:#F59E0B;
-  --cyan:#06B6D4;--pink:#EC4899;--orange:#F97316;
+  --cyan:#06B6D4;--pink:#EC4899;--orange:#F97316;--teal:#10B981;--indigo:#6366F1;
   --text:#F1F1F5;--muted:#6B7280;--muted2:#9CA3AF;
   --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
 }
 html,body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;max-width:430px;margin:0 auto;min-height:100dvh;overflow-x:hidden;}
 input,select,textarea,button{font-family:inherit;color:inherit;}
 button{cursor:pointer;border:none;background:none;}
-*::-webkit-scrollbar{display:none;}
-*{-ms-overflow-style:none;scrollbar-width:none;}
+*::-webkit-scrollbar{display:none;}*{-ms-overflow-style:none;scrollbar-width:none;}
 
-#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:calc(var(--st) + 10px) 20px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
+#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:calc(var(--st)+10px) 20px 10px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
 #statusbar .logo{font-weight:900;font-size:17px;letter-spacing:-0.5px;background:linear-gradient(135deg,#6C63FF,#EC4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 #statusbar .right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);}
 
-#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#0D0D16F0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding:8px 0 calc(var(--sb) + 6px);z-index:100;}
+#nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#0D0D16F0;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding:8px 0 calc(var(--sb)+6px);z-index:100;}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;color:var(--muted);font-size:9px;font-weight:600;padding:4px 0;transition:color 0.2s;letter-spacing:0.3px;}
-.nav-btn.active{color:var(--accent);}
-.nav-btn .ico{font-size:21px;line-height:1;}
+.nav-btn.active{color:var(--accent);}.nav-btn .ico{font-size:20px;line-height:1;}
 
-#app{padding-top:calc(var(--st) + 56px);padding-bottom:calc(var(--sb) + 76px);}
+#app{padding-top:calc(var(--st)+56px);padding-bottom:calc(var(--sb)+76px);}
 .page{display:none;padding:16px 20px;animation:fadeSlide 0.25s ease;}
 .page.active{display:block;}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -43,11 +41,12 @@ button{cursor:pointer;border:none;background:none;}
 .card.cgreen{background:linear-gradient(135deg,#22C55E0D,#22C55E1A);border-color:#22C55E2A;}
 .card.cred{background:linear-gradient(135deg,#EF44440D,#EF44441A);border-color:#EF444430;}
 .card.camber{background:linear-gradient(135deg,#F59E0B0D,#F59E0B1A);border-color:#F59E0B30;}
+.card.cteal{background:linear-gradient(135deg,#10B9810D,#10B9811A);border-color:#10B98130;}
+.card.cindigo{background:linear-gradient(135deg,#6366F10D,#6366F11A);border-color:#6366F130;}
 
 .label{font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);margin-bottom:5px;}
-.bignum{font-size:32px;font-weight:900;letter-spacing:-1.5px;}
+.bignum{font-size:30px;font-weight:900;letter-spacing:-1.5px;}
 .sec-title{font-size:15px;font-weight:700;margin-bottom:12px;letter-spacing:-0.2px;}
-.muted{color:var(--muted);}
 
 .btn{padding:14px 20px;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;border:none;width:100%;text-align:center;transition:opacity 0.15s;display:block;}
 .btn:active{opacity:0.75;}
@@ -55,6 +54,8 @@ button{cursor:pointer;border:none;background:none;}
 .btn-green{background:#22C55E1A;color:var(--green);border:1px solid #22C55E30;}
 .btn-red{background:#EF44441A;color:var(--red);border:1px solid #EF444430;}
 .btn-ghost{background:var(--card2);color:var(--muted2);border:1px solid var(--border);}
+.btn-teal{background:#10B9811A;color:var(--teal);border:1px solid #10B98130;}
+.btn-amber{background:#F59E0B1A;color:var(--amber);border:1px solid #F59E0B30;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:10px;width:auto;display:inline-block;}
 
 .form-group{margin-bottom:13px;}
@@ -62,30 +63,37 @@ button{cursor:pointer;border:none;background:none;}
 .form-input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;}
 .form-input:focus{border-color:var(--accent);}
 select.form-input{-webkit-appearance:none;}
-.form-row{display:flex;gap:10px;}
-.form-row .form-group{flex:1;}
+.form-row{display:flex;gap:10px;}.form-row .form-group{flex:1;}
 
 .tx-item{background:var(--card);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px;margin-bottom:8px;border:1px solid var(--border);}
+.tx-item.pending{border-color:#F59E0B55;background:linear-gradient(135deg,#F59E0B06,#F59E0B10);}
 .tx-icon{width:40px;height:40px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .tx-details{flex:1;min-width:0;}
 .tx-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .tx-meta{font-size:10px;color:var(--muted);margin-top:1px;}
 .tx-amt{font-size:14px;font-weight:700;flex-shrink:0;text-align:right;}
-.waste-tag{font-size:8px;background:#EF444415;color:var(--red);padding:2px 6px;border-radius:5px;display:inline-block;margin-top:2px;}
+.tag{font-size:8px;padding:2px 6px;border-radius:5px;display:inline-block;margin-top:2px;font-weight:700;}
+.tag-waste{background:#EF444415;color:var(--red);}
+.tag-pending{background:#F59E0B15;color:var(--amber);}
+.tag-family{background:#10B98115;color:var(--teal);}
+.tag-loan{background:#6C63FF15;color:var(--accent);}
+.tag-card{background:#EC489915;color:var(--pink);}
 
 .loan-card{background:var(--card);border-radius:16px;padding:16px;margin-bottom:10px;border:1px solid var(--border);}
 .prog-bar{height:5px;background:var(--border);border-radius:99px;overflow:hidden;margin:8px 0;}
 .prog-fill{height:100%;border-radius:99px;}
+.prog-bar-thick{height:8px;background:var(--border);border-radius:99px;overflow:hidden;margin:8px 0;}
 
 .pill{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;}
 .pill-green{background:#22C55E18;color:var(--green);}
 .pill-red{background:#EF444418;color:var(--red);}
 .pill-amber{background:#F59E0B18;color:var(--amber);}
 .pill-blue{background:#3B82F618;color:#3B82F6;}
+.pill-teal{background:#10B98118;color:var(--teal);}
 
 #overlay{position:fixed;inset:0;background:#000000CC;backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:none;align-items:flex-end;justify-content:center;z-index:200;}
 #overlay.show{display:flex;}
-#modal-sheet{background:linear-gradient(160deg,#1C1C2E,#13131A);border-radius:26px 26px 0 0;width:100%;max-width:430px;padding:6px 0 calc(var(--sb) + 28px);border:1px solid #6C63FF33;border-bottom:none;transform:translateY(100%);transition:transform 0.38s cubic-bezier(0.34,1.4,0.64,1);max-height:92vh;overflow-y:auto;}
+#modal-sheet{background:linear-gradient(160deg,#1C1C2E,#13131A);border-radius:26px 26px 0 0;width:100%;max-width:430px;padding:6px 0 calc(var(--sb)+28px);border:1px solid #6C63FF33;border-bottom:none;transform:translateY(100%);transition:transform 0.38s cubic-bezier(0.34,1.4,0.64,1);max-height:92vh;overflow-y:auto;}
 #overlay.show #modal-sheet{transform:translateY(0);}
 .modal-handle{width:36px;height:3.5px;background:#2A2A3E;border-radius:99px;margin:10px auto 18px;}
 .modal-body{padding:0 22px;}
@@ -101,10 +109,8 @@ select.form-input{-webkit-appearance:none;}
 .toggle.on::after{left:21px;}
 
 .insight{background:var(--card);border-radius:13px;padding:13px 15px;margin-bottom:9px;border:1px solid var(--border);}
-
 .chip-scroll{display:flex;gap:7px;overflow-x:auto;padding-bottom:8px;margin-bottom:14px;}
 .chip{padding:5px 13px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;border:1px solid transparent;transition:all 0.15s;background:var(--card);}
-
 .divider{height:1px;background:var(--border);margin:14px 0;}
 
 #toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 22px;border-radius:99px;font-size:12px;font-weight:700;z-index:300;display:none;white-space:nowrap;box-shadow:0 4px 20px #22C55E44;}
@@ -115,87 +121,96 @@ select.form-input{-webkit-appearance:none;}
 .mini-card .val{font-size:20px;font-weight:800;letter-spacing:-0.5px;}
 .mini-card .sub{font-size:10px;color:var(--muted);margin-top:3px;}
 
-.install-banner{background:linear-gradient(135deg,#6C63FF1A,#8B5CF61A);border:1px solid #6C63FF33;border-radius:14px;padding:13px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;}
+.pending-bar{background:linear-gradient(135deg,#F59E0B12,#F59E0B22);border:1px solid #F59E0B44;border-radius:14px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;gap:10px;}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--amber);animation:pulseAnim 1.5s infinite;flex-shrink:0;}
+@keyframes pulseAnim{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.5;transform:scale(0.8)}}
+
+.bill-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);}
+.bill-row:last-child{border-bottom:none;}
+.bill-check{width:24px;height:24px;border-radius:8px;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.2s;flex-shrink:0;font-size:12px;}
+.bill-check.done{background:var(--green);border-color:var(--green);color:#fff;}
+
+.cc-card{background:var(--card);border-radius:18px;padding:16px;margin-bottom:12px;border:1px solid var(--border);}
+.cc-limit-bar{height:6px;background:var(--border);border-radius:99px;overflow:hidden;margin:10px 0;}
+
+.invest-row{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);}
+.invest-row:last-child{border-bottom:none;}
+
+.color-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;}
 </style>
 </head>
 <body>
-
 <div id="statusbar">
   <span class="logo">SpendWise</span>
-  <div class="right">
-    <span>🔒 Private</span>
-    <span id="clock"></span>
-  </div>
+  <div class="right"><span>🔒 Private</span><span id="clock"></span></div>
 </div>
-
 <div id="app">
   <div class="page active" id="page-home"></div>
-  <div class="page" id="page-income"></div>
   <div class="page" id="page-tx"></div>
+  <div class="page" id="page-cards"></div>
   <div class="page" id="page-loans"></div>
-  <div class="page" id="page-analytics"></div>
+  <div class="page" id="page-money"></div>
   <div class="page" id="page-settings"></div>
 </div>
-
 <nav id="nav">
   <button class="nav-btn active" onclick="goTo('home')"><span class="ico">🏠</span>Home</button>
-  <button class="nav-btn" onclick="goTo('income')"><span class="ico">💰</span>Income</button>
   <button class="nav-btn" onclick="goTo('tx')"><span class="ico">💳</span>Spends</button>
+  <button class="nav-btn" onclick="goTo('cards')"><span class="ico">💴</span>Cards</button>
   <button class="nav-btn" onclick="goTo('loans')"><span class="ico">🏦</span>Loans</button>
-  <button class="nav-btn" onclick="goTo('analytics')"><span class="ico">📊</span>Analysis</button>
+  <button class="nav-btn" onclick="goTo('money')"><span class="ico">💹</span>Money</button>
   <button class="nav-btn" onclick="goTo('settings')"><span class="ico">⚙️</span>Settings</button>
 </nav>
-
 <div id="overlay" onclick="maybeClose(event)">
-  <div id="modal-sheet">
-    <div class="modal-handle"></div>
-    <div class="modal-body" id="modal-body"></div>
-  </div>
+  <div id="modal-sheet"><div class="modal-handle"></div><div class="modal-body" id="modal-body"></div></div>
 </div>
-
 <div id="toast"></div>
-
 <script>
-// ═══════════════════════════════════════════════
-// CONSTANTS
-// ═══════════════════════════════════════════════
-const CATS = [
-  {id:'food',     label:'Food & Dining',   icon:'🍽️', color:'#F59E0B'},
-  {id:'fuel',     label:'Fuel',            icon:'⛽',  color:'#F97316'},
-  {id:'shopping', label:'Shopping',        icon:'🛍️', color:'#EC4899'},
-  {id:'bills',    label:'Bills & Utilities',icon:'💡', color:'#06B6D4'},
-  {id:'emi',      label:'EMI / Loan',      icon:'🏦',  color:'#EF4444'},
-  {id:'entertainment',label:'Entertainment',icon:'🎬', color:'#8B5CF6'},
-  {id:'health',   label:'Health',          icon:'💊',  color:'#22C55E'},
-  {id:'travel',   label:'Travel',          icon:'✈️', color:'#3B82F6'},
-  {id:'income',   label:'Income / Salary', icon:'💰',  color:'#22C55E'},
-  {id:'savings',  label:'Savings',         icon:'🏆',  color:'#6C63FF'},
-  {id:'waste',    label:'Wasteful',        icon:'🗑️', color:'#6B7280'},
-  {id:'other',    label:'Other',           icon:'📦',  color:'#9CA3AF'},
+// ── CONSTANTS ────────────────────────────────────────────────
+const CATS=[
+  {id:'food',label:'Food & Dining',icon:'🍽️',color:'#F59E0B'},
+  {id:'fuel',label:'Fuel',icon:'⛽',color:'#F97316'},
+  {id:'shopping',label:'Shopping',icon:'🛍️',color:'#EC4899'},
+  {id:'bills',label:'Bills & Utilities',icon:'💡',color:'#06B6D4'},
+  {id:'emi',label:'EMI / Loan',icon:'🏦',color:'#EF4444'},
+  {id:'entertainment',label:'Entertainment',icon:'🎬',color:'#8B5CF6'},
+  {id:'health',label:'Health',icon:'💊',color:'#22C55E'},
+  {id:'travel',label:'Travel',icon:'✈️',color:'#3B82F6'},
+  {id:'family',label:'Family / Friends',icon:'👨‍👩‍👧',color:'#10B981'},
+  {id:'investment',label:'Investment / SIP',icon:'📈',color:'#6366F1'},
+  {id:'income',label:'Income / Salary',icon:'💰',color:'#22C55E'},
+  {id:'savings',label:'Savings',icon:'🏆',color:'#6C63FF'},
+  {id:'waste',label:'Wasteful',icon:'🗑️',color:'#6B7280'},
+  {id:'other',label:'Other',icon:'📦',color:'#9CA3AF'},
 ];
-
-const DEMO_SMS = [
+const CC_COLORS=['#EC4899','#6C63FF','#F97316','#06B6D4','#22C55E','#EF4444','#F59E0B','#8B5CF6'];
+const LOAN_COLORS=['#EF4444','#F97316','#F59E0B','#06B6D4','#8B5CF6','#EC4899','#3B82F6','#22C55E'];
+const DEMO_SMS=[
   'Rs.450 debited from A/C XX4521 at SWIGGY on 21-05-26. Avail Bal: Rs.12340',
   'INR 14007.00 debited from your RBL account for EMI payment. Bal: Rs.45210',
   'Rs.2500 debited at RELIANCE PETROL on 21-05-26. Avail Bal: Rs.9840',
   'Rs.199 debited from A/C XX4521 at NETFLIX on 21-05-26.',
   'Rs.85000 credited to your account. Employer: TECH CORP. Salary for May 2026.',
   'Rs.1250 debited at AMAZON on 21-05-26. Avail Bal: Rs.8391',
-  'Rs.750 debited at ZOMATO on 21-05-26. Avail Bal: Rs.7641',
-  'Rs.3200 debited at APOLLO PHARMACY on 21-05-26.',
   'Rs.600 debited at UBER on 21-05-26. Avail Bal: Rs.7041',
-  'Rs.10000 debited. Transfer to savings account. Ref: NEFT.',
 ];
 
-const LOAN_COLORS = ['#EF4444','#F97316','#F59E0B','#06B6D4','#8B5CF6','#EC4899','#3B82F6','#22C55E'];
-
-// ═══════════════════════════════════════════════
-// STATE
-// ═══════════════════════════════════════════════
-const DEFAULT = {
-  profile: {name:''},
-  salary: {amount:0, expectedDay:1, history:[]},
-  loans: [
+// ── STATE ────────────────────────────────────────────────────
+const DEFAULT={
+  profile:{name:''},
+  salary:{amount:0,expectedDay:1,history:[]},
+  bankBalance:{amount:0,lastUpdated:''},
+  investments:{angelOne:{monthlyAmount:5000,currentBalance:0,history:[]}},
+  mandatoryBills:[
+    {id:1,name:'Internet',icon:'🌐',amount:799,dueDay:5,paidThisMonth:false},
+    {id:2,name:'Electricity',icon:'💡',amount:0,dueDay:10,paidThisMonth:false},
+    {id:3,name:'Water',icon:'💧',amount:0,dueDay:15,paidThisMonth:false},
+    {id:4,name:'Mobile/Phone',icon:'📱',amount:299,dueDay:1,paidThisMonth:false},
+  ],
+  creditCards:[
+    {id:1,name:'HDFC Regalia',limit:200000,outstanding:45000,color:'#EC4899',dueDay:15,minDue:2250},
+    {id:2,name:'SBI Simply Click',limit:100000,outstanding:12500,color:'#6C63FF',dueDay:20,minDue:625},
+  ],
+  loans:[
     {id:1,name:'RBL Bank',emi:14007,outstanding:270000,rate:22,remaining:22,color:'#EF4444'},
     {id:2,name:'Cred',emi:9624,outstanding:72405,rate:16.5,remaining:7,color:'#EC4899'},
     {id:3,name:'Cred2',emi:5128,outstanding:38584,rate:16.5,remaining:7,color:'#8B5CF6'},
@@ -203,38 +218,40 @@ const DEFAULT = {
     {id:5,name:'ICICI',emi:16527,outstanding:392560,rate:11.25,remaining:27,color:'#F97316'},
     {id:6,name:'Car Loan',emi:35725,outstanding:1068641,rate:8.95,remaining:34,color:'#22C55E'},
   ],
-  transactions: [
-    {id:1,amount:101195,merchant:'All EMIs (May)',category:'emi',date:'2026-05-01',note:'RBL+Cred+Kotak+ICICI+Car',isWaste:false},
-    {id:2,amount:850,merchant:'SWIGGY',category:'food',date:'2026-05-03',note:'Lunch',isWaste:false},
-    {id:3,amount:2500,merchant:'PETROL PUMP',category:'fuel',date:'2026-05-05',note:'',isWaste:false},
-    {id:4,amount:3200,merchant:'AMAZON',category:'shopping',date:'2026-05-08',note:'Shirt',isWaste:false},
-    {id:5,amount:199,merchant:'NETFLIX',category:'entertainment',date:'2026-05-10',note:'',isWaste:false},
-    {id:6,amount:1200,merchant:'APOLLO PHARMACY',category:'health',date:'2026-05-12',note:'',isWaste:false},
-    {id:7,amount:500,merchant:'ELECTRICITY BOARD',category:'bills',date:'2026-05-15',note:'',isWaste:false},
-    {id:8,amount:1500,merchant:'ZOMATO',category:'food',date:'2026-05-18',note:'Party order',isWaste:true},
+  transactions:[
+    {id:1,amount:14007,merchant:'RBL Bank EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:1,creditCardId:null,contactName:''},
+    {id:2,amount:9624,merchant:'Cred EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:2,creditCardId:null,contactName:''},
+    {id:3,amount:20184,merchant:'Kotak EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:4,creditCardId:null,contactName:''},
+    {id:4,amount:16527,merchant:'ICICI EMI',category:'emi',date:'2026-05-02',note:'May EMI',isWaste:false,isPending:false,loanId:5,creditCardId:null,contactName:''},
+    {id:5,amount:35725,merchant:'Car Loan EMI',category:'emi',date:'2026-05-02',note:'May EMI',isWaste:false,isPending:false,loanId:6,creditCardId:null,contactName:''},
+    {id:6,amount:850,merchant:'SWIGGY',category:'food',date:'2026-05-03',note:'Lunch',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
+    {id:7,amount:2500,merchant:'PETROL PUMP',category:'fuel',date:'2026-05-05',note:'',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
+    {id:8,amount:3200,merchant:'AMAZON',category:'shopping',date:'2026-05-08',note:'Shirt',isWaste:false,isPending:false,loanId:null,creditCardId:1,contactName:''},
+    {id:9,amount:1500,merchant:'ZOMATO',category:'food',date:'2026-05-10',note:'Party',isWaste:true,isPending:false,loanId:null,creditCardId:null,contactName:''},
+    {id:10,amount:5000,merchant:'Mom - Monthly',category:'family',date:'2026-05-12',note:'Monthly support',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:'Mom'},
+    {id:11,amount:5000,merchant:'Angel One SIP',category:'investment',date:'2026-05-05',note:'May SIP',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
+    {id:12,amount:1200,merchant:'Unknown Debit',category:'other',date:'2026-05-14',note:'',isWaste:false,isPending:true,loanId:null,creditCardId:null,contactName:''},
   ],
-  budgets:{food:5000,fuel:3000,shopping:5000,bills:2000,entertainment:1500,health:2000,travel:3000,other:2000}
+  budgets:{food:5000,fuel:3000,shopping:5000,bills:2000,entertainment:1500,health:2000,travel:3000,other:2000},
 };
 
-let S = JSON.parse(JSON.stringify(DEFAULT));
-let currentPage = 'home';
-let smsIdx = 0;
-let txFilter = 'all';
-let _smsData = null;
+let S=JSON.parse(JSON.stringify(DEFAULT));
+let currentPage='home';
+let smsIdx=0;
+let txFilter='all';
+let _smsData=null;
 
-function save(){localStorage.setItem('sw_v3',JSON.stringify(S));}
-function load(){try{const d=localStorage.getItem('sw_v3');if(d)S=JSON.parse(d);}catch(e){}}
+function save(){localStorage.setItem('sw_v4',JSON.stringify(S));}
+function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:p.investments||DEFAULT.investments,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards};}}catch(e){}}
 
-// ═══════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════
+// ── HELPERS ──────────────────────────────────────────────────
 function fmt(n){
-  if(Math.abs(n)>=10000000) return '₹'+(n/10000000).toFixed(1)+'Cr';
-  if(Math.abs(n)>=100000)   return '₹'+(n/100000).toFixed(1)+'L';
-  if(Math.abs(n)>=1000)     return '₹'+(n/1000).toFixed(0)+'k';
-  return '₹'+Math.round(n).toLocaleString('en-IN');
+  if(Math.abs(n)>=10000000)return'₹'+(n/10000000).toFixed(1)+'Cr';
+  if(Math.abs(n)>=100000)return'₹'+(n/100000).toFixed(1)+'L';
+  if(Math.abs(n)>=1000)return'₹'+(n/1000).toFixed(0)+'k';
+  return'₹'+Math.round(n).toLocaleString('en-IN');
 }
-function fmtFull(n){return '₹'+Math.round(n).toLocaleString('en-IN');}
+function fmtFull(n){return'₹'+Math.abs(Math.round(n)).toLocaleString('en-IN');}
 function cat(id){return CATS.find(c=>c.id===id)||CATS[CATS.length-1];}
 function today(){return new Date().toISOString().split('T')[0];}
 function thisMonth(){const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;}
@@ -244,24 +261,25 @@ function totalIncome(){return monthTxs().filter(t=>t.category==='income').reduce
 function totalWaste(){return monthTxs().filter(t=>t.isWaste||t.category==='waste').reduce((s,t)=>s+t.amount,0);}
 function emiTotal(){return S.loans.reduce((s,l)=>s+l.emi,0);}
 function salaryThisMonth(){return S.salary.history.find(h=>h.date&&h.date.startsWith(thisMonth()));}
-function daysUntilSalary(){
-  const n=new Date(),t=new Date(n.getFullYear(),n.getMonth(),S.salary.expectedDay);
-  if(t<=n)t.setMonth(t.getMonth()+1);
-  return Math.ceil((t-n)/86400000);
-}
+function daysUntilSalary(){const n=new Date(),t=new Date(n.getFullYear(),n.getMonth(),S.salary.expectedDay);if(t<=n)t.setMonth(t.getMonth()+1);return Math.ceil((t-n)/86400000);}
 function fmtDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});}
+function pendingTxs(){return S.transactions.filter(t=>t.isPending);}
+function totalCCOutstanding(){return S.creditCards.reduce((s,c)=>s+c.outstanding,0);}
+function totalCCLimit(){return S.creditCards.reduce((s,c)=>s+c.limit,0);}
+
 function guessCat(m){
   m=m.toLowerCase();
-  if(/swiggy|zomato|food|restaurant|cafe|pizza|burger|biryani|eat|dine|kfc|mcdonald/.test(m))return'food';
-  if(/petrol|diesel|fuel|pump|hp |ioc|bharat petroleum/.test(m))return'fuel';
-  if(/amazon|flipkart|myntra|ajio|nykaa|meesho|mall|store|shop/.test(m))return'shopping';
-  if(/netflix|hotstar|spotify|prime|youtube|zee5|jiocinema|cinema|movie/.test(m))return'entertainment';
-  if(/apollo|pharmacy|hospital|clinic|medical|health|doctor|dr\./.test(m))return'health';
-  if(/electricity|airtel|jio|bsnl|water|gas|bill|bescom|tneb|ebill/.test(m))return'bills';
-  if(/emi|loan|rbl|icici|kotak|cred|hdfc|sbi|axis|payment|bank/.test(m))return'emi';
-  if(/irctc|ola|uber|rapido|train|flight|travel|mmt|makemytrip/.test(m))return'travel';
+  if(/swiggy|zomato|food|restaurant|cafe|pizza|burger|biryani/.test(m))return'food';
+  if(/petrol|diesel|fuel|pump|hp |ioc|bharat/.test(m))return'fuel';
+  if(/amazon|flipkart|myntra|ajio|nykaa|mall|shop/.test(m))return'shopping';
+  if(/netflix|hotstar|spotify|prime|youtube|cinema|movie/.test(m))return'entertainment';
+  if(/apollo|pharmacy|hospital|clinic|medical|health|doctor/.test(m))return'health';
+  if(/electricity|airtel|jio|bsnl|water|gas|bill|bescom|tneb/.test(m))return'bills';
+  if(/emi|loan|rbl|icici|kotak|cred|hdfc|sbi|axis/.test(m))return'emi';
+  if(/irctc|ola|uber|rapido|train|flight|travel|mmt/.test(m))return'travel';
   if(/salary|sal|employer|payroll|tech corp/.test(m))return'income';
-  if(/savings|save|piggy/.test(m))return'savings';
+  if(/mom|dad|bro|sis|wife|husband|friend|family|transfer|neft|imps/.test(m))return'family';
+  if(/angel|sip|mutual|invest|zerodha|groww/.test(m))return'investment';
   return'other';
 }
 function parseSMS(msg){
@@ -272,168 +290,169 @@ function parseSMS(msg){
   const merchant=(atM&&atM[1].trim())||(empM&&empM[1].trim())||'Unknown';
   const isCredit=/credited|salary|received/i.test(msg);
   const isDebit=/debited|deducted|payment/i.test(msg);
-  return{amount,merchant:merchant.trim(),isCredit,isDebit};
+  const balM=msg.match(/(?:Avail Bal|Bal):\s*Rs\.?\s*([\d,]+)/i);
+  const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
+  return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal};
 }
 
-// ═══════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════
+// ── NAVIGATION ───────────────────────────────────────────────
 function goTo(page){
   document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('page-'+page).classList.add('active');
-  const pages=['home','income','tx','loans','analytics','settings'];
-  document.querySelectorAll('.nav-btn')[pages.indexOf(page)].classList.add('active');
+  const pages=['home','tx','cards','loans','money','settings'];
+  const idx=pages.indexOf(page);
+  if(idx>=0)document.querySelectorAll('.nav-btn')[idx].classList.add('active');
   currentPage=page;
-  // Destroy stale charts
-  Chart.helpers.each(Chart.instances,(c)=>{
-    if(c.canvas&&c.canvas.closest('#page-'+page)){}
-    else if(c.canvas&&!document.body.contains(c.canvas))c.destroy();
-  });
+  Chart.helpers.each(Chart.instances,(c)=>{if(c.canvas&&!document.body.contains(c.canvas))c.destroy();});
   renderPage(page);
 }
 function renderPage(p){
-  const r={home:renderHome,income:renderIncome,tx:renderTx,loans:renderLoans,analytics:renderAnalytics,settings:renderSettings};
+  const r={home:renderHome,tx:renderTx,cards:renderCards,loans:renderLoans,money:renderMoney,settings:renderSettings};
   if(r[p])r[p]();
 }
 
-// ═══════════════════════════════════════════════
-// HOME
-// ═══════════════════════════════════════════════
+// ── HOME ─────────────────────────────────────────────────────
 function renderHome(){
-  const spent=totalSpent(), inc=totalIncome(), salAmt=S.salary.amount||0;
-  const totalInc=inc+(salaryThisMonth()?0:0);
-  const effectiveInc=salaryThisMonth()?salAmt:salAmt; // salary as reference
-  const bal=effectiveInc-spent;
-  const waste=totalWaste(), emi=emiTotal();
+  const spent=totalSpent(),salAmt=S.salary.amount||0;
+  const bal=salAmt-spent;
+  const bankAmt=S.bankBalance.amount||0;
+  const waste=totalWaste(),emi=emiTotal();
   const n=new Date(),dayPassed=n.getDate(),daysInMonth=new Date(n.getFullYear(),n.getMonth()+1,0).getDate();
   const burnRate=dayPassed>0?spent/dayPassed:0;
   const projected=burnRate*daysInMonth;
   const name=S.profile.name||'there';
   const dSal=daysUntilSalary();
   const salRecvd=salaryThisMonth();
+  const pending=pendingTxs();
+  const ccOut=totalCCOutstanding();
+  const hr=n.getHours();
+  const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
+  const unpaidBills=S.mandatoryBills.filter(b=>!b.paidThisMonth);
+  const unpaidAmt=unpaidBills.reduce((s,b)=>s+b.amount,0);
+  const recent=[...S.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+
   // Budget alerts
   const catSpend={};
   monthTxs().filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
   const alerts=Object.entries(S.budgets).filter(([id,b])=>(catSpend[id]||0)>b*0.8);
-  const recent=[...S.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
-  const isStandalone=window.navigator.standalone===true||window.matchMedia('(display-mode: standalone)').matches;
-  const hr=n.getHours();
-  const greet=hr<12?'Good morning':'hr'<17?'Good afternoon':'Good evening';
 
   document.getElementById('page-home').innerHTML=`
-    ${!isStandalone?`<div class="install-banner"><span style="font-size:26px;">📱</span><div><div style="font-weight:700;font-size:13px;">Install on your iPhone</div><div style="font-size:11px;color:var(--muted);margin-top:2px;">Safari → <b>Share</b> → <b>Add to Home Screen</b></div></div></div>`:''}
-
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
       <div>
         <div style="color:var(--muted);font-size:12px;">${greet}, ${name} 👋</div>
-        <div style="font-size:20px;font-weight:900;letter-spacing:-0.5px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
+        <div style="font-size:19px;font-weight:900;letter-spacing:-0.5px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
       </div>
-      <button onclick="openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:8px 13px;border-radius:12px;font-size:11px;font-weight:700;letter-spacing:0.3px;">📩 Simulate SMS</button>
+      <button onclick="openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:8px 12px;border-radius:12px;font-size:11px;font-weight:700;">📩 SMS</button>
     </div>
 
-    <!-- Balance Card -->
-    <div class="card ${bal>=0?'caccent':'cred'}" style="margin-bottom:14px;">
-      <div class="label">${salRecvd?'Net Balance':'Salary Reference Balance'}</div>
-      <div class="bignum" style="color:${bal>=0?'var(--text)':'var(--red)'};">${fmtFull(Math.abs(bal))}</div>
-      <div style="display:flex;flex-wrap:wrap;gap:14px;margin-top:12px;">
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Salary</div><div style="font-weight:700;font-size:15px;color:var(--green);">${salAmt?fmtFull(salAmt):'Not set'}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Spent</div><div style="font-weight:700;font-size:15px;color:var(--red);">${fmtFull(spent)}</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Next Salary</div><div style="font-weight:700;font-size:15px;color:var(--amber);">${dSal}d</div></div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;">Status</div><span class="pill ${salRecvd?'pill-green':'pill-amber'}">${salRecvd?'✓ Received':'⏳ Pending'}</span></div>
-      </div>
-    </div>
+    ${pending.length?`<div class="pending-bar" onclick="goTo('tx');setTxFilter('pending')">
+      <div class="pulse"></div>
+      <div style="flex:1;"><div style="font-size:12px;font-weight:700;color:var(--amber);">⏳ ${pending.length} Pending Transaction${pending.length>1?'s':''}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">Tap to tag them with category & description</div></div>
+      <div style="font-size:18px;">›</div>
+    </div>`:''}
 
-    <!-- Stats grid -->
+    <!-- Balance Cards -->
     <div class="grid2">
-      <div class="mini-card"><div class="lbl">EMI Burden</div><div class="val" style="color:var(--red);">${fmtFull(emi)}</div><div class="sub">${effectiveInc?((emi/effectiveInc)*100).toFixed(0)+'% of salary':''}</div></div>
-      <div class="mini-card"><div class="lbl">Waste Spent</div><div class="val" style="color:var(--amber);">${fmtFull(waste)}</div><div class="sub">This month</div></div>
-      <div class="mini-card"><div class="lbl">Daily Burn Rate</div><div class="val" style="color:var(--cyan);">${fmt(burnRate)}</div><div class="sub">₹/day avg</div></div>
-      <div class="mini-card"><div class="lbl">Month Projection</div><div class="val" style="color:${projected>effectiveInc?'var(--red)':'var(--green)'};">${fmt(projected)}</div><div class="sub">Estimated total</div></div>
+      <div class="card caccent" style="margin-bottom:0;border-radius:16px;padding:14px;">
+        <div class="label">Salary Balance</div>
+        <div style="font-size:22px;font-weight:900;color:${bal>=0?'var(--text)':'var(--red)'};">${fmtFull(bal)}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">${salAmt?fmtFull(salAmt)+' salary':'Not set'}</div>
+      </div>
+      <div class="card" style="margin-bottom:0;border-radius:16px;padding:14px;border-color:${bankAmt>0?'#22C55E33':'var(--border)'};">
+        <div class="label">Bank Balance</div>
+        <div style="font-size:22px;font-weight:900;color:${bankAmt>0?'var(--green)':'var(--muted)'};">${bankAmt>0?fmtFull(bankAmt):'—'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">${S.bankBalance.lastUpdated?'Updated '+fmtDate(S.bankBalance.lastUpdated):'Not updated'}</div>
+        <button onclick="openBankBalance()" style="font-size:10px;color:var(--accent);margin-top:6px;font-weight:600;">Update →</button>
+      </div>
+    </div>
+    <div style="margin-bottom:14px;"></div>
+
+    <div class="grid2">
+      <div class="mini-card"><div class="lbl">EMI Burden</div><div class="val" style="color:var(--red);">${fmtFull(emi)}</div><div class="sub">${salAmt?((emi/salAmt)*100).toFixed(0)+'% of salary':''}</div></div>
+      <div class="mini-card"><div class="lbl">CC Outstanding</div><div class="val" style="color:var(--pink);">${fmtFull(ccOut)}</div><div class="sub">${S.creditCards.length} card${S.creditCards.length!==1?'s':''}</div></div>
+      <div class="mini-card"><div class="lbl">Daily Burn</div><div class="val" style="color:var(--cyan);">${fmt(burnRate)}</div><div class="sub">₹/day avg</div></div>
+      <div class="mini-card"><div class="lbl">Month Projection</div><div class="val" style="color:${projected>salAmt?'var(--red)':'var(--green)'};">${fmt(projected)}</div><div class="sub">Estimated total</div></div>
     </div>
 
-    ${!salRecvd&&salAmt>0?`
-    <div class="card camber" style="margin-bottom:14px;">
-      <div style="display:flex;justify-content:space-between;align-items:center;">
-        <div><div style="font-weight:700;font-size:13px;">💰 Salary Awaited</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">Expected on ${S.salary.expectedDay}th • ${dSal} days away</div></div>
-        <div style="display:flex;gap:8px;">
-          <button onclick="openMarkSalary()" class="btn btn-green btn-sm">Mark Received</button>
+    <!-- Mandatory Bills -->
+    ${S.mandatoryBills.length?`<div class="card camber" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+        <div style="font-weight:700;font-size:13px;">📋 Monthly Bills</div>
+        <span class="pill ${unpaidBills.length?'pill-amber':'pill-green'}">${unpaidBills.length?unpaidBills.length+' unpaid':'All paid ✓'}</span>
+      </div>
+      ${S.mandatoryBills.map(b=>`<div class="bill-row">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div class="bill-check ${b.paidThisMonth?'done':''}" onclick="toggleBill(${b.id})">${b.paidThisMonth?'✓':''}</div>
+          <div>
+            <div style="font-size:12px;font-weight:600;">${b.icon} ${b.name}</div>
+            <div style="font-size:10px;color:var(--muted);">Due: ${b.dueDay}${['th','st','nd','rd'][Math.min(b.dueDay%10,3)]||'th'}</div>
+          </div>
         </div>
+        <div style="text-align:right;">
+          <div style="font-size:13px;font-weight:700;color:${b.paidThisMonth?'var(--green)':'var(--text)'};">${b.amount?fmtFull(b.amount):'—'}</div>
+          ${!b.paidThisMonth&&b.amount?`<div style="font-size:9px;color:var(--amber);">PENDING</div>`:''}
+        </div>
+      </div>`).join('')}
+      ${unpaidAmt>0?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;justify-content:space-between;font-size:12px;"><span style="color:var(--muted);">Total Pending</span><span style="font-weight:700;color:var(--amber);">${fmtFull(unpaidAmt)}</span></div>`:''}
+    </div>`:''}
+
+    ${!salRecvd&&salAmt>0?`<div class="card camber" style="margin-bottom:14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <div><div style="font-weight:700;font-size:13px;">💰 Salary Awaited</div><div style="font-size:11px;color:var(--muted);margin-top:3px;">${dSal} days away · ${S.salary.expectedDay}th</div></div>
+        <button onclick="openMarkSalary()" class="btn btn-green btn-sm">Mark Received</button>
       </div>
     </div>`:''}
 
-    ${alerts.length?`
-    <div class="card cred" style="margin-bottom:14px;">
+    ${alerts.length?`<div class="card cred" style="margin-bottom:14px;">
       <div style="font-weight:700;color:var(--red);font-size:13px;margin-bottom:10px;">⚠️ Budget Alerts (${alerts.length})</div>
-      ${alerts.map(([id,b])=>{const sp=catSpend[id]||0;const c=cat(id);const pct=Math.round((sp/b)*100);return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;"><span style="font-size:12px;">${c.icon} ${c.label}</span><span style="font-size:11px;font-weight:700;color:${pct>=100?'var(--red)':'var(--amber)'};">${fmtFull(sp)} / ${fmtFull(b)} · ${pct}%</span></div>`;}).join('')}
+      ${alerts.map(([id,b])=>{const sp=catSpend[id]||0;const c=cat(id);const pct=Math.round((sp/b)*100);return`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;"><span style="font-size:12px;">${c.icon} ${c.label}</span><span style="font-size:11px;font-weight:700;color:${pct>=100?'var(--red)':'var(--amber)'};">${fmtFull(sp)}/${fmtFull(b)} · ${pct}%</span></div>`;}).join('')}
     </div>`:''}
 
-    ${waste>0?`
-    <div class="card cred" style="margin-bottom:14px;">
+    ${waste>0?`<div class="card cred" style="margin-bottom:14px;">
       <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px;">🗑️ Waste Alert</div>
-      <div style="font-size:13px;">You've spent <b style="color:var(--red);">${fmtFull(waste)}</b> on flagged wasteful purchases. That's <b style="color:var(--amber);">${fmtFull(waste*12)}/yr</b> — enough to accelerate your <b>RBL 22% loan</b>.</div>
+      <div style="font-size:13px;">You've spent <b style="color:var(--red);">${fmtFull(waste)}</b> wastefully this month. That's <b style="color:var(--amber);">${fmtFull(waste*12)}/yr</b>.</div>
     </div>`:''}
 
     <div class="sec-title">Recent Transactions</div>
     ${recent.map(tx=>txHTML(tx,true)).join('')}
-    <button onclick="goTo('tx')" class="btn btn-ghost" style="margin-top:4px;font-size:13px;">View All Transactions →</button>
+    <button onclick="goTo('tx')" class="btn btn-ghost" style="margin-top:4px;font-size:13px;">View All →</button>
   `;
 }
 
 function txHTML(tx,showDel){
   const c=cat(tx.category);
   const isInc=tx.category==='income';
-  return`<div class="tx-item">
+  const isFamily=tx.category==='family';
+  const loanName=tx.loanId?S.loans.find(l=>l.id===tx.loanId):null;
+  const ccName=tx.creditCardId?S.creditCards.find(cc=>cc.id===tx.creditCardId):null;
+  return`<div class="tx-item ${tx.isPending?'pending':''}">
     <div class="tx-icon" style="background:${c.color}20;">${c.icon}</div>
     <div class="tx-details">
-      <div class="tx-name">${tx.merchant}</div>
+      <div class="tx-name">${tx.merchant}${isFamily&&tx.contactName?' · '+tx.contactName:''}</div>
       <div class="tx-meta">${c.label} · ${fmtDate(tx.date)}${tx.note?' · '+tx.note:''}</div>
-      ${tx.isWaste?'<span class="waste-tag">WASTEFUL</span>':''}
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">
+        ${tx.isWaste?'<span class="tag tag-waste">WASTEFUL</span>':''}
+        ${tx.isPending?'<span class="tag tag-pending">⏳ NEEDS TAG</span>':''}
+        ${loanName?`<span class="tag tag-loan">🏦 ${loanName.name}</span>`:''}
+        ${ccName?`<span class="tag tag-card">💴 ${ccName.name}</span>`:''}
+        ${isFamily?`<span class="tag tag-family">👨‍👩‍👧 ${isInc?'RECEIVED':'SENT'}</span>`:''}
+      </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
       <div class="tx-amt" style="color:${isInc?'var(--green)':'var(--red)'};">${isInc?'+':'-'}${fmtFull(tx.amount)}</div>
-      ${showDel?`<button onclick="delTx(${tx.id})" style="font-size:10px;color:var(--muted);background:var(--card2);padding:2px 7px;border-radius:6px;">✕</button>`:''}
+      <div style="display:flex;gap:4px;">
+        <button onclick="openEditTx(${tx.id})" style="font-size:10px;color:var(--accent);background:var(--card2);padding:2px 7px;border-radius:6px;">✏️</button>
+        ${showDel?`<button onclick="delTx(${tx.id})" style="font-size:10px;color:var(--muted);background:var(--card2);padding:2px 7px;border-radius:6px;">✕</button>`:''}
+      </div>
     </div>
   </div>`;
 }
 
-// ═══════════════════════════════════════════════
-// INCOME
-// ═══════════════════════════════════════════════
-function renderIncome(){
-  const recv=salaryThisMonth();
-  const incTxs=[...S.transactions].filter(t=>t.category==='income').sort((a,b)=>b.date.localeCompare(a.date));
-  const salHist=[...S.salary.history].sort((a,b)=>b.date.localeCompare(a.date));
-  document.getElementById('page-income').innerHTML=`
-    <div class="sec-title" style="margin-top:4px;">Salary & Income</div>
-    <div class="card ${recv?'cgreen':'camber'}">
-      <div class="label">Monthly Salary</div>
-      <div class="bignum">${S.salary.amount?fmtFull(S.salary.amount):'Not configured'}</div>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
-        <span class="pill ${recv?'pill-green':'pill-amber'}">${recv?'✓ Received this month':'⏳ Not received yet'}</span>
-        <span style="font-size:11px;color:var(--muted);">Expected: ${S.salary.expectedDay}${['th','st','nd','rd'][Math.min(S.salary.expectedDay%10,3)]||'th'} of month</span>
-      </div>
-    </div>
-
-    <div class="grid2">
-      <button onclick="openSalarySettings()" class="btn btn-ghost" style="padding:12px;">⚙️ Edit Salary</button>
-      <button onclick="openMarkSalary()" class="btn btn-green" style="padding:12px;">✓ Mark Received</button>
-    </div>
-    <button onclick="openAddIncome()" class="btn btn-primary" style="margin-bottom:20px;">+ Add Other Income</button>
-
-    <div class="sec-title">Income History</div>
-    ${salHist.length===0&&incTxs.length===0?'<div style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">No income recorded yet.<br>Tap Mark Received when salary arrives.</div>':''}
-    ${salHist.map(h=>`<div class="tx-item"><div class="tx-icon" style="background:#22C55E20;">💰</div><div class="tx-details"><div class="tx-name">Salary</div><div class="tx-meta">${fmtDate(h.date)}${h.note?' · '+h.note:''}</div></div><div class="tx-amt" style="color:var(--green);">+${fmtFull(h.amount)}</div></div>`).join('')}
-    ${incTxs.filter(t=>!salHist.find(h=>h.date===t.date&&t.merchant==='Salary')).map(t=>`<div class="tx-item"><div class="tx-icon" style="background:#22C55E20;">💰</div><div class="tx-details"><div class="tx-name">${t.merchant}</div><div class="tx-meta">${fmtDate(t.date)}${t.note?' · '+t.note:''}</div></div><div class="tx-amt" style="color:var(--green);">+${fmtFull(t.amount)}</div></div>`).join('')}
-  `;
-}
-
-// ═══════════════════════════════════════════════
-// TRANSACTIONS
-// ═══════════════════════════════════════════════
+// ── SPENDS ───────────────────────────────────────────────────
 function renderTx(){
   const all=[...S.transactions].sort((a,b)=>b.date.localeCompare(a.date));
-  const filtered=txFilter==='all'?all:all.filter(t=>t.category===txFilter);
+  const filtered=txFilter==='all'?all:txFilter==='pending'?all.filter(t=>t.isPending):all.filter(t=>t.category===txFilter);
   document.getElementById('page-tx').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <div class="sec-title" style="margin-bottom:0;">Transactions (${filtered.length})</div>
@@ -444,6 +463,7 @@ function renderTx(){
     </div>
     <div class="chip-scroll">
       <span class="chip" style="${txFilter==='all'?'background:#6C63FF18;color:var(--accent);border-color:#6C63FF33;':''}" onclick="setTxFilter('all')">All</span>
+      <span class="chip" style="${txFilter==='pending'?'background:#F59E0B18;color:var(--amber);border-color:#F59E0B33;':''}" onclick="setTxFilter('pending')">⏳ Pending</span>
       ${CATS.map(c=>`<span class="chip" style="${txFilter===c.id?`background:${c.color}18;color:${c.color};border-color:${c.color}33;`:''}" onclick="setTxFilter('${c.id}')">${c.icon} ${c.label}</span>`).join('')}
     </div>
     ${filtered.length===0?'<div style="color:var(--muted);text-align:center;padding:30px;font-size:13px;">No transactions here.</div>':''}
@@ -451,20 +471,70 @@ function renderTx(){
   `;
 }
 function setTxFilter(f){txFilter=f;renderTx();}
-function delTx(id){
-  if(!confirm('Delete this transaction?'))return;
-  S.transactions=S.transactions.filter(t=>t.id!==id);
-  save();renderPage(currentPage);
-}
+function delTx(id){if(!confirm('Delete?'))return;S.transactions=S.transactions.filter(t=>t.id!==id);save();renderPage(currentPage);}
 
-// ═══════════════════════════════════════════════
-// LOANS
-// ═══════════════════════════════════════════════
+// ── CREDIT CARDS ─────────────────────────────────────────────
+function renderCards(){
+  const totalOut=totalCCOutstanding(),totalLim=totalCCLimit();
+  const availTotal=totalLim-totalOut;
+  const usePct=totalLim?Math.round((totalOut/totalLim)*100):0;
+  document.getElementById('page-cards').innerHTML=`
+    <div class="sec-title" style="margin-top:4px;">Credit Cards</div>
+    <div class="card cred">
+      <div class="label">Total Outstanding</div>
+      <div class="bignum">${fmtFull(totalOut)}</div>
+      <div class="cc-limit-bar"><div class="prog-fill" style="width:${usePct}%;background:${usePct>80?'var(--red)':usePct>50?'var(--amber)':'var(--green)'}"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);">
+        <span>Used: ${fmtFull(totalOut)} (${usePct}%)</span>
+        <span>Available: <b style="color:var(--green);">${fmtFull(availTotal)}</b></span>
+      </div>
+    </div>
+    <button onclick="openAddCard()" class="btn btn-primary" style="margin-bottom:16px;">+ Add Credit Card</button>
+    ${S.creditCards.length===0?'<div style="color:var(--muted);text-align:center;padding:30px;font-size:13px;">No credit cards added yet.</div>':''}
+    ${S.creditCards.map(cc=>{
+      const used=cc.outstanding;
+      const avail=cc.limit-used;
+      const pct=Math.min(Math.round((used/cc.limit)*100),100);
+      const ccTxs=S.transactions.filter(t=>t.creditCardId===cc.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
+      return`<div class="cc-card" style="border-color:${cc.color}44;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+              <div style="width:32px;height:20px;border-radius:5px;background:linear-gradient(135deg,${cc.color},${cc.color}88);"></div>
+              <div style="font-size:15px;font-weight:700;">${cc.name}</div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);">Due: ${cc.dueDay}${['th','st','nd','rd'][Math.min(cc.dueDay%10,3)]||'th'} · Min: ${fmtFull(cc.minDue||0)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:18px;font-weight:800;color:${cc.color};">${fmtFull(cc.outstanding)}</div>
+            <div style="font-size:10px;color:var(--muted);">outstanding</div>
+          </div>
+        </div>
+        <div class="cc-limit-bar"><div class="prog-fill" style="width:${pct}%;background:${pct>80?'var(--red)':pct>50?'var(--amber)':cc.color};"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-bottom:12px;">
+          <span>Limit: ${fmtFull(cc.limit)}</span>
+          <span>Available: <b style="color:var(--green);">${fmtFull(avail)}</b> (${100-pct}%)</span>
+        </div>
+        ${ccTxs.length?`<div style="margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Recent Spends</div>
+          ${ccTxs.map(t=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:11px;"><span>${cat(t.category).icon} ${t.merchant}</span><span style="color:var(--red);font-weight:700;">-${fmtFull(t.amount)}</span></div>`).join('')}
+        </div>`:''}
+        <div style="display:flex;gap:8px;">
+          <button onclick="openCardTx(${cc.id})" class="btn btn-primary btn-sm" style="flex:2;text-align:center;">+ Add Spend</button>
+          <button onclick="openEditCard(${cc.id})" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">✏️ Edit</button>
+          <button onclick="delCard(${cc.id})" class="btn btn-red btn-sm" style="flex:1;text-align:center;">🗑️</button>
+        </div>
+      </div>`;
+    }).join('')}
+  `;
+}
+function delCard(id){if(!confirm('Remove card?'))return;S.creditCards=S.creditCards.filter(c=>c.id!==id);save();renderCards();}
+
+// ── LOANS ────────────────────────────────────────────────────
 function renderLoans(){
   const totalOut=S.loans.reduce((s,l)=>s+l.outstanding,0);
   const totalEMI=S.loans.reduce((s,l)=>s+l.emi,0);
   const sorted=[...S.loans].sort((a,b)=>b.rate-a.rate);
-  const topLoan=sorted[0];
   document.getElementById('page-loans').innerHTML=`
     <div class="sec-title" style="margin-top:4px;">Loan Manager</div>
     <div class="card cred">
@@ -472,23 +542,19 @@ function renderLoans(){
       <div class="bignum">${fmt(totalOut)}</div>
       <div style="margin-top:8px;font-size:12px;color:var(--muted);">Monthly EMIs: <span style="color:var(--red);font-weight:700;">${fmtFull(totalEMI)}</span> · ${S.loans.length} active loans</div>
     </div>
-
-    ${topLoan?`<div class="insight" style="border-left:3px solid var(--accent);margin-bottom:14px;">
+    ${sorted[0]?`<div class="insight" style="border-left:3px solid var(--accent);margin-bottom:14px;">
       <div style="font-size:11px;font-weight:700;color:var(--accent);margin-bottom:4px;">💡 Avalanche Strategy</div>
-      <div style="font-size:12px;color:var(--muted);">Priority #1: <b style="color:var(--text);">${topLoan.name} (${topLoan.rate}%)</b>. After smaller loans close, redirect freed EMIs here. Estimated interest savings: <b style="color:var(--green);">₹1.5–1.7 lakh</b></div>
+      <div style="font-size:12px;color:var(--muted);">Priority #1: <b style="color:var(--text);">${sorted[0].name} (${sorted[0].rate}%)</b>. Redirect freed EMIs here when smaller loans close.</div>
     </div>`:''}
-
     <button onclick="openAddLoan()" class="btn btn-primary" style="margin-bottom:16px;">+ Add New Loan</button>
-
-    <div class="sec-title">Your Loans · Priority Order</div>
-    ${sorted.length===0?'<div style="color:var(--muted);text-align:center;padding:30px;font-size:13px;">No loans added. Tap + Add to get started.</div>':''}
+    <div class="sec-title">Your Loans · By Interest Rate</div>
     ${sorted.map((loan,i)=>{
-      const maxR=sorted[0].rate||1;
       const pctBar=Math.min((loan.outstanding/totalOut)*100,100);
+      const loanTxs=S.transactions.filter(t=>t.loanId===loan.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,3);
       return`<div class="loan-card" style="border-color:${loan.rate>=20?'#EF444333':loan.rate>=15?'#F59E0B33':'var(--border)'};">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;">
           <div>
-            ${i===0?'<div style="font-size:8px;background:#EF444415;color:var(--red);padding:2px 7px;border-radius:5px;margin-bottom:5px;display:inline-block;font-weight:700;letter-spacing:1px;">TOP PRIORITY</div>':''}
+            ${i===0?'<div style="font-size:8px;background:#EF444415;color:var(--red);padding:2px 7px;border-radius:5px;margin-bottom:5px;display:inline-block;font-weight:700;">TOP PRIORITY</div>':''}
             <div style="font-size:15px;font-weight:700;">${loan.name}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:2px;">EMI ${fmtFull(loan.emi)} · ${loan.remaining} months left</div>
           </div>
@@ -502,246 +568,400 @@ function renderLoans(){
           <span>Outstanding: <b style="color:var(--text);">${fmtFull(loan.outstanding)}</b></span>
           <span>${pctBar.toFixed(0)}% of total debt</span>
         </div>
+        ${loanTxs.length?`<div style="margin-bottom:10px;">
+          <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Payment History</div>
+          ${loanTxs.map(t=>`<div style="display:flex;justify-content:space-between;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);"><span style="color:var(--muted);">${fmtDate(t.date)}</span><span style="font-weight:600;color:var(--red);">-${fmtFull(t.amount)}</span></div>`).join('')}
+        </div>`:''}
         <div style="display:flex;gap:8px;">
           <button onclick="openEditLoan(${loan.id})" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">✏️ Edit</button>
-          <button onclick="delLoan(${loan.id})" class="btn btn-red btn-sm" style="flex:1;text-align:center;">🗑️ Remove</button>
+          <button onclick="openLoanPayTx(${loan.id})" class="btn btn-amber btn-sm" style="flex:1;text-align:center;">💳 Pay</button>
+          <button onclick="delLoan(${loan.id})" class="btn btn-red btn-sm" style="flex:1;text-align:center;">🗑️</button>
         </div>
       </div>`;
     }).join('')}
   `;
 }
-function delLoan(id){
-  if(!confirm('Remove this loan?'))return;
-  S.loans=S.loans.filter(l=>l.id!==id);
-  save();renderLoans();
-}
+function delLoan(id){if(!confirm('Remove loan?'))return;S.loans=S.loans.filter(l=>l.id!==id);save();renderLoans();}
 
-// ═══════════════════════════════════════════════
-// ANALYTICS
-// ═══════════════════════════════════════════════
-function renderAnalytics(){
+// ── MONEY ────────────────────────────────────────────────────
+function renderMoney(){
+  const recv=salaryThisMonth();
+  const incTxs=[...S.transactions].filter(t=>t.category==='income').sort((a,b)=>b.date.localeCompare(a.date));
+  const ao=S.investments.angelOne;
+  const totalInvested=ao.history.reduce((s,h)=>s+h.amount,0);
+  const gainAmt=ao.currentBalance-totalInvested;
+  const gainPct=totalInvested>0?((gainAmt/totalInvested)*100).toFixed(1):0;
+  const salHist=[...S.salary.history].sort((a,b)=>b.date.localeCompare(a.date));
   const spent=totalSpent(),salAmt=S.salary.amount||0;
   const savings=salAmt-spent;
   const savRate=salAmt>0?Math.round((savings/salAmt)*100):0;
-  const emi=emiTotal();
-  const catSpend={};
-  monthTxs().filter(t=>t.category!=='income'&&t.category!=='savings').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
-  const catData=CATS.filter(c=>c.id!=='income'&&c.id!=='savings'&&catSpend[c.id]).map(c=>({...c,value:catSpend[c.id]||0})).sort((a,b)=>b.value-a.value);
-  const sortedLoans=[...S.loans].sort((a,b)=>b.rate-a.rate);
-  const longestLoan=S.loans.length?S.loans.reduce((m,l)=>l.remaining>m.remaining?l:m,S.loans[0]):null;
-  const dfDate=longestLoan?new Date(Date.now()+longestLoan.remaining*30*86400000).toLocaleDateString('en-IN',{month:'short',year:'numeric'}):'-';
+  const famTxsSent=S.transactions.filter(t=>t.category==='family'&&t.amount>0);
+  const famTotal=famTxsSent.reduce((s,t)=>s+t.amount,0);
 
-  // Smart insights
-  const ins=[];
-  if(emi/salAmt>0.5)ins.push({ico:'🚨',text:`EMIs eat ${((emi/salAmt)*100).toFixed(0)}% of your salary. Target is below 40%. Consider prepaying high-rate loans.`,col:'var(--red)'});
-  if(savRate<10)ins.push({ico:'⚠️',text:`Savings rate is only ${savRate}%. Aim for at least 20% (₹${fmtFull(salAmt*0.2)}) per month.`,col:'var(--amber)'});
-  if(savRate>=20)ins.push({ico:'✅',text:`You're saving ${savRate}% this month. Great discipline!`,col:'var(--green)'});
-  const rbl=S.loans.find(l=>l.rate>=20);
-  if(rbl)ins.push({ico:'💡',text:`Paying ₹5,000 extra on ${rbl.name} (${rbl.rate}%) saves approx ₹18,000 in total interest.`,col:'var(--accent)'});
-  const waste=totalWaste();
-  if(waste>0)ins.push({ico:'🗑️',text:`₹${waste.toLocaleString('en-IN')} wasted this month = ₹${(waste*12).toLocaleString('en-IN')}/yr. Redirect this to RBL to save interest.`,col:'var(--amber)'});
-  if(salAmt&&spent>salAmt)ins.push({ico:'🔴',text:`You've spent more than your salary this month by ₹${fmtFull(spent-salAmt)}. Review and cut discretionary spend.`,col:'var(--red)'});
+  document.getElementById('page-money').innerHTML=`
+    <div class="sec-title" style="margin-top:4px;">Money Overview</div>
 
-  document.getElementById('page-analytics').innerHTML=`
-    <div class="sec-title" style="margin-top:4px;">Analytics & Intelligence</div>
-
+    <!-- Salary -->
+    <div class="card ${recv?'cgreen':'camber'}">
+      <div class="label">Monthly Salary</div>
+      <div class="bignum">${S.salary.amount?fmtFull(S.salary.amount):'Not configured'}</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+        <span class="pill ${recv?'pill-green':'pill-amber'}">${recv?'✓ Received':'⏳ Awaiting'}</span>
+        <span style="font-size:11px;color:var(--muted);">Expected: ${S.salary.expectedDay}th</span>
+      </div>
+    </div>
     <div class="grid2">
-      <div class="mini-card"><div class="lbl">Savings Rate</div><div class="val" style="color:${savRate>=20?'var(--green)':savRate>=10?'var(--amber)':'var(--red)'};">${savRate}%</div><div class="sub">${salAmt?'of salary':''}</div></div>
+      <button onclick="openSalarySettings()" class="btn btn-ghost" style="padding:12px;font-size:12px;">⚙️ Edit Salary</button>
+      <button onclick="openMarkSalary()" class="btn btn-green" style="padding:12px;font-size:12px;">✓ Mark Received</button>
+    </div>
+
+    <!-- Savings -->
+    <div class="grid2">
       <div class="mini-card"><div class="lbl">Net Savings</div><div class="val" style="color:${savings>=0?'var(--green)':'var(--red)'};">${fmt(Math.abs(savings))}</div><div class="sub">${savings>=0?'saved':'overspent'}</div></div>
-      <div class="mini-card"><div class="lbl">EMI % of Salary</div><div class="val" style="color:${(emi/salAmt)>0.5?'var(--red)':'var(--amber)'};">${salAmt?((emi/salAmt)*100).toFixed(0)+'%':'—'}</div><div class="sub">Target: &lt;40%</div></div>
-      <div class="mini-card"><div class="lbl">Debt-Free Date</div><div class="val" style="font-size:14px;font-weight:800;color:var(--green);">${dfDate}</div><div class="sub">${longestLoan?longestLoan.name:''}</div></div>
+      <div class="mini-card"><div class="lbl">Savings Rate</div><div class="val" style="color:${savRate>=20?'var(--green)':savRate>=10?'var(--amber)':'var(--red)'};">${savRate}%</div><div class="sub">Target ≥20%</div></div>
     </div>
 
-    <div class="sec-title">🧠 Smart Insights</div>
-    ${ins.map(i=>`<div class="insight" style="border-left:3px solid ${i.col};margin-bottom:9px;"><div style="font-size:12px;">${i.ico} ${i.text}</div></div>`).join('')}
-
-    <div class="card" style="margin-top:4px;">
-      <div class="sec-title">May Spending Breakdown</div>
-      ${catData.length?`<div style="position:relative;height:190px;"><canvas id="donut-chart"></canvas></div>`:'<div style="color:var(--muted);text-align:center;padding:20px;">No spend data yet</div>'}
-      <div style="margin-top:14px;">
-      ${catData.map(d=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <div style="width:9px;height:9px;border-radius:3px;background:${d.color};flex-shrink:0;"></div>
-            <span style="font-size:12px;color:var(--muted);">${d.icon} ${d.label}</span>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;">
-            <span style="font-size:12px;font-weight:600;">${fmtFull(d.value)}</span>
-            <span style="font-size:10px;color:var(--muted);">${spent?((d.value/spent)*100).toFixed(0)+'%':''}</span>
-          </div>
-        </div>`).join('')}
+    <!-- Angel One -->
+    <div class="card cindigo">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+        <div>
+          <div class="label">Angel One · Mutual Funds</div>
+          <div style="font-size:22px;font-weight:900;">${ao.currentBalance?fmtFull(ao.currentBalance):'₹0'}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:4px;">Invested: ${fmtFull(totalInvested)} · Monthly SIP: ${fmtFull(ao.monthlyAmount)}</div>
+        </div>
+        <div style="text-align:right;">
+          ${ao.currentBalance>0?`<div style="font-size:14px;font-weight:700;color:${gainAmt>=0?'var(--green)':'var(--red)'};">${gainAmt>=0?'+':''}${fmtFull(gainAmt)}</div><div style="font-size:10px;color:var(--muted);">${gainPct}% ${gainAmt>=0?'gain':'loss'}</div>`:'<div style="font-size:11px;color:var(--muted);">No data</div>'}
+        </div>
       </div>
+      <button onclick="openInvestModal()" class="btn btn-indigo" style="background:#6366F11A;color:var(--indigo);border:1px solid #6366F130;font-size:12px;padding:10px;">⚙️ Update Investment</button>
     </div>
 
-    <div class="card">
-      <div class="sec-title">EMI Breakdown vs Salary</div>
-      ${S.loans.length===0?'<div style="color:var(--muted);font-size:12px;">No loans configured.</div>':''}
-      ${[...S.loans].sort((a,b)=>b.rate-a.rate).map(l=>`
-        <div style="margin-bottom:12px;">
-          <div style="display:flex;justify-content:space-between;margin-bottom:3px;">
-            <span style="font-size:12px;font-weight:600;">${l.name}</span>
-            <span style="font-size:11px;color:${l.color};font-weight:700;">${l.rate}% · ${fmtFull(l.emi)}/mo</span>
-          </div>
-          <div class="prog-bar"><div class="prog-fill" style="width:${salAmt?Math.min((l.emi/salAmt)*300,100):20}%;background:${l.color};"></div></div>
-        </div>`).join('')}
+    ${ao.history.length?`<div class="card">
+      <div class="sec-title" style="font-size:13px;">📅 SIP History</div>
+      ${ao.history.slice().reverse().slice(0,6).map(h=>`<div class="invest-row">
+        <div><div style="font-size:12px;font-weight:600;">${h.month}</div><div style="font-size:10px;color:var(--muted);">Invested</div></div>
+        <div style="text-align:right;"><div style="font-size:13px;font-weight:700;color:var(--indigo);">${fmtFull(h.amount)}</div>${h.balance?`<div style="font-size:10px;color:var(--muted);">Val: ${fmtFull(h.balance)}</div>`:''}</div>
+      </div>`).join('')}
+    </div>`:'' }
+
+    <!-- Family / Friends -->
+    <div class="card cteal">
+      <div class="sec-title" style="font-size:13px;">👨‍👩‍👧 Family & Friends</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Total transferred this month: <b style="color:var(--teal);">${fmtFull(famTotal)}</b></div>
+      <button onclick="openFamilyTx()" class="btn btn-teal" style="font-size:12px;padding:10px;margin-bottom:12px;">+ Add Transfer / Receipt</button>
+      ${famTxsSent.slice(0,4).map(t=>`<div class="invest-row">
+        <div style="display:flex;align-items:center;gap:8px;"><div style="font-size:18px;">👨‍👩‍👧</div><div><div style="font-size:12px;font-weight:600;">${t.contactName||t.merchant}</div><div style="font-size:10px;color:var(--muted);">${fmtDate(t.date)}${t.note?' · '+t.note:''}</div></div></div>
+        <div style="font-weight:700;font-size:13px;color:${t.category==='income'?'var(--green)':'var(--red)'};">${t.category==='income'?'+':'-'}${fmtFull(t.amount)}</div>
+      </div>`).join('')}
     </div>
 
-    <div class="card cgreen">
-      <div class="sec-title">🎯 Payoff Accelerator</div>
-      <div style="font-size:12px;color:var(--muted);line-height:1.7;">
-        <div>• <b style="color:var(--text);">Oct 2026:</b> Kotak closes → ₹20,184 freed up</div>
-        <div>• <b style="color:var(--text);">Jan 2027:</b> Cred + Cred2 close → ₹14,752 more freed</div>
-        <div>• <b style="color:var(--text);">Redirect both</b> to RBL (22%) → closes ~10 months early</div>
-        <div style="margin-top:8px;color:var(--green);font-weight:700;">💰 Total interest saved: ₹1.5–1.7 lakh</div>
-      </div>
-    </div>
+    <!-- Income History -->
+    <div class="sec-title">Income History</div>
+    <button onclick="openAddIncome()" class="btn btn-primary" style="margin-bottom:12px;">+ Add Other Income</button>
+    ${salHist.length===0&&incTxs.length===0?'<div style="color:var(--muted);text-align:center;padding:24px;font-size:13px;">No income recorded yet.</div>':''}
+    ${salHist.slice(0,5).map(h=>`<div class="tx-item"><div class="tx-icon" style="background:#22C55E20;">💰</div><div class="tx-details"><div class="tx-name">Salary</div><div class="tx-meta">${fmtDate(h.date)}${h.note?' · '+h.note:''}</div></div><div class="tx-amt" style="color:var(--green);">+${fmtFull(h.amount)}</div></div>`).join('')}
   `;
-
-  // Build chart
-  if(catData.length){
-    const existing=Chart.getChart('donut-chart');
-    if(existing)existing.destroy();
-    new Chart(document.getElementById('donut-chart').getContext('2d'),{
-      type:'doughnut',
-      data:{labels:catData.map(d=>d.label),datasets:[{data:catData.map(d=>d.value),backgroundColor:catData.map(d=>d.color),borderWidth:2,borderColor:'#13131A'}]},
-      options:{responsive:true,maintainAspectRatio:false,cutout:'62%',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>`₹${c.raw.toLocaleString('en-IN')}`},bodyColor:'#F1F1F5',backgroundColor:'#1C1C2E',borderColor:'#1E1E2E',borderWidth:1}}}
-    });
-  }
 }
 
-// ═══════════════════════════════════════════════
-// SETTINGS
-// ═══════════════════════════════════════════════
+// ── SETTINGS ─────────────────────────────────────────────────
 function renderSettings(){
   document.getElementById('page-settings').innerHTML=`
     <div class="sec-title" style="margin-top:4px;">Settings</div>
-
     <div class="card">
       <div class="sec-title" style="font-size:13px;">👤 Profile</div>
-      <div class="form-group">
-        <label class="form-label">Your Name</label>
-        <input class="form-input" id="set-name" value="${S.profile.name}" placeholder="Enter your name">
-      </div>
+      <div class="form-group"><label class="form-label">Your Name</label><input class="form-input" id="set-name" value="${S.profile.name}" placeholder="Enter your name"></div>
       <button onclick="saveName()" class="btn btn-primary">Save</button>
     </div>
 
     <div class="card">
+      <div class="sec-title" style="font-size:13px;">🏦 Bank Balance</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Current: <b style="color:var(--text);">${S.bankBalance.amount?fmtFull(S.bankBalance.amount):'Not set'}</b>${S.bankBalance.lastUpdated?' · '+fmtDate(S.bankBalance.lastUpdated):''}</div>
+      <button onclick="openBankBalance()" class="btn btn-ghost">📊 Update Bank Balance</button>
+    </div>
+
+    <div class="card">
+      <div class="sec-title" style="font-size:13px;">📋 Monthly Mandatory Bills</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Configure recurring bills. Tap ✓ on home to mark paid.</div>
+      ${S.mandatoryBills.map(b=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <span style="font-size:18px;width:28px;text-align:center;">${b.icon}</span>
+        <input class="form-input" style="flex:2;" value="${b.name}" id="bill-name-${b.id}" placeholder="Bill name">
+        <input class="form-input" style="flex:1;" type="number" value="${b.amount}" id="bill-amt-${b.id}" placeholder="₹">
+        <input class="form-input" style="flex:1;max-width:55px;" type="number" min="1" max="31" value="${b.dueDay}" id="bill-day-${b.id}" placeholder="Day">
+      </div>`).join('')}
+      <button onclick="saveBills()" class="btn btn-primary" style="margin-top:4px;">Save Bills</button>
+      <button onclick="openAddBill()" class="btn btn-ghost" style="margin-top:8px;">+ Add Bill</button>
+    </div>
+
+    <div class="card">
       <div class="sec-title" style="font-size:13px;">📊 Monthly Budgets</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Set limits per category. You'll get alerts at 80% and 100%.</div>
-      ${['food','fuel','shopping','bills','entertainment','health','travel','other'].map(id=>{
-        const c=cat(id);
-        return`<div class="form-group"><label class="form-label">${c.icon} ${c.label}</label><input class="form-input" id="bgt-${id}" type="number" value="${S.budgets[id]||0}" placeholder="Budget in ₹"></div>`;
-      }).join('')}
+      ${['food','fuel','shopping','bills','entertainment','health','travel','other'].map(id=>{const c=cat(id);return`<div class="form-group"><label class="form-label">${c.icon} ${c.label}</label><input class="form-input" id="bgt-${id}" type="number" value="${S.budgets[id]||0}"></div>`;}).join('')}
       <button onclick="saveBudgets()" class="btn btn-primary">Save Budgets</button>
     </div>
 
     <div class="card">
-      <div class="sec-title" style="font-size:13px;">📂 Data</div>
-      <button onclick="exportCSV()" class="btn btn-ghost" style="margin-bottom:10px;">📤 Export to CSV</button>
+      <div class="sec-title" style="font-size:13px;">📂 Data & Reports</div>
+      <button onclick="downloadMonthlyReport()" class="btn btn-teal" style="margin-bottom:10px;">📄 Download Monthly Report</button>
+      <button onclick="exportCSV()" class="btn btn-ghost" style="margin-bottom:10px;">📤 Export CSV</button>
       <button onclick="clearData()" class="btn btn-red">🗑️ Clear All Data</button>
     </div>
 
     <div class="card" style="text-align:center;padding:20px;">
-      <div style="font-size:13px;font-weight:700;">SpendWise v3.0</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:6px;">🔒 All data stored 100% locally on your device</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:2px;">No cloud. No servers. Completely private.</div>
-      <div style="font-size:11px;color:var(--muted);margin-top:8px;">To install: Safari → Share → Add to Home Screen</div>
+      <div style="font-size:13px;font-weight:700;">SpendWise v4.0</div>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">🔒 All data stored 100% locally</div>
     </div>
   `;
 }
 function saveName(){S.profile.name=document.getElementById('set-name').value.trim();save();toast('Name saved ✓');}
-function saveBudgets(){
-  ['food','fuel','shopping','bills','entertainment','health','travel','other'].forEach(id=>{
-    S.budgets[id]=parseFloat(document.getElementById('bgt-'+id).value)||0;
-  });
-  save();toast('Budgets saved ✓');
-}
-function exportCSV(){
-  const rows=['Date,Merchant,Category,Amount,Note,Wasteful'];
-  S.transactions.forEach(t=>rows.push(`${t.date},"${t.merchant}","${t.category}",${t.amount},"${t.note||''}",${t.isWaste?'Yes':'No'}`));
-  const a=document.createElement('a');
-  a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));
-  a.download='SpendWise_export.csv';a.click();
-  toast('CSV exported ✓');
-}
-function clearData(){
-  if(!confirm('Delete ALL SpendWise data? This cannot be undone.'))return;
-  localStorage.removeItem('sw_v3');
-  S=JSON.parse(JSON.stringify(DEFAULT));
-  renderPage(currentPage);toast('Data cleared');
+function saveBudgets(){['food','fuel','shopping','bills','entertainment','health','travel','other'].forEach(id=>{S.budgets[id]=parseFloat(document.getElementById('bgt-'+id).value)||0;});save();toast('Budgets saved ✓');}
+function saveBills(){S.mandatoryBills.forEach(b=>{const n=document.getElementById('bill-name-'+b.id);const a=document.getElementById('bill-amt-'+b.id);const d=document.getElementById('bill-day-'+b.id);if(n)b.name=n.value;if(a)b.amount=parseFloat(a.value)||0;if(d)b.dueDay=parseInt(d.value)||1;});save();toast('Bills saved ✓');}
+function toggleBill(id){const b=S.mandatoryBills.find(x=>x.id===id);if(!b)return;b.paidThisMonth=!b.paidThisMonth;if(b.paidThisMonth&&b.amount>0){S.transactions.push({id:Date.now(),amount:b.amount,merchant:b.name,category:'bills',date:today(),note:'Auto from bill',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});toast('✅ Bill marked paid & transaction added!');}else{toast(b.name+' marked unpaid');}save();renderPage(currentPage);}
+function exportCSV(){const rows=['Date,Merchant,Category,Amount,Note,Loan,CreditCard,Wasteful,Pending'];S.transactions.forEach(t=>{const ln=t.loanId?S.loans.find(l=>l.id===t.loanId):null;const cc=t.creditCardId?S.creditCards.find(c=>c.id===t.creditCardId):null;rows.push(`${t.date},"${t.merchant}","${t.category}",${t.amount},"${t.note||''}","${ln?ln.name:''}","${cc?cc.name:''}",${t.isWaste?'Yes':'No'},${t.isPending?'Yes':'No'}`);});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');}
+function clearData(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('sw_v4');S=JSON.parse(JSON.stringify(DEFAULT));renderPage(currentPage);toast('Data cleared');}
+
+function downloadMonthlyReport(){
+  const ym=thisMonth();const mn=new Date().toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const txs=S.transactions.filter(t=>t.date.startsWith(ym));
+  const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
+  const emi=emiTotal();const waste=txs.filter(t=>t.isWaste).reduce((s,t)=>s+t.amount,0);
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SpendWise Report - ${mn}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;background:#f9f9f9;color:#1a1a2e;}
+  h1{color:#6C63FF;border-bottom:2px solid #6C63FF;padding-bottom:8px;}h2{color:#444;font-size:16px;margin-top:24px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:16px 0;}
+  .stat{background:#fff;border-radius:10px;padding:14px;border-left:4px solid #6C63FF;}
+  .stat .val{font-size:22px;font-weight:900;color:#6C63FF;}.stat .lbl{font-size:11px;color:#888;margin-bottom:4px;}
+  table{width:100%;border-collapse:collapse;background:#fff;border-radius:10px;overflow:hidden;margin-top:8px;}
+  th{background:#6C63FF;color:#fff;padding:10px;font-size:12px;text-align:left;}td{padding:9px 10px;font-size:12px;border-bottom:1px solid #eee;}
+  .green{color:#22C55E;font-weight:700;}.red{color:#EF4444;font-weight:700;}.amber{color:#F59E0B;font-weight:700;}
+  @media print{body{background:#fff;}}</style></head><body>
+  <h1>SpendWise Monthly Report</h1><p style="color:#888;font-size:13px;">Period: ${mn} · Generated: ${new Date().toLocaleDateString('en-IN')}</p>
+  <div class="grid">
+    <div class="stat"><div class="lbl">Total Income</div><div class="val green">₹${inc.toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Total Expenses</div><div class="val red">₹${exp.toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Net Savings</div><div class="val" style="color:${inc-exp>=0?'#22C55E':'#EF4444'};">₹${Math.abs(inc-exp).toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Total EMIs</div><div class="val red">₹${emi.toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Wasteful Spend</div><div class="val amber">₹${waste.toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Bank Balance</div><div class="val" style="color:#6C63FF;">₹${(S.bankBalance.amount||0).toLocaleString('en-IN')}</div></div>
+  </div>
+  <h2>💳 Credit Cards</h2>
+  <table><tr><th>Card</th><th>Limit</th><th>Outstanding</th><th>Available</th></tr>
+  ${S.creditCards.map(cc=>`<tr><td>${cc.name}</td><td>₹${cc.limit.toLocaleString('en-IN')}</td><td class="red">₹${cc.outstanding.toLocaleString('en-IN')}</td><td class="green">₹${(cc.limit-cc.outstanding).toLocaleString('en-IN')}</td></tr>`).join('')}</table>
+  <h2>🏦 Loan Summary</h2>
+  <table><tr><th>Loan</th><th>Rate</th><th>EMI</th><th>Outstanding</th><th>Remaining</th></tr>
+  ${S.loans.map(l=>`<tr><td>${l.name}</td><td>${l.rate}%</td><td>₹${l.emi.toLocaleString('en-IN')}</td><td class="red">₹${l.outstanding.toLocaleString('en-IN')}</td><td>${l.remaining} months</td></tr>`).join('')}</table>
+  <h2>📋 Mandatory Bills</h2>
+  <table><tr><th>Bill</th><th>Amount</th><th>Due Day</th><th>Status</th></tr>
+  ${S.mandatoryBills.map(b=>`<tr><td>${b.icon} ${b.name}</td><td>₹${b.amount.toLocaleString('en-IN')}</td><td>${b.dueDay}th</td><td class="${b.paidThisMonth?'green':'amber'}">${b.paidThisMonth?'✓ Paid':'⏳ Pending'}</td></tr>`).join('')}</table>
+  <h2>📈 Investments (Angel One)</h2>
+  <table><tr><th>Metric</th><th>Value</th></tr>
+  <tr><td>Monthly SIP</td><td>₹${(S.investments.angelOne.monthlyAmount||0).toLocaleString('en-IN')}</td></tr>
+  <tr><td>Current Portfolio</td><td class="green">₹${(S.investments.angelOne.currentBalance||0).toLocaleString('en-IN')}</td></tr></table>
+  <h2>📊 All Transactions (${mn})</h2>
+  <table><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Amount</th><th>Note</th></tr>
+  ${txs.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<tr><td>${fmtDate(t.date)}</td><td>${t.merchant}</td><td>${cat(t.category).label}</td><td class="${t.category==='income'?'green':'red'}">${t.category==='income'?'+':'-'}₹${t.amount.toLocaleString('en-IN')}</td><td>${t.note||''}</td></tr>`).join('')}
+  </table>
+  <p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">🔒 SpendWise · All data is private and stored locally</p>
+  <script>window.onload=()=>window.print();<\/script></body></html>`;
+  const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
 }
 
-// ═══════════════════════════════════════════════
-// MODAL SYSTEM
-// ═══════════════════════════════════════════════
-function openModal(html){
-  document.getElementById('modal-body').innerHTML=html;
-  document.getElementById('overlay').classList.add('show');
-}
+// ── MODALS ───────────────────────────────────────────────────
+function openModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('overlay').classList.add('show');}
 function closeModal(){document.getElementById('overlay').classList.remove('show');_smsData=null;}
 function maybeClose(e){if(e.target===document.getElementById('overlay'))closeModal();}
 
-// ── SMS Simulator ─────────────────────────────
-function openSMSSim(){
-  const msg=DEMO_SMS[smsIdx%DEMO_SMS.length];smsIdx++;
-  const p=parseSMS(msg);
-  _smsData=p;
-  const guessed=guessCat(p.merchant);
-  openModal(`
-    <div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
-    <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${msg}"</div>
-    <div style="display:flex;align-items:center;gap:13px;margin-bottom:18px;padding:14px;background:var(--card2);border-radius:14px;">
-      <div style="width:50px;height:50px;border-radius:14px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:24px;">${p.isCredit?'💰':'💸'}</div>
-      <div>
-        <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div>
-        <div style="font-size:28px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div>
-        <div style="font-size:12px;color:var(--muted);">${p.merchant}</div>
-      </div>
-    </div>
-    <div style="font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;">AUTO-DETECTED CATEGORY · Tap to change</div>
-    <div class="cat-grid" id="sms-cats">
-      ${CATS.map(c=>`<button class="cat-btn${c.id===guessed?' sel':''}" id="sc-${c.id}" style="${c.id===guessed?`border-color:${c.color};color:${c.color};background:${c.color}18;`:''}" onclick="pickSMSCat('${c.id}','${c.color}')">${c.icon} ${c.label}</button>`).join('')}
-    </div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
-      <div><div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div><div style="font-size:10px;color:var(--muted);">Flag impulse purchase</div></div>
-      <div class="toggle" id="sms-waste" onclick="this.classList.toggle('on')"></div>
-    </div>
-    <div class="form-group"><input class="form-input" id="sms-note" placeholder="Add a note (optional)..."></div>
+function openBankBalance(){
+  openModal(`<div class="modal-title">🏦 Update Bank Balance</div>
+    <div class="form-group"><label class="form-label">Current Bank Balance (₹)</label><input class="form-input" id="bb-amt" type="number" value="${S.bankBalance.amount||''}" placeholder="e.g. 45000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">As of Date</label><input class="form-input" id="bb-dt" type="date" value="${today()}"></div>
+    <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Update this after checking your bank app to get accurate financial picture.</div>
     <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Skip</button>
-      <button onclick="saveSMSTx('${guessed}')" class="btn btn-primary" style="flex:2;padding:13px;">Save Transaction ✓</button>
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveBankBalance()" class="btn btn-primary" style="flex:2;padding:13px;">Update Balance</button>
+    </div>`);
+}
+function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:dt};save();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
+
+function openInvestModal(){
+  const ao=S.investments.angelOne;
+  openModal(`<div class="modal-title">📈 Angel One Investment</div>
+    <div class="form-group"><label class="form-label">Monthly SIP Amount (₹)</label><input class="form-input" id="ao-sip" type="number" value="${ao.monthlyAmount||''}" placeholder="e.g. 5000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Current Portfolio Value (₹)</label><input class="form-input" id="ao-bal" type="number" value="${ao.currentBalance||''}" placeholder="e.g. 62000" inputmode="numeric"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Log SIP for this month:</div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Month (YYYY-MM)</label><input class="form-input" id="ao-month" value="${thisMonth()}" placeholder="2026-05"></div>
+      <div class="form-group"><label class="form-label">SIP Amount</label><input class="form-input" id="ao-sipamt" type="number" value="${ao.monthlyAmount||''}" inputmode="numeric"></div>
     </div>
-  `);
-  _smsData._cat=guessed;
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveInvestment()" class="btn btn-primary" style="flex:2;padding:13px;">Save & Log SIP</button>
+    </div>`);
 }
-function pickSMSCat(id,color){
-  if(_smsData)_smsData._cat=id;
-  document.querySelectorAll('.cat-btn').forEach(b=>{b.classList.remove('sel');b.style.borderColor='transparent';b.style.color='var(--muted)';b.style.background='var(--card2)';});
-  const btn=document.getElementById('sc-'+id);
-  if(btn){btn.classList.add('sel');btn.style.borderColor=color;btn.style.color=color;btn.style.background=color+'18';}
-}
-function saveSMSTx(){
-  if(!_smsData)return;
-  const catId=_smsData._cat||((_smsData.isCredit)?'income':'other');
-  const isWaste=document.getElementById('sms-waste').classList.contains('on');
-  const note=document.getElementById('sms-note').value;
-  if(_smsData.isCredit&&catId==='income'){
-    S.salary.history.push({amount:_smsData.amount,date:today(),note});
-    if(!S.salary.amount)S.salary.amount=_smsData.amount;
+function saveInvestment(){
+  const sip=parseFloat(document.getElementById('ao-sip').value)||0;
+  const bal=parseFloat(document.getElementById('ao-bal').value)||0;
+  const month=document.getElementById('ao-month').value;
+  const sipAmt=parseFloat(document.getElementById('ao-sipamt').value)||0;
+  S.investments.angelOne.monthlyAmount=sip;S.investments.angelOne.currentBalance=bal;
+  if(month&&sipAmt){
+    const existing=S.investments.angelOne.history.find(h=>h.month===month);
+    if(existing){existing.amount=sipAmt;existing.balance=bal;}
+    else{S.investments.angelOne.history.push({month,amount:sipAmt,balance:bal});}
+    S.transactions.push({id:Date.now(),amount:sipAmt,merchant:'Angel One SIP',category:'investment',date:today(),note:'Monthly SIP '+month,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});
   }
-  S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste});
-  save();closeModal();toast('✅ Transaction saved!');renderPage(currentPage);
+  save();closeModal();toast('✅ Investment updated!');renderPage(currentPage);
 }
 
-// ── Add Transaction ───────────────────────────
+function openAddBill(){
+  openModal(`<div class="modal-title">+ Add Mandatory Bill</div>
+    <div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="nb-name" placeholder="e.g. OTT Subscription"></div>
+    <div class="form-group"><label class="form-label">Icon (emoji)</label><input class="form-input" id="nb-icon" value="📄" style="font-size:22px;"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Monthly Amount (₹)</label><input class="form-input" id="nb-amt" type="number" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Due Day</label><input class="form-input" id="nb-day" type="number" min="1" max="31" value="1"></div>
+    </div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveNewBill()" class="btn btn-primary" style="flex:2;padding:13px;">Add Bill</button>
+    </div>`);
+}
+function saveNewBill(){const name=document.getElementById('nb-name').value.trim();if(!name){toast('Enter bill name');return;}S.mandatoryBills.push({id:Date.now(),name,icon:document.getElementById('nb-icon').value||'📄',amount:parseFloat(document.getElementById('nb-amt').value)||0,dueDay:parseInt(document.getElementById('nb-day').value)||1,paidThisMonth:false});save();closeModal();toast('✅ Bill added!');renderPage(currentPage);}
+
+function openAddCard(editId){
+  const cc=editId?S.creditCards.find(c=>c.id===editId):null;
+  openModal(`<div class="modal-title">${cc?'✏️ Edit Card':'+ Add Credit Card'}</div>
+    <div class="form-group"><label class="form-label">Card Name</label><input class="form-input" id="cc-name" value="${cc?cc.name:''}" placeholder="e.g. HDFC Regalia"></div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Credit Limit (₹)</label><input class="form-input" id="cc-limit" type="number" value="${cc?cc.limit:''}" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Outstanding (₹)</label><input class="form-input" id="cc-out" type="number" value="${cc?cc.outstanding:''}" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Due Day (1-31)</label><input class="form-input" id="cc-due" type="number" min="1" max="31" value="${cc?cc.dueDay:15}"></div>
+      <div class="form-group"><label class="form-label">Min. Due (₹)</label><input class="form-input" id="cc-min" type="number" value="${cc?cc.minDue||0:''}" placeholder="0" inputmode="numeric"></div>
+    </div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveCard(${editId||'null'})" class="btn btn-primary" style="flex:2;padding:13px;">${cc?'Update':'Add Card'}</button>
+    </div>`);
+}
+function openEditCard(id){openAddCard(id);}
+function saveCard(editId){
+  const name=document.getElementById('cc-name').value.trim();if(!name){toast('Enter card name');return;}
+  const limit=parseFloat(document.getElementById('cc-limit').value)||0;
+  const outstanding=parseFloat(document.getElementById('cc-out').value)||0;
+  const dueDay=parseInt(document.getElementById('cc-due').value)||15;
+  const minDue=parseFloat(document.getElementById('cc-min').value)||0;
+  if(editId){const idx=S.creditCards.findIndex(c=>c.id===editId);if(idx>=0)S.creditCards[idx]={...S.creditCards[idx],name,limit,outstanding,dueDay,minDue};}
+  else{S.creditCards.push({id:Date.now(),name,limit,outstanding,color:CC_COLORS[S.creditCards.length%CC_COLORS.length],dueDay,minDue});}
+  save();closeModal();toast(editId?'✅ Card updated!':'✅ Card added!');renderCards();
+}
+
+function openCardTx(cardId){
+  const cc=S.creditCards.find(c=>c.id===cardId);if(!cc)return;
+  openModal(`<div class="modal-title">💴 ${cc.name} Spend</div>
+    <div style="background:var(--card2);border-radius:12px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;font-size:12px;">
+      <span style="color:var(--muted);">Available</span><span style="font-weight:700;color:var(--green);">${fmtFull(cc.limit-cc.outstanding)}</span>
+    </div>
+    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="ctx-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Merchant</label><input class="form-input" id="ctx-mer" placeholder="e.g. Amazon, Swiggy" oninput="autoPickCat(this.value)"></div>
+    <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="ctx-cat">${CATS.filter(c=>c.id!=='income'&&c.id!=='savings').map(c=>`<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="ctx-dt" type="date" value="${today()}"></div>
+    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="ctx-nt" placeholder="Optional"></div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveCardTx(${cardId})" class="btn btn-primary" style="flex:2;padding:13px;">Add Spend</button>
+    </div>`);
+}
+function saveCardTx(cardId){
+  const amt=parseFloat(document.getElementById('ctx-amt').value);const mer=document.getElementById('ctx-mer').value.trim();
+  if(!amt||!mer){toast('Fill amount and merchant');return;}
+  const cc=S.creditCards.find(c=>c.id===cardId);if(cc)cc.outstanding+=amt;
+  S.transactions.push({id:Date.now(),amount:amt,merchant:mer,category:document.getElementById('ctx-cat').value,date:document.getElementById('ctx-dt').value,note:document.getElementById('ctx-nt').value,isWaste:false,isPending:false,loanId:null,creditCardId:cardId,contactName:''});
+  save();closeModal();toast('✅ CC spend added!');renderPage(currentPage);
+}
+
+function openLoanPayTx(loanId){
+  const loan=S.loans.find(l=>l.id===loanId);if(!loan)return;
+  openModal(`<div class="modal-title">💳 Pay EMI — ${loan.name}</div>
+    <div style="background:var(--card2);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Rate: ${loan.rate}% · Outstanding: ${fmtFull(loan.outstanding)}</div>
+    <div class="form-group"><label class="form-label">EMI Amount (₹)</label><input class="form-input" id="lp-amt" type="number" value="${loan.emi}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Payment Date</label><input class="form-input" id="lp-dt" type="date" value="${today()}"></div>
+    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="lp-nt" placeholder="e.g. May EMI"></div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveLoanPayTx(${loanId})" class="btn btn-primary" style="flex:2;padding:13px;">Record Payment</button>
+    </div>`);
+}
+function saveLoanPayTx(loanId){
+  const amt=parseFloat(document.getElementById('lp-amt').value)||0;const dt=document.getElementById('lp-dt').value;const nt=document.getElementById('lp-nt').value;
+  if(!amt){toast('Enter amount');return;}
+  S.transactions.push({id:Date.now(),amount:amt,merchant:S.loans.find(l=>l.id===loanId)?.name+' EMI',category:'emi',date:dt,note:nt,isWaste:false,isPending:false,loanId,creditCardId:null,contactName:''});
+  const loan=S.loans.find(l=>l.id===loanId);if(loan){loan.outstanding=Math.max(0,loan.outstanding-amt);if(loan.remaining>0)loan.remaining--;}
+  save();closeModal();toast('✅ EMI recorded!');renderPage(currentPage);
+}
+
+function openFamilyTx(){
+  openModal(`<div class="modal-title">👨‍👩‍👧 Family / Friends Transfer</div>
+    <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="ft-contact" placeholder="e.g. Mom, Raj, Sister"></div>
+    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="ft-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="ft-type"><option value="sent">💸 Money Sent</option><option value="received">💰 Money Received</option></select></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="ft-dt" type="date" value="${today()}"></div>
+    <div class="form-group"><label class="form-label">Note / Reason</label><input class="form-input" id="ft-nt" placeholder="e.g. Monthly support, Festival gift"></div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveFamilyTx()" class="btn btn-teal" style="flex:2;padding:13px;">Save Transfer</button>
+    </div>`);
+}
+function saveFamilyTx(){
+  const contact=document.getElementById('ft-contact').value.trim();const amt=parseFloat(document.getElementById('ft-amt').value);const type=document.getElementById('ft-type').value;
+  if(!contact||!amt){toast('Fill contact and amount');return;}
+  const isInc=type==='received';
+  S.transactions.push({id:Date.now(),amount:amt,merchant:contact+(isInc?' (Received)':' (Sent)'),category:isInc?'income':'family',date:document.getElementById('ft-dt').value,note:document.getElementById('ft-nt').value,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:contact});
+  save();closeModal();toast('✅ Transfer saved!');renderPage(currentPage);
+}
+
+function openEditTx(id){
+  const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
+  openModal(`<div class="modal-title">✏️ Edit Transaction</div>
+    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="et-amt" type="number" value="${tx.amount}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="et-mer" value="${tx.merchant}"></div>
+    <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="et-cat">${CATS.map(c=>`<option value="${c.id}" ${c.id===tx.category?'selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="et-dt" type="date" value="${tx.date}"></div>
+    <div class="form-group"><label class="form-label">Note / Description</label><input class="form-input" id="et-nt" value="${tx.note||''}" placeholder="Add description to clear pending status"></div>
+    <div class="form-group"><label class="form-label">Linked Loan (if EMI)</label><select class="form-input" id="et-loan"><option value="">None</option>${S.loans.map(l=>`<option value="${l.id}" ${tx.loanId===l.id?'selected':''}>${l.name}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Linked Credit Card</label><select class="form-input" id="et-cc"><option value="">None</option>${S.creditCards.map(c=>`<option value="${c.id}" ${tx.creditCardId===c.id?'selected':''}>${c.name}</option>`).join('')}</select></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
+      <div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div>
+      <div class="toggle ${tx.isWaste?'on':''}" id="et-waste" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveEditTx(${id})" class="btn btn-primary" style="flex:2;padding:13px;">Save Changes</button>
+    </div>`);
+}
+function saveEditTx(id){
+  const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
+  tx.amount=parseFloat(document.getElementById('et-amt').value)||tx.amount;
+  tx.merchant=document.getElementById('et-mer').value.trim()||tx.merchant;
+  tx.category=document.getElementById('et-cat').value;
+  tx.date=document.getElementById('et-dt').value;
+  tx.note=document.getElementById('et-nt').value;
+  tx.loanId=parseInt(document.getElementById('et-loan').value)||null;
+  tx.creditCardId=parseInt(document.getElementById('et-cc').value)||null;
+  tx.isWaste=document.getElementById('et-waste').classList.contains('on');
+  tx.isPending=!(tx.note&&tx.note.trim()&&tx.category!=='other');
+  save();closeModal();toast('✅ Transaction updated!');renderPage(currentPage);
+}
+
 function openAddTx(){
-  openModal(`
-    <div class="modal-title">Add Transaction</div>
+  openModal(`<div class="modal-title">Add Transaction</div>
     <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="tx-amt" type="number" placeholder="0" inputmode="numeric"></div>
-    <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="tx-mer" placeholder="e.g. Swiggy, Amazon, Salary..." oninput="autoPickCat(this.value)"></div>
+    <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="tx-mer" placeholder="e.g. Swiggy, RBL EMI..." oninput="autoPickCat(this.value)"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="tx-cat">${CATS.map(c=>`<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="tx-dt" type="date" value="${today()}"></div>
-    <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="tx-nt" placeholder="e.g. Birthday dinner"></div>
+    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="tx-nt" placeholder="Optional"></div>
+    <div class="form-group"><label class="form-label">Linked Loan (EMI)</label><select class="form-input" id="tx-loan"><option value="">None</option>${S.loans.map(l=>`<option value="${l.id}">${l.name}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Linked Credit Card</label><select class="form-input" id="tx-cc"><option value="">None</option>${S.creditCards.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
       <div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div>
       <div class="toggle" id="tx-waste" onclick="this.classList.toggle('on')"></div>
@@ -749,142 +969,116 @@ function openAddTx(){
     <div style="display:flex;gap:9px;">
       <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
       <button onclick="saveManualTx()" class="btn btn-primary" style="flex:2;padding:13px;">Add Transaction</button>
-    </div>
-  `);
+    </div>`);
 }
-function autoPickCat(val){
-  const g=guessCat(val);
-  const sel=document.getElementById('tx-cat');
-  if(sel)sel.value=g;
-}
+function autoPickCat(val){const g=guessCat(val);const sel=document.getElementById('tx-cat');if(sel)sel.value=g;}
 function saveManualTx(){
-  const amt=parseFloat(document.getElementById('tx-amt').value);
-  const mer=document.getElementById('tx-mer').value.trim();
-  if(!amt||!mer){toast('Fill in amount and description');return;}
-  S.transactions.push({id:Date.now(),amount:amt,merchant:mer,category:document.getElementById('tx-cat').value,date:document.getElementById('tx-dt').value,note:document.getElementById('tx-nt').value,isWaste:document.getElementById('tx-waste').classList.contains('on')});
+  const amt=parseFloat(document.getElementById('tx-amt').value);const mer=document.getElementById('tx-mer').value.trim();
+  if(!amt||!mer){toast('Fill amount and description');return;}
+  const cat=document.getElementById('tx-cat').value;const note=document.getElementById('tx-nt').value;
+  const loanId=parseInt(document.getElementById('tx-loan').value)||null;
+  const creditCardId=parseInt(document.getElementById('tx-cc').value)||null;
+  const isPending=!(note&&note.trim()&&cat!=='other');
+  if(creditCardId){const cc=S.creditCards.find(c=>c.id===creditCardId);if(cc&&cat!=='income')cc.outstanding+=amt;}
+  S.transactions.push({id:Date.now(),amount:amt,merchant:mer,category:cat,date:document.getElementById('tx-dt').value,note,isWaste:document.getElementById('tx-waste').classList.contains('on'),isPending,loanId,creditCardId,contactName:''});
   save();closeModal();toast('✅ Transaction added!');renderPage(currentPage);
 }
 
-// ── Salary Settings ───────────────────────────
+function openSMSSim(){
+  const msg=DEMO_SMS[smsIdx%DEMO_SMS.length];smsIdx++;
+  const p=parseSMS(msg);_smsData=p;
+  const guessed=guessCat(p.merchant);
+  if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:today()};save();}
+  openModal(`<div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
+    <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${msg}"</div>
+    ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ₹${p.bankBal.toLocaleString('en-IN')}</div>`:''}
+    <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;background:var(--card2);border-radius:14px;">
+      <div style="width:48px;height:48px;border-radius:13px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:22px;">${p.isCredit?'💰':'💸'}</div>
+      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
+    </div>
+    <div style="font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;">Category · Tap to change</div>
+    <div class="cat-grid" id="sms-cats">${CATS.map(c=>`<button class="cat-btn${c.id===guessed?' sel':''}" id="sc-${c.id}" style="${c.id===guessed?`border-color:${c.color};color:${c.color};background:${c.color}18;`:''}" onclick="pickSMSCat('${c.id}','${c.color}')">${c.icon} ${c.label}</button>`).join('')}</div>
+    ${!p.isCredit?`<div class="form-group"><label class="form-label">Linked Loan (if EMI)</label><select class="form-input" id="sms-loan"><option value="">None</option>${S.loans.map(l=>`<option value="${l.id}">${l.name}</option>`).join('')}</select></div>`:''}
+    <div class="form-group"><label class="form-label">Note / Description</label><input class="form-input" id="sms-note" placeholder="Add description..."></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
+      <div><div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div></div>
+      <div class="toggle" id="sms-waste" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Skip</button>
+      <button onclick="saveSMSTx('${guessed}')" class="btn btn-primary" style="flex:2;padding:13px;">Save ✓</button>
+    </div>`);
+  _smsData._cat=guessed;
+}
+function pickSMSCat(id,color){if(_smsData)_smsData._cat=id;document.querySelectorAll('.cat-btn').forEach(b=>{b.classList.remove('sel');b.style.borderColor='transparent';b.style.color='var(--muted)';b.style.background='var(--card2)';});const btn=document.getElementById('sc-'+id);if(btn){btn.classList.add('sel');btn.style.borderColor=color;btn.style.color=color;btn.style.background=color+'18';}}
+function saveSMSTx(){
+  if(!_smsData)return;
+  const catId=_smsData._cat||(_smsData.isCredit?'income':'other');
+  const isWaste=document.getElementById('sms-waste').classList.contains('on');
+  const note=document.getElementById('sms-note').value;
+  const loanEl=document.getElementById('sms-loan');const loanId=loanEl?parseInt(loanEl.value)||null:null;
+  const isPending=!(note&&note.trim()&&catId!=='other');
+  if(_smsData.isCredit&&catId==='income'){S.salary.history.push({amount:_smsData.amount,date:today(),note});if(!S.salary.amount)S.salary.amount=_smsData.amount;}
+  S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:''});
+  save();closeModal();toast('✅ Transaction saved!');renderPage(currentPage);
+}
+
 function openSalarySettings(){
-  openModal(`
-    <div class="modal-title">⚙️ Salary Settings</div>
+  openModal(`<div class="modal-title">⚙️ Salary Settings</div>
     <div class="form-group"><label class="form-label">Monthly Salary (₹)</label><input class="form-input" id="sal-amt" type="number" value="${S.salary.amount||''}" placeholder="e.g. 85000" inputmode="numeric"></div>
-    <div class="form-group"><label class="form-label">Expected Salary Day (1–31)</label><input class="form-input" id="sal-day" type="number" min="1" max="31" value="${S.salary.expectedDay||1}"></div>
-    <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 You'll get notified when salary day arrives and can manually mark it received.</div>
-    <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
-      <button onclick="saveSalarySettings()" class="btn btn-primary" style="flex:2;padding:13px;">Save</button>
-    </div>
-  `);
+    <div class="form-group"><label class="form-label">Expected Salary Day</label><input class="form-input" id="sal-day" type="number" min="1" max="31" value="${S.salary.expectedDay||1}"></div>
+    <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveSalarySettings()" class="btn btn-primary" style="flex:2;padding:13px;">Save</button></div>`);
 }
-function saveSalarySettings(){
-  S.salary.amount=parseFloat(document.getElementById('sal-amt').value)||0;
-  S.salary.expectedDay=parseInt(document.getElementById('sal-day').value)||1;
-  save();closeModal();toast('✅ Salary settings saved!');renderPage(currentPage);
-}
+function saveSalarySettings(){S.salary.amount=parseFloat(document.getElementById('sal-amt').value)||0;S.salary.expectedDay=parseInt(document.getElementById('sal-day').value)||1;save();closeModal();toast('✅ Salary saved!');renderPage(currentPage);}
 
-// ── Mark Salary Received ──────────────────────
 function openMarkSalary(){
-  openModal(`
-    <div class="modal-title">✅ Salary Received</div>
-    <div class="form-group"><label class="form-label">Amount Received (₹)</label><input class="form-input" id="rv-amt" type="number" value="${S.salary.amount||''}" placeholder="Enter amount" inputmode="numeric"></div>
-    <div class="form-group"><label class="form-label">Date Received</label><input class="form-input" id="rv-dt" type="date" value="${today()}"></div>
-    <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="rv-nt" placeholder="e.g. May 2026 salary"></div>
-    <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
-      <button onclick="saveMarkSalary()" class="btn btn-green" style="flex:2;padding:13px;">✓ Confirm</button>
-    </div>
-  `);
+  openModal(`<div class="modal-title">✅ Salary Received</div>
+    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="rv-amt" type="number" value="${S.salary.amount||''}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="rv-dt" type="date" value="${today()}"></div>
+    <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="rv-nt" placeholder="e.g. May 2026 salary"></div>
+    <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveMarkSalary()" class="btn btn-green" style="flex:2;padding:13px;">✓ Confirm</button></div>`);
 }
-function saveMarkSalary(){
-  const amt=parseFloat(document.getElementById('rv-amt').value)||S.salary.amount;
-  const dt=document.getElementById('rv-dt').value;
-  const nt=document.getElementById('rv-nt').value;
-  S.salary.history.push({amount:amt,date:dt,note:nt});
-  S.salary.amount=amt;
-  S.transactions.push({id:Date.now(),amount:amt,merchant:'Salary',category:'income',date:dt,note:nt,isWaste:false});
-  save();closeModal();toast('✅ Salary marked received!');renderPage(currentPage);
-}
+function saveMarkSalary(){const amt=parseFloat(document.getElementById('rv-amt').value)||S.salary.amount;const dt=document.getElementById('rv-dt').value;const nt=document.getElementById('rv-nt').value;S.salary.history.push({amount:amt,date:dt,note:nt});S.salary.amount=amt;S.transactions.push({id:Date.now(),amount:amt,merchant:'Salary',category:'income',date:dt,note:nt,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});save();closeModal();toast('✅ Salary marked!');renderPage(currentPage);}
 
-// ── Add Other Income ──────────────────────────
 function openAddIncome(){
-  openModal(`
-    <div class="modal-title">+ Add Income</div>
+  openModal(`<div class="modal-title">+ Add Income</div>
     <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="inc-amt" type="number" placeholder="0" inputmode="numeric"></div>
-    <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="inc-src" placeholder="e.g. Freelance, Bonus, Rent, Interest..."></div>
+    <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="inc-src" placeholder="e.g. Freelance, Bonus, Interest..."></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="inc-dt" type="date" value="${today()}"></div>
     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="inc-nt" placeholder="Optional"></div>
-    <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
-      <button onclick="saveIncome()" class="btn btn-green" style="flex:2;padding:13px;">+ Add</button>
-    </div>
-  `);
+    <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveIncome()" class="btn btn-green" style="flex:2;padding:13px;">+ Add</button></div>`);
 }
-function saveIncome(){
-  const amt=parseFloat(document.getElementById('inc-amt').value);
-  const src=document.getElementById('inc-src').value.trim();
-  if(!amt||!src){toast('Fill all fields');return;}
-  S.transactions.push({id:Date.now(),amount:amt,merchant:src,category:'income',date:document.getElementById('inc-dt').value,note:document.getElementById('inc-nt').value,isWaste:false});
-  save();closeModal();toast('✅ Income added!');renderPage(currentPage);
-}
+function saveIncome(){const amt=parseFloat(document.getElementById('inc-amt').value);const src=document.getElementById('inc-src').value.trim();if(!amt||!src){toast('Fill all fields');return;}S.transactions.push({id:Date.now(),amount:amt,merchant:src,category:'income',date:document.getElementById('inc-dt').value,note:document.getElementById('inc-nt').value,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});save();closeModal();toast('✅ Income added!');renderPage(currentPage);}
 
-// ── Add Loan ──────────────────────────────────
 function openAddLoan(editId){
   const loan=editId?S.loans.find(l=>l.id===editId):null;
-  openModal(`
-    <div class="modal-title">${loan?'✏️ Edit Loan':'+ Add Loan'}</div>
-    <div class="form-group"><label class="form-label">Lender / Loan Name</label><input class="form-input" id="ln-name" value="${loan?loan.name:''}" placeholder="e.g. HDFC Bank, Bajaj Finance..."></div>
+  openModal(`<div class="modal-title">${loan?'✏️ Edit Loan':'+ Add Loan'}</div>
+    <div class="form-group"><label class="form-label">Lender Name</label><input class="form-input" id="ln-name" value="${loan?loan.name:''}" placeholder="e.g. HDFC Bank"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Monthly EMI (₹)</label><input class="form-input" id="ln-emi" type="number" value="${loan?loan.emi:''}" placeholder="0" inputmode="numeric"></div>
-      <div class="form-group"><label class="form-label">Interest Rate (%)</label><input class="form-input" id="ln-rate" type="number" step="0.1" value="${loan?loan.rate:''}" placeholder="e.g. 12.5"></div>
+      <div class="form-group"><label class="form-label">EMI (₹/mo)</label><input class="form-input" id="ln-emi" type="number" value="${loan?loan.emi:''}" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Rate (%)</label><input class="form-input" id="ln-rate" type="number" step="0.1" value="${loan?loan.rate:''}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Outstanding (₹)</label><input class="form-input" id="ln-out" type="number" value="${loan?loan.outstanding:''}" placeholder="0" inputmode="numeric"></div>
-      <div class="form-group"><label class="form-label">Months Remaining</label><input class="form-input" id="ln-rem" type="number" value="${loan?loan.remaining:''}" placeholder="e.g. 24"></div>
+      <div class="form-group"><label class="form-label">Outstanding (₹)</label><input class="form-input" id="ln-out" type="number" value="${loan?loan.outstanding:''}" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Months Left</label><input class="form-input" id="ln-rem" type="number" value="${loan?loan.remaining:''}"></div>
     </div>
-    <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
-      <button onclick="saveLoan(${editId||'null'})" class="btn btn-primary" style="flex:2;padding:13px;">${loan?'Update':'Add Loan'}</button>
-    </div>
-  `);
+    <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveLoan(${editId||'null'})" class="btn btn-primary" style="flex:2;padding:13px;">${loan?'Update':'Add Loan'}</button></div>`);
 }
 function openEditLoan(id){openAddLoan(id);}
 function saveLoan(editId){
-  const name=document.getElementById('ln-name').value.trim();
-  const emi=parseFloat(document.getElementById('ln-emi').value)||0;
-  const rate=parseFloat(document.getElementById('ln-rate').value)||0;
-  const outstanding=parseFloat(document.getElementById('ln-out').value)||0;
-  const remaining=parseInt(document.getElementById('ln-rem').value)||0;
-  if(!name){toast('Enter lender name');return;}
-  if(editId){
-    const idx=S.loans.findIndex(l=>l.id===editId);
-    if(idx>=0)S.loans[idx]={...S.loans[idx],name,emi,rate,outstanding,remaining};
-  } else {
-    S.loans.push({id:Date.now(),name,emi,rate,outstanding,remaining,color:LOAN_COLORS[S.loans.length%LOAN_COLORS.length]});
-  }
+  const name=document.getElementById('ln-name').value.trim();if(!name){toast('Enter lender name');return;}
+  const emi=parseFloat(document.getElementById('ln-emi').value)||0;const rate=parseFloat(document.getElementById('ln-rate').value)||0;
+  const outstanding=parseFloat(document.getElementById('ln-out').value)||0;const remaining=parseInt(document.getElementById('ln-rem').value)||0;
+  if(editId){const idx=S.loans.findIndex(l=>l.id===editId);if(idx>=0)S.loans[idx]={...S.loans[idx],name,emi,rate,outstanding,remaining};}
+  else{S.loans.push({id:Date.now(),name,emi,rate,outstanding,remaining,color:LOAN_COLORS[S.loans.length%LOAN_COLORS.length]});}
   save();closeModal();toast(editId?'✅ Loan updated!':'✅ Loan added!');renderLoans();
 }
 
-// ═══════════════════════════════════════════════
-// TOAST & CLOCK
-// ═══════════════════════════════════════════════
-function toast(msg,isError){
-  const t=document.getElementById('toast');
-  t.textContent=msg;
-  t.style.background=isError?'var(--red)':'var(--green)';
-  t.style.display='block';
-  clearTimeout(t._tmr);
-  t._tmr=setTimeout(()=>t.style.display='none',2600);
-}
-function updateClock(){
-  const el=document.getElementById('clock');
-  if(el)el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-}
+// ── TOAST & CLOCK ─────────────────────────────────────────────
+function toast(msg,isError){const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'var(--red)':'var(--green)';t.style.display='block';clearTimeout(t._tmr);t._tmr=setTimeout(()=>t.style.display='none',2600);}
+function updateClock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 
-// ═══════════════════════════════════════════════
-// INIT
-// ═══════════════════════════════════════════════
+// ── INIT ──────────────────────────────────────────────────────
 load();
 updateClock();
 setInterval(updateClock,30000);
