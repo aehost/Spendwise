@@ -414,7 +414,7 @@ let txFilter='all';
 let _smsData=null;
 
 function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
-function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:p.investments||DEFAULT.investments,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards};}}catch(e){}}
+function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:{angelOne:{...DEFAULT.investments.angelOne,...((p.investments&&p.investments.angelOne)||{})}},mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})}};}}catch(e){}}
 
 // ── FIREBASE AUTH + CLOUD SYNC ────────────────────────────────
 const FB_URL='https://spendwise-4bc4f-default-rtdb.asia-southeast1.firebasedatabase.app';
@@ -458,9 +458,14 @@ async function syncFromCloud(){
     if(!res.ok){updateSyncDot('fail');return false;}
     const d=await res.json();
     if(!d||!d.transactions){updateSyncDot('ok');return false;}
-    S={...DEFAULT,...d,bankBalance:d.bankBalance||DEFAULT.bankBalance,investments:d.investments||DEFAULT.investments,
-      mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,creditCards:d.creditCards||DEFAULT.creditCards,
-      loans:d.loans||DEFAULT.loans};
+    S={...DEFAULT,...d,
+      bankBalance:d.bankBalance||DEFAULT.bankBalance,
+      investments:{angelOne:{...DEFAULT.investments.angelOne,...((d.investments&&d.investments.angelOne)||{})}},
+      mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,
+      creditCards:d.creditCards||DEFAULT.creditCards,
+      loans:d.loans||DEFAULT.loans,
+      salary:{...DEFAULT.salary,...(d.salary||{}),history:(d.salary&&d.salary.history)||[]},
+      budgets:{...DEFAULT.budgets,...(d.budgets||{})}};
     localStorage.setItem('sw_v4',JSON.stringify(S));
     localStorage.setItem('sw_last_sync',new Date().toISOString());
     updateSyncDot('ok');return true;
@@ -973,7 +978,7 @@ function delLoan(id){if(!confirm('Remove loan?'))return;S.loans=S.loans.filter(l
 function renderMoney(){
   const recv=salaryThisMonth();
   const incTxs=[...S.transactions].filter(t=>t.category==='income').sort((a,b)=>b.date.localeCompare(a.date));
-  const ao=S.investments.angelOne;
+  const ao=(S.investments&&S.investments.angelOne)||DEFAULT.investments.angelOne;
   const totalInvested=ao.history.reduce((s,h)=>s+h.amount,0);
   const gainAmt=ao.currentBalance-totalInvested;
   const gainPct=totalInvested>0?((gainAmt/totalInvested)*100).toFixed(1):0;
@@ -1310,7 +1315,7 @@ function emailMonthlyReport(ym){
 
 // ── MODALS ───────────────────────────────────────────────────
 function openModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('overlay').classList.add('show');}
-function closeModal(){document.getElementById('overlay').classList.remove('show');_smsData=null;}
+function closeModal(){document.getElementById('overlay').classList.remove('show');}
 function maybeClose(e){if(e.target===document.getElementById('overlay'))closeModal();}
 
 function openBankBalance(){
@@ -1326,7 +1331,7 @@ function openBankBalance(){
 function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:dt};save();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
 
 function openInvestModal(){
-  const ao=S.investments.angelOne;
+  const ao=(S.investments&&S.investments.angelOne)||DEFAULT.investments.angelOne;
   openModal(`<div class="modal-title">📈 Angel One Investment</div>
     <div class="form-group"><label class="form-label">Monthly SIP Amount (₹)</label><input class="form-input" id="ao-sip" type="number" value="${ao.monthlyAmount||''}" placeholder="e.g. 5000" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Current Portfolio Value (₹)</label><input class="form-input" id="ao-bal" type="number" value="${ao.currentBalance||''}" placeholder="e.g. 62000" inputmode="numeric"></div>
@@ -1345,6 +1350,8 @@ function saveInvestment(){
   const bal=parseFloat(document.getElementById('ao-bal').value)||0;
   const month=document.getElementById('ao-month').value;
   const sipAmt=parseFloat(document.getElementById('ao-sipamt').value)||0;
+  if(!S.investments)S.investments={};
+  if(!S.investments.angelOne)S.investments.angelOne={...DEFAULT.investments.angelOne};
   S.investments.angelOne.monthlyAmount=sip;S.investments.angelOne.currentBalance=bal;
   if(month&&sipAmt){
     const existing=S.investments.angelOne.history.find(h=>h.month===month);
@@ -1563,6 +1570,7 @@ function saveSMSTx(){
   const isPending=!(note&&note.trim()&&catId!=='other');
   if(_smsData.isCredit&&catId==='income'){S.salary.history.push({amount:_smsData.amount,date:today(),note});if(!S.salary.amount)S.salary.amount=_smsData.amount;}
   S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:''});
+  _smsData=null;
   save();closeModal();toast('✅ Transaction saved!');renderPage(currentPage);
 }
 
