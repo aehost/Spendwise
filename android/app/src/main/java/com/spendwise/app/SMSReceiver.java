@@ -29,8 +29,10 @@ public class SMSReceiver extends BroadcastReceiver {
     );
 
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
-        "(?:Rs\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d+)?)|" +
-        "(?:Amt|Amount)[:\\s]+(?:Rs\\.?|INR|₹)?\\s*([\\d,]+(?:\\.\\d+)?)",
+        "(?:Rs\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d+)?)|" +                          // Rs./INR/₹ prefix
+        "(?:Amt|Amount)[:\\s]+(?:Rs\\.?|INR|₹)?\\s*([\\d,]+(?:\\.\\d+)?)|" +    // Amt:/Amount: prefix
+        "(?:credited|debited|deducted)(?:\\s+(?:with|by|of))?\\s+(?:Rs\\.?|INR|₹)?\\s*([\\d,]+(?:\\.\\d+)?)|" + // verb then amount
+        "([\\d,]+(?:\\.\\d+)?)\\s*(?:Rs\\.?|INR|₹|credited|debited|deducted)",  // amount then verb
         Pattern.CASE_INSENSITIVE
     );
 
@@ -134,8 +136,10 @@ public class SMSReceiver extends BroadcastReceiver {
                         || lower.contains("refund") || lower.contains("deposit");
         Matcher m = AMOUNT_PATTERN.matcher(body);
         if (m.find()) {
-            // group(1) from Rs./INR/₹ pattern; group(2) from Amt/Amount pattern
-            String raw = m.group(1) != null ? m.group(1) : m.group(2);
+            // groups: (1) Rs./INR/₹ prefix, (2) Amt/Amount prefix, (3) verb-then-amount, (4) amount-then-verb
+            String raw = m.group(1) != null ? m.group(1) :
+                         m.group(2) != null ? m.group(2) :
+                         m.group(3) != null ? m.group(3) : m.group(4);
             if (raw != null) {
                 raw = raw.replace(",", "");
                 try {

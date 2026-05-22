@@ -61,11 +61,12 @@ button{cursor:pointer;border:none;background:none;}
 
 .form-group{margin-bottom:13px;}
 .form-label{font-size:11px;color:var(--muted);margin-bottom:5px;display:block;letter-spacing:0.3px;}
-.form-input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;color-scheme:dark;}
-.form-input:focus{border-color:var(--accent);}
-select.form-input{-webkit-appearance:none;}
-/* Force dark styling on modal inputs — fixes Android WebView white override */
-.modal-body input,.modal-body select,.modal-body textarea{background:var(--card2)!important;color:var(--text)!important;color-scheme:dark;}
+.form-input{width:100%;background:#1A1A25;border:1.5px solid #1E1E2E;border-radius:12px;padding:12px 14px;color:#F1F1F5;-webkit-text-fill-color:#F1F1F5;font-size:15px;outline:none;transition:border-color 0.2s;}
+.form-input:focus{border-color:#6C63FF;}
+select.form-input{-webkit-appearance:none;appearance:none;background-color:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;}
+/* Force explicit colours on all form controls — prevents Android WebView white-on-white */
+input.form-input,textarea.form-input{background-color:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;}
+.modal-body input,.modal-body select,.modal-body textarea{background:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;border-color:#1E1E2E!important;}
 .form-row{display:flex;gap:10px;}.form-row .form-group{flex:1;}
 
 .tx-item{background:var(--card);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px;margin-bottom:8px;border:1px solid var(--border);}
@@ -780,14 +781,19 @@ function autoImportNewSMS(){
       const isSalary=/\b(salary|sal credit|payroll|employer)\b/i.test(body);
       const txCat=isSalary?'income':'other';
       S.transactions.push({
-        id:Date.now()*1000+added,amount:p.amount,
+        id:Date.now()+added,amount:p.amount,
         merchant:p.merchant||'Bank Transaction',
         category:txCat,date:txDate,note:'',isWaste:false,
         isPending:!isSalary, // salary auto-confirmed; others need tagging
         loanId:null,creditCardId:null,contactName:'',
         isCredit:p.isCredit||isSalary,smsRaw:key});
-      // Always update bank balance when SMS provides Avl Bal
-      if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+      // Update bank balance from Avl Bal only when this SMS is NEWER than stored balance
+      // (prevents old inbox SMS from overwriting a Firebase-synced or manually-set balance)
+      if(p.bankBal){
+        const smsTs=s.date||0;
+        const balTs=S.bankBalance.lastUpdated?new Date(S.bankBalance.lastUpdated).getTime():0;
+        if(smsTs>balTs){S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+      }
       // Auto-record salary history if not already this month
       if(isSalary&&!salaryThisMonth()){
         S.salary.history.push({amount:p.amount,date:txDate,note:'Auto-imported from SMS'});
@@ -835,7 +841,7 @@ function renderHome(){
   const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const unpaidBills=S.mandatoryBills.filter(b=>!b.paidThisMonth);
   const unpaidAmt=unpaidBills.reduce((s,b)=>s+b.amount,0);
-  const recent=[...S.transactions].sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,5);
+  const recent=[...S.transactions].sort((a,b)=>{const d=b.date.localeCompare(a.date);return d!==0?d:(b.id||0)-(a.id||0);}).slice(0,5);
 
   // Budget alerts
   const catSpend={};
@@ -1019,7 +1025,7 @@ function txHTML(tx,showDel){
 
 // ── SPENDS ───────────────────────────────────────────────────
 function renderTx(){
-  const all=[...S.transactions].sort((a,b)=>(b.id||0)-(a.id||0));
+  const all=[...S.transactions].sort((a,b)=>{const d=b.date.localeCompare(a.date);return d!==0?d:(b.id||0)-(a.id||0);});
   const filtered=txFilter==='all'?all:txFilter==='pending'?all.filter(t=>t.isPending):all.filter(t=>t.category===txFilter);
   document.getElementById('page-tx').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -1311,6 +1317,12 @@ function renderSettings(){
     </div>
 
     <div class="card">
+      <div class="sec-title" style="font-size:13px;">☁️ Cloud Sync</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">If local data looks wrong (e.g. bank balance incorrect), use this to discard local cache and reload everything fresh from Firebase.</div>
+      <button onclick="forceSyncFromCloud()" class="btn btn-teal" style="margin-bottom:0;">🔄 Reset Local &amp; Re-sync from Cloud</button>
+    </div>
+
+    <div class="card">
       <div class="sec-title" style="font-size:13px;">⚠️ Danger Zone</div>
       <button onclick="clearData()" class="btn btn-red" style="margin-bottom:10px;">🗑️ Clear All Local Data</button>
       <button onclick="deleteAccount()" class="btn btn-red">💀 Delete Account & All Data Forever</button>
@@ -1334,6 +1346,16 @@ function exportCSV(){
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');
 }
 function clearData(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('sw_v4');S=JSON.parse(JSON.stringify(DEFAULT));renderPage(currentPage);toast('Data cleared');}
+async function forceSyncFromCloud(){
+  if(!_fbUser){toast('Sign in first',true);return;}
+  if(!confirm('Clear local cache and reload from Firebase?\n\nLocal changes not yet synced will be lost.'))return;
+  localStorage.removeItem('sw_v4');
+  S=JSON.parse(JSON.stringify(DEFAULT));
+  toast('Fetching from cloud…');
+  const ok=await syncFromCloud();
+  if(ok){renderPage(currentPage);toast('✅ Synced from cloud!');}
+  else{toast('❌ Cloud sync failed — check connection',true);}
+}
 
 function exportBackup(){
   const json=JSON.stringify(S,null,2);
@@ -1383,7 +1405,7 @@ function openMonthlyReport(){
   const cur=thisMonth();
   openModal(`<div class="modal-title">📊 Monthly Analysis</div>
     <div class="form-group"><label class="form-label">Select Month</label>
-      <select class="form-input" id="rpt-month" onchange="renderMonthReport()" style="background:var(--card2)!important;color:var(--text)!important;color-scheme:dark;-webkit-appearance:none;">
+      <select class="form-input" id="rpt-month" onchange="renderMonthReport()" style="background:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;-webkit-appearance:none;appearance:none;">
         ${months.map(ym=>{const[y,m]=ym.split('-');const lbl=new Date(y,m-1,1).toLocaleDateString(_locale,{month:'long',year:'numeric'});return`<option value="${ym}"${ym===cur?' selected':''}>${lbl}</option>`;}).join('')}
       </select>
     </div>
