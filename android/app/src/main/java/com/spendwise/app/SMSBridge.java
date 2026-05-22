@@ -28,7 +28,20 @@ public class SMSBridge {
     @JavascriptInterface
     public String getPendingSMS() {
         String result = pendingSmsJson;
-        pendingSmsJson = null; // consume: JS reads it once then it's gone
+        pendingSmsJson = null;
+        if (result != null) {
+            // Same process — also clear SharedPreferences so it won't re-deliver after restart
+            ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
+                .edit().remove("pending_sms").apply();
+        } else {
+            // Process was restarted — recover from SharedPreferences
+            android.content.SharedPreferences prefs =
+                ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE);
+            result = prefs.getString("pending_sms", null);
+            if (result != null) {
+                prefs.edit().remove("pending_sms").apply();
+            }
+        }
         return result != null ? result : "null";
     }
 

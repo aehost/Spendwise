@@ -491,7 +491,7 @@ async function syncFromCloud(){
     const res=await fetch(`${url}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`);
     if(!res.ok){updateSyncDot('fail');return false;}
     const d=await res.json();
-    if(!d||!d.transactions){updateSyncDot('ok');return false;}
+    if(!d){updateSyncDot('ok');return false;}
     S={...DEFAULT,...d,
       bankBalance:d.bankBalance||DEFAULT.bankBalance,
       investments:{angelOne:{...DEFAULT.investments.angelOne,...((d.investments&&d.investments.angelOne)||{})}},
@@ -603,16 +603,15 @@ async function submitAuth(){
 
 async function afterAuth(){
   hideAuthScreen();
-  // Always start clean and pull from Firebase — never trust stale local data
-  localStorage.removeItem('sw_v4');
-  S=JSON.parse(JSON.stringify(DEFAULT));
+  load(); // show local data immediately — never blank the screen before Firebase responds
+  renderPage(currentPage);
   updateSyncDot('pending');
   document.getElementById('sync-dot').style.display='block';
   const synced=await syncFromCloud();
-  if(!synced)S=JSON.parse(JSON.stringify(DEFAULT));
-  renderPage(currentPage);
-  if(!synced)toast('Welcome! Start by setting your salary and adding transactions.');
-  // Deliver any SMS that arrived before auth completed (cold-start notification tap)
+  if(synced){renderPage(currentPage);}
+  else if(!S.salary.amount&&!S.bankBalance.amount&&!S.transactions.length){
+    toast('Welcome! Start by setting your salary and adding transactions.');
+  }
   if(window._pendingIncomingSMS){
     const sms=window._pendingIncomingSMS;
     window._pendingIncomingSMS=null;

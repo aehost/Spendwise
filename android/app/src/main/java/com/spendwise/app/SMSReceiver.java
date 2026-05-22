@@ -66,14 +66,21 @@ public class SMSReceiver extends BroadcastReceiver {
         if (!BANK_PATTERN.matcher(body).find()) return;
 
         // Store SMS in bridge so JS can consume it via AndroidBridge.getPendingSMS()
+        String smsJson = null;
         try {
             JSONObject obj = new JSONObject();
             obj.put("body", body);
             obj.put("sender", sender);
             obj.put("time", System.currentTimeMillis());
-            SMSBridge.setPendingSms(obj.toString());
+            smsJson = obj.toString();
+            SMSBridge.setPendingSms(smsJson);
         } catch (Exception e) {
-            return;
+            // JSON failed — continue to show notification anyway
+        }
+        // Persist to SharedPreferences so SMS survives process restart when user taps notification
+        if (smsJson != null) {
+            context.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
+                .edit().putString("pending_sms", smsJson).apply();
         }
 
         // Create notification channel (required Android 8.0+)
