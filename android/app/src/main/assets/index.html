@@ -17,6 +17,7 @@
   --cyan:#06B6D4;--pink:#EC4899;--orange:#F97316;--teal:#10B981;--indigo:#6366F1;
   --text:#F1F1F5;--muted:#6B7280;--muted2:#9CA3AF;
   --sb:env(safe-area-inset-bottom,0px);
+  color-scheme:dark;
 }
 html{overflow-y:scroll;}body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;max-width:430px;margin:0 auto;min-height:100dvh;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 input,select,textarea,button{font-family:inherit;color:inherit;}
@@ -60,9 +61,11 @@ button{cursor:pointer;border:none;background:none;}
 
 .form-group{margin-bottom:13px;}
 .form-label{font-size:11px;color:var(--muted);margin-bottom:5px;display:block;letter-spacing:0.3px;}
-.form-input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;}
+.form-input{width:100%;background:var(--card2);border:1.5px solid var(--border);border-radius:12px;padding:12px 14px;color:var(--text);font-size:15px;outline:none;transition:border-color 0.2s;color-scheme:dark;}
 .form-input:focus{border-color:var(--accent);}
 select.form-input{-webkit-appearance:none;}
+/* Force dark styling on modal inputs — fixes Android WebView white override */
+.modal-body input,.modal-body select,.modal-body textarea{background:var(--card2)!important;color:var(--text)!important;color-scheme:dark;}
 .form-row{display:flex;gap:10px;}.form-row .form-group{flex:1;}
 
 .tx-item{background:var(--card);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px;margin-bottom:8px;border:1px solid var(--border);}
@@ -260,8 +263,16 @@ function onAndroidSMSReady(){
 function onIncomingSMS(sms){
   if(!_fbUser)return; // not logged in yet — ignore
   const p=parseSMS(sms.body);
+
+  // Save a pending tx immediately so it shows in Spends even if user skips
+  const pendingId=Date.now();
+  S.transactions.push({id:pendingId,amount:p.amount,merchant:p.merchant||'Bank Transaction',
+    category:'other',date:today(),note:'',isWaste:false,isPending:true,
+    loanId:null,creditCardId:null,contactName:'',isCredit:p.isCredit,smsRaw:sms.body.substring(0,200)});
+  save();
+
   _smsData=p;
-  if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:today()};save();}
+  _smsData._pendingId=pendingId;
   const guessed=guessCat(p.merchant);
   _smsData._cat=guessed;
   closeModal();
@@ -332,8 +343,7 @@ function openAndroidSMS(){
 function pickAndroidSMS(i){
   const sms=window._androidSMSList[i];
   const p=parseSMS(sms.body);
-  _smsData=p;
-  if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:today()};save();}
+  _smsData=p; // no pre-save; saveSMSTx will add tx and update balance
   const guessed=guessCat(p.merchant);
   closeModal();
   setTimeout(()=>{
@@ -722,26 +732,51 @@ function renderHome(){
   const greet=hr<12?'Good morning':hr<17?'Good afternoon':'Good evening';
   const unpaidBills=S.mandatoryBills.filter(b=>!b.paidThisMonth);
   const unpaidAmt=unpaidBills.reduce((s,b)=>s+b.amount,0);
-  const recent=[...S.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);
+  const recent=[...S.transactions].sort((a,b)=>(b.id||0)-(a.id||0)).slice(0,5);
 
   // Budget alerts
   const catSpend={};
   monthTxs().filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
   const alerts=Object.entries(S.budgets).filter(([id,b])=>(catSpend[id]||0)>b*0.8);
 
+  // Smart suggestions
+  const tips=[];
+  if(!S.salary.amount)tips.push({icon:'💡',text:'Set your monthly salary in <b>Money → Edit Salary</b> to track budget accurately.'});
+  if(!S.bankBalance.amount)tips.push({icon:'🏦',text:'Update your <b>Bank Balance</b> so SpendWise can show real-time balance.'});
+  if(S.transactions.length===0)tips.push({icon:'📩',text:'Tap <b>SMS</b> to import your bank transactions automatically.'});
+  if(savRate<10&&salAmt>0)tips.push({icon:'⚠️',text:`Your savings rate is only <b style="color:var(--red);">${savRate}%</b>. Target ≥20% to build wealth.`});
+  if(emi>0&&salAmt>0&&(emi/salAmt)>0.4)tips.push({icon:'🏦',text:`EMIs eat <b style="color:var(--amber);">${((emi/salAmt)*100).toFixed(0)}%</b> of your salary. Consider prepaying your highest-rate loan.`});
+  if(waste>5000)tips.push({icon:'🗑️',text:`You've marked <b style="color:var(--red);">${fmtFull(waste)}</b> wasteful this month. Small cuts = <b>${fmtFull(waste*12)}</b>/year saved.`});
+  if(S.creditCards.some(cc=>cc.outstanding/cc.limit>0.7))tips.push({icon:'💳',text:'One of your credit cards is over 70% utilised. High utilisation hurts your credit score.'});
+  if(S.mandatoryBills.some(b=>!b.paidThisMonth&&b.amount>0))tips.push({icon:'📋',text:'You have unpaid mandatory bills this month. Mark them paid after payment.'});
+  const tip=tips.length?tips[Math.floor(Date.now()/60000)%tips.length]:null;
+
   document.getElementById('page-home').innerHTML=`
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-      <div>
-        <div style="color:var(--muted);font-size:12px;">${greet}, ${name} 👋</div>
-        <div style="font-size:19px;font-weight:900;letter-spacing:-0.5px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
+    <!-- Hero logo banner -->
+    <div style="background:linear-gradient(135deg,#6C63FF 0%,#8B5CF6 50%,#EC4899 100%);border-radius:22px;padding:20px 22px 18px;margin-bottom:16px;position:relative;overflow:hidden;">
+      <div style="position:absolute;right:-18px;top:-18px;font-size:100px;opacity:0.08;line-height:1;pointer-events:none;user-select:none;">₹</div>
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-bottom:2px;">${greet}, ${name||'there'} 👋</div>
+          <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;line-height:1.2;">SpendWise</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
+        </div>
+        <div style="text-align:right;">
+          <button onclick="IS_ANDROID?openAndroidSMS():openSMSSim()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 13px;border-radius:12px;font-size:11px;font-weight:700;backdrop-filter:blur(4px);">📩 Import SMS</button>
+          <div style="font-size:10px;color:rgba(255,255,255,0.6);margin-top:4px;">Auto-detect bank txns</div>
+        </div>
       </div>
-      <button onclick="IS_ANDROID?openAndroidSMS():openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:8px 12px;border-radius:12px;font-size:11px;font-weight:700;">📩 SMS</button>
+      ${pending.length?`<div style="margin-top:12px;background:rgba(255,255,255,0.15);border-radius:10px;padding:7px 12px;display:flex;align-items:center;gap:8px;">
+        <div class="pulse" style="background:#fff;"></div>
+        <span style="font-size:11px;color:#fff;font-weight:600;">${pending.length} transaction${pending.length>1?'s':''} waiting to be tagged</span>
+        <button onclick="goTo('tx');setTxFilter('pending')" style="margin-left:auto;font-size:10px;background:rgba(255,255,255,0.25);color:#fff;padding:3px 9px;border-radius:7px;font-weight:700;">Tag →</button>
+      </div>`:''}
     </div>
 
-    ${pending.length?`<div class="pending-bar" onclick="goTo('tx');setTxFilter('pending')">
-      <div class="pulse"></div>
-      <div style="flex:1;"><div style="font-size:12px;font-weight:700;color:var(--amber);">⏳ ${pending.length} Pending Transaction${pending.length>1?'s':''}</div><div style="font-size:10px;color:var(--muted);margin-top:2px;">Tap to tag them with category & description</div></div>
-      <div style="font-size:18px;">›</div>
+    <!-- Smart suggestion tip -->
+    ${tip?`<div style="background:linear-gradient(135deg,#6C63FF0D,#8B5CF60D);border:1px solid #6C63FF22;border-radius:14px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;">
+      <span style="font-size:18px;flex-shrink:0;">${tip.icon}</span>
+      <div style="font-size:12px;color:var(--muted2);line-height:1.5;">${tip.text}</div>
     </div>`:''}
 
     <!-- Balance Cards -->
@@ -811,27 +846,39 @@ function renderHome(){
   `;
 }
 
+function fmtDateTime(tx){
+  // Use tx.id (Date.now() ms) for precise time; fall back to date string
+  const ts=typeof tx.id==='number'&&tx.id>1000000000000?tx.id:null;
+  if(!ts){const d=tx.date?new Date(tx.date+'T00:00:00'):null;return d?d.toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'—';}
+  const d=new Date(ts);
+  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+
 function txHTML(tx,showDel){
   const c=cat(tx.category);
-  const isInc=tx.category==='income';
+  // isInc: income category OR a credited family/other transfer
+  const isInc=tx.category==='income'||(tx.isCredit===true&&tx.category!=='family'?false:tx.isCredit===true&&tx.category==='family');
+  const isCreditTx=tx.category==='income'||tx.isCredit===true;
   const isFamily=tx.category==='family';
   const loanName=tx.loanId?S.loans.find(l=>l.id===tx.loanId):null;
   const ccName=tx.creditCardId?S.creditCards.find(cc=>cc.id===tx.creditCardId):null;
+  const amtColor=isCreditTx?'var(--green)':'var(--red)';
+  const amtSign=isCreditTx?'+':'-';
   return`<div class="tx-item ${tx.isPending?'pending':''}">
     <div class="tx-icon" style="background:${c.color}20;">${c.icon}</div>
     <div class="tx-details">
       <div class="tx-name">${tx.merchant}${isFamily&&tx.contactName?' · '+tx.contactName:''}</div>
-      <div class="tx-meta">${c.label} · ${fmtDate(tx.date)}${tx.note?' · '+tx.note:''}</div>
+      <div class="tx-meta">${c.label} · ${fmtDateTime(tx)}${tx.note?' · '+tx.note:''}</div>
       <div style="display:flex;gap:4px;flex-wrap:wrap;">
         ${tx.isWaste?'<span class="tag tag-waste">WASTEFUL</span>':''}
         ${tx.isPending?'<span class="tag tag-pending">⏳ NEEDS TAG</span>':''}
         ${loanName?`<span class="tag tag-loan">🏦 ${loanName.name}</span>`:''}
         ${ccName?`<span class="tag tag-card">💴 ${ccName.name}</span>`:''}
-        ${isFamily?`<span class="tag tag-family">👨‍👩‍👧 ${isInc?'RECEIVED':'SENT'}</span>`:''}
+        ${isFamily?`<span class="tag tag-family">👨‍👩‍👧 ${tx.isCredit?'RECEIVED':'SENT'}</span>`:''}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
-      <div class="tx-amt" style="color:${isInc?'var(--green)':'var(--red)'};">${isInc?'+':'-'}${fmtFull(tx.amount)}</div>
+      <div class="tx-amt" style="color:${amtColor};">${amtSign}${fmtFull(tx.amount)}</div>
       <div style="display:flex;gap:4px;">
         <button onclick="openEditTx(${tx.id})" style="font-size:10px;color:var(--accent);background:var(--card2);padding:2px 7px;border-radius:6px;">✏️</button>
         ${showDel?`<button onclick="delTx(${tx.id})" style="font-size:10px;color:var(--muted);background:var(--card2);padding:2px 7px;border-radius:6px;">✕</button>`:''}
@@ -842,7 +889,7 @@ function txHTML(tx,showDel){
 
 // ── SPENDS ───────────────────────────────────────────────────
 function renderTx(){
-  const all=[...S.transactions].sort((a,b)=>b.date.localeCompare(a.date));
+  const all=[...S.transactions].sort((a,b)=>(b.id||0)-(a.id||0));
   const filtered=txFilter==='all'?all:txFilter==='pending'?all.filter(t=>t.isPending):all.filter(t=>t.category===txFilter);
   document.getElementById('page-tx').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
@@ -1072,15 +1119,22 @@ function renderSettings(){
 
     <div class="card">
       <div class="sec-title" style="font-size:13px;">📋 Monthly Mandatory Bills</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Configure recurring bills. Tap ✓ on home to mark paid.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Configure recurring bills. Tap ✓ on home to mark as paid.</div>
+      <!-- Column header labels -->
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;padding:0 2px;">
+        <span style="width:28px;"></span>
+        <span style="flex:2;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Bill Name</span>
+        <span style="flex:1;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Amount ₹</span>
+        <span style="flex:1;max-width:55px;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Due Day</span>
+      </div>
       ${S.mandatoryBills.map(b=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <span style="font-size:18px;width:28px;text-align:center;">${b.icon}</span>
-        <input class="form-input" style="flex:2;" value="${b.name}" id="bill-name-${b.id}" placeholder="Bill name">
-        <input class="form-input" style="flex:1;" type="number" value="${b.amount}" id="bill-amt-${b.id}" placeholder="₹">
-        <input class="form-input" style="flex:1;max-width:55px;" type="number" min="1" max="31" value="${b.dueDay}" id="bill-day-${b.id}" placeholder="Day">
+        <span style="font-size:18px;width:28px;text-align:center;" title="${b.name}">${b.icon}</span>
+        <input class="form-input" style="flex:2;" value="${b.name}" id="bill-name-${b.id}" placeholder="e.g. Netflix, Gym">
+        <input class="form-input" style="flex:1;" type="number" value="${b.amount}" id="bill-amt-${b.id}" placeholder="0" inputmode="numeric">
+        <input class="form-input" style="flex:1;max-width:55px;" type="number" min="1" max="31" value="${b.dueDay}" id="bill-day-${b.id}" placeholder="1-31">
       </div>`).join('')}
       <button onclick="saveBills()" class="btn btn-primary" style="margin-top:4px;">Save Bills</button>
-      <button onclick="openAddBill()" class="btn btn-ghost" style="margin-top:8px;">+ Add Bill</button>
+      <button onclick="openAddBill()" class="btn btn-ghost" style="margin-top:8px;">+ Add New Bill</button>
     </div>
 
     <div class="card">
@@ -1499,7 +1553,8 @@ function saveEditTx(id){
   tx.loanId=parseInt(document.getElementById('et-loan').value)||null;
   tx.creditCardId=parseInt(document.getElementById('et-cc').value)||null;
   tx.isWaste=document.getElementById('et-waste').classList.contains('on');
-  tx.isPending=!(tx.note&&tx.note.trim()&&tx.category!=='other');
+  tx.isPending=tx.category==='other'; // only unclassified = pending
+  tx.isCredit=tx.category==='income'||tx.isCredit===true;
   save();closeModal();toast('✅ Transaction updated!');renderPage(currentPage);
 }
 
@@ -1528,9 +1583,9 @@ function saveManualTx(){
   const cat=document.getElementById('tx-cat').value;const note=document.getElementById('tx-nt').value;
   const loanId=parseInt(document.getElementById('tx-loan').value)||null;
   const creditCardId=parseInt(document.getElementById('tx-cc').value)||null;
-  const isPending=!(note&&note.trim()&&cat!=='other');
+  const isPending=cat==='other'; // pending only when no category selected
   if(creditCardId){const cc=S.creditCards.find(c=>c.id===creditCardId);if(cc&&cat!=='income')cc.outstanding+=amt;}
-  S.transactions.push({id:Date.now(),amount:amt,merchant:mer,category:cat,date:document.getElementById('tx-dt').value,note,isWaste:document.getElementById('tx-waste').classList.contains('on'),isPending,loanId,creditCardId,contactName:''});
+  S.transactions.push({id:Date.now(),amount:amt,merchant:mer,category:cat,date:document.getElementById('tx-dt').value,note,isWaste:document.getElementById('tx-waste').classList.contains('on'),isPending,loanId,creditCardId,contactName:'',isCredit:cat==='income'});
   save();closeModal();toast('✅ Transaction added!');renderPage(currentPage);
 }
 
@@ -1565,11 +1620,34 @@ function saveSMSTx(){
   if(!_smsData)return;
   const catId=_smsData._cat||(_smsData.isCredit?'income':'other');
   const isWaste=document.getElementById('sms-waste').classList.contains('on');
-  const note=document.getElementById('sms-note').value;
+  const note=(document.getElementById('sms-note').value||'').trim();
   const loanEl=document.getElementById('sms-loan');const loanId=loanEl?parseInt(loanEl.value)||null:null;
-  const isPending=!(note&&note.trim()&&catId!=='other');
-  if(_smsData.isCredit&&catId==='income'){S.salary.history.push({amount:_smsData.amount,date:today(),note});if(!S.salary.amount)S.salary.amount=_smsData.amount;}
-  S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:''});
+  // Pending only if category is still unclassified
+  const isPending=catId==='other';
+
+  // Update bank balance: use SMS-provided balance, else adjust by delta
+  if(_smsData.bankBal){
+    S.bankBalance={amount:_smsData.bankBal,lastUpdated:today()};
+  } else if(_smsData.amount>0){
+    const cur=S.bankBalance.amount||0;
+    const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
+    if(cur>0||_smsData.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+  }
+
+  // Salary history update for credited income
+  if(_smsData.isCredit&&catId==='income'){
+    S.salary.history.push({amount:_smsData.amount,date:today(),note});
+    if(!S.salary.amount)S.salary.amount=_smsData.amount;
+  }
+
+  if(_smsData._pendingId){
+    // Update the pre-saved pending tx (from onIncomingSMS)
+    const tx=S.transactions.find(t=>t.id===_smsData._pendingId);
+    if(tx){tx.category=catId;tx.note=note;tx.isWaste=isWaste;tx.isPending=isPending;tx.loanId=loanId;tx.merchant=_smsData.merchant;}
+  } else {
+    // pickAndroidSMS / openSMSSim path — add fresh tx
+    S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:'',isCredit:_smsData.isCredit});
+  }
   _smsData=null;
   save();closeModal();toast('✅ Transaction saved!');renderPage(currentPage);
 }
