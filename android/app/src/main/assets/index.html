@@ -279,10 +279,20 @@ function onIncomingSMS(sms){
   S.transactions.push({id:pendingId,amount:p.amount,merchant:p.merchant||'Bank Transaction',
     category:'other',date:today(),note:'',isWaste:false,isPending:true,
     loanId:null,creditCardId:null,contactName:'',isCredit:p.isCredit,smsRaw:sms.body.substring(0,200)});
+  // Immediately update bank balance so all panels reflect the debit/credit
+  if(p.bankBal){
+    S.bankBalance={amount:p.bankBal,lastUpdated:today()};
+  } else if(p.amount>0){
+    const cur=S.bankBalance.amount||0;
+    const delta=p.isCredit?p.amount:-p.amount;
+    if(cur>0||p.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+  }
   save();
+  renderPage(currentPage);
 
   _smsData=p;
   _smsData._pendingId=pendingId;
+  _smsData._balUpdated=true; // skip balance update in saveSMSTx to prevent double-update
   const guessed=guessCat(p.merchant);
   _smsData._cat=guessed;
   closeModal();
@@ -700,9 +710,9 @@ function parseSMS(msg){
   const atM=msg.match(/at\s+([A-Z][A-Z0-9\s&']+?)(?:\s+on|\s*\.|Avail|Bal|$)/);
   const empM=msg.match(/Employer:\s*([^\.]+)/i);
   const merchant=(atM&&atM[1].trim())||(empM&&empM[1].trim())||'Unknown';
-  const isCredit=/credited|salary|received/i.test(msg);
-  const isDebit=/debited|deducted|payment/i.test(msg);
-  const balM=msg.match(/(?:Avail Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
+  const isCredit=/credited|credit|salary|received|refund|cashback|deposit/i.test(msg);
+  const isDebit=/debited|debit|deducted|payment|spent|purchase|withdrawn/i.test(msg);
+  const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\s*Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
   const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
   return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal};
 }
@@ -1661,13 +1671,15 @@ function saveSMSTx(){
   // Pending only if category is still unclassified
   const isPending=catId==='other';
 
-  // Update bank balance: use SMS-provided balance, else adjust by delta
-  if(_smsData.bankBal){
-    S.bankBalance={amount:_smsData.bankBal,lastUpdated:today()};
-  } else if(_smsData.amount>0){
-    const cur=S.bankBalance.amount||0;
-    const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
-    if(cur>0||_smsData.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+  // Update bank balance; skip if onIncomingSMS already updated (real-time SMS path)
+  if(!_smsData._balUpdated){
+    if(_smsData.bankBal){
+      S.bankBalance={amount:_smsData.bankBal,lastUpdated:today()};
+    } else if(_smsData.amount>0){
+      const cur=S.bankBalance.amount||0;
+      const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
+      if(cur>0||_smsData.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+    }
   }
 
   // Salary history update for credited income

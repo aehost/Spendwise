@@ -34,9 +34,9 @@ public class SMSBridge {
 
     // Matches bank/financial SMS messages
     private static final Pattern BANK_PATTERN = Pattern.compile(
-        "debited|credited|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
-        "Avail\\s*Bal|available\\s*balance|transaction|payment|EMI|UPI|" +
-        "A/C|account|withdrawn|deposit",
+        "debited|debit|credited|credit|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
+        "Avail\\s*Bal|Avl\\s*Bal|available\\s*balance|transaction|payment|" +
+        "spent|purchase|EMI|UPI|A/C|account|withdrawn|deposit|refund",
         Pattern.CASE_INSENSITIVE
     );
 

@@ -22,14 +22,15 @@ public class SMSReceiver extends BroadcastReceiver {
     private static final String CHANNEL_ID = "spendwise_bank";
 
     private static final Pattern BANK_PATTERN = Pattern.compile(
-        "debited|credited|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
-        "Avail\\s*Bal|available\\s*balance|transaction|payment|EMI|UPI|" +
-        "A/C|account|withdrawn|deposit",
+        "debited|debit|credited|credit|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
+        "Avail\\s*Bal|Avl\\s*Bal|available\\s*balance|transaction|payment|" +
+        "spent|purchase|EMI|UPI|A/C|account|withdrawn|deposit|refund",
         Pattern.CASE_INSENSITIVE
     );
 
     private static final Pattern AMOUNT_PATTERN = Pattern.compile(
-        "(?:Rs\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d+)?)",
+        "(?:Rs\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d+)?)|" +
+        "(?:Amt|Amount)[:\\s]+(?:Rs\\.?|INR|₹)?\\s*([\\d,]+(?:\\.\\d+)?)",
         Pattern.CASE_INSENSITIVE
     );
 
@@ -112,16 +113,21 @@ public class SMSReceiver extends BroadcastReceiver {
 
     private String buildNotificationTitle(String body) {
         String lower = body.toLowerCase();
-        boolean isCredit = lower.contains("credited") || lower.contains("salary")
-                        || lower.contains("received");
+        boolean isCredit = lower.contains("credited") || lower.contains("credit")
+                        || lower.contains("salary") || lower.contains("received")
+                        || lower.contains("refund") || lower.contains("deposit");
         Matcher m = AMOUNT_PATTERN.matcher(body);
         if (m.find()) {
-            String raw = m.group(1).replace(",", "");
-            try {
-                double amt = Double.parseDouble(raw);
-                return String.format("₹%.0f %s — Tap to tag in SpendWise",
-                    amt, isCredit ? "Credited" : "Debited");
-            } catch (NumberFormatException ignored) {}
+            // group(1) from Rs./INR/₹ pattern; group(2) from Amt/Amount pattern
+            String raw = m.group(1) != null ? m.group(1) : m.group(2);
+            if (raw != null) {
+                raw = raw.replace(",", "");
+                try {
+                    double amt = Double.parseDouble(raw);
+                    return String.format("₹%.0f %s — Tap to tag in SpendWise",
+                        amt, isCredit ? "Credited" : "Debited");
+                } catch (NumberFormatException ignored) {}
+            }
         }
         return isCredit ? "Money Credited — Tap to tag" : "Money Debited — Tap to tag";
     }
