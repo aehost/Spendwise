@@ -23,7 +23,7 @@ input,select,textarea,button{font-family:inherit;color:inherit;}
 button{cursor:pointer;border:none;background:none;}
 *::-webkit-scrollbar{display:none;}*{-ms-overflow-style:none;scrollbar-width:none;}
 
-#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:calc(var(--st)+4px) 16px 6px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
+#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:calc(var(--st)+8px) 16px 8px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
 #statusbar .logo{font-weight:900;font-size:17px;letter-spacing:-0.5px;background:linear-gradient(135deg,#6C63FF,#EC4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 #statusbar .right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);}
 
@@ -31,7 +31,7 @@ button{cursor:pointer;border:none;background:none;}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:9px;font-weight:600;padding:6px 2px;transition:color 0.2s;letter-spacing:0.3px;min-height:52px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .nav-btn.active{color:var(--accent);}.nav-btn .ico{font-size:22px;line-height:1;}
 
-#app{padding-top:calc(var(--st)+48px);padding-bottom:calc(var(--sb)+80px);min-height:100dvh;}
+#app{padding-top:calc(var(--st)+52px);padding-bottom:calc(var(--sb)+80px);min-height:100dvh;}
 .page{display:none;padding:16px 20px 8px;animation:fadeSlide 0.25s ease;}
 .page.active{display:block;}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -113,7 +113,7 @@ select.form-input{-webkit-appearance:none;}
 .chip{padding:5px 13px;border-radius:99px;font-size:11px;font-weight:600;white-space:nowrap;cursor:pointer;border:1px solid transparent;transition:all 0.15s;background:var(--card);}
 .divider{height:1px;background:var(--border);margin:14px 0;}
 
-#toast{position:fixed;bottom:calc(var(--sb)+84px);left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 22px;border-radius:99px;font-size:12px;font-weight:700;z-index:300;display:none;white-space:nowrap;box-shadow:0 4px 20px #22C55E44;}
+#toast{position:fixed;bottom:calc(var(--sb)+88px);left:50%;transform:translateX(-50%);background:var(--green);color:#fff;padding:10px 22px;border-radius:99px;font-size:12px;font-weight:700;z-index:300;display:none;white-space:nowrap;box-shadow:0 4px 20px #22C55E44;}
 
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;}
 .mini-card{background:var(--card);border-radius:16px;padding:14px;border:1px solid var(--border);}
@@ -138,16 +138,15 @@ select.form-input{-webkit-appearance:none;}
 
 .color-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;}
 
-@media (display-mode:standalone){
-  #statusbar{padding-top:calc(var(--st)+2px);padding-bottom:4px;}
-  #app{padding-top:calc(var(--st)+44px);}
-}
 </style>
 </head>
 <body>
 <div id="statusbar">
   <span class="logo">SpendWise</span>
-  <div class="right"><span>🔒 Private</span><span id="clock"></span></div>
+  <div class="right">
+    <div id="sync-dot" title="Cloud sync" style="width:7px;height:7px;border-radius:50%;background:var(--green);display:none;flex-shrink:0;"></div>
+    <span id="clock"></span>
+  </div>
 </div>
 <div id="app">
   <div class="page active" id="page-home"></div>
@@ -170,6 +169,19 @@ select.form-input{-webkit-appearance:none;}
 </div>
 <div id="toast"></div>
 <script>
+// iOS PWA safe-area fix — runs before render
+(function(){
+  if(window.navigator.standalone!==true)return;
+  // Measure actual env(safe-area-inset-top) via a positioned element
+  var m=document.createElement('div');
+  m.style.cssText='position:fixed;top:env(safe-area-inset-top,0px);left:0;width:1px;height:1px;visibility:hidden;pointer-events:none;';
+  document.body.appendChild(m);
+  var st=Math.max(m.getBoundingClientRect().top,44);
+  document.body.removeChild(m);
+  document.documentElement.style.setProperty('--st',st+'px');
+  document.documentElement.style.setProperty('--sb','34px');
+})();
+
 // ── CONSTANTS ────────────────────────────────────────────────
 const CATS=[
   {id:'food',label:'Food & Dining',icon:'🍽️',color:'#F59E0B'},
@@ -246,8 +258,96 @@ let smsIdx=0;
 let txFilter='all';
 let _smsData=null;
 
-function save(){localStorage.setItem('sw_v4',JSON.stringify(S));}
+function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
 function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:p.investments||DEFAULT.investments,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards};}}catch(e){}}
+
+// ── CLOUD SYNC (Firebase Realtime Database) ───────────────────
+let _syncTimer=null;
+function getFbCfg(){
+  const url=(localStorage.getItem('sw_fb_url')||'').replace(/\/$/,'');
+  const key=localStorage.getItem('sw_fb_key')||'';
+  if(!url||!key)return null;
+  const path=btoa(unescape(encodeURIComponent(key))).replace(/\+/g,'_').replace(/\//g,'-').replace(/=/g,'');
+  return{url,path};
+}
+function updateSyncDot(state){
+  const el=document.getElementById('sync-dot');if(!el)return;
+  el.style.display='block';
+  el.style.background=state==='ok'?'var(--green)':state==='fail'?'var(--red)':'var(--amber)';
+}
+function debouncedSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(syncToCloud,2500);}
+async function syncToCloud(){
+  const cfg=getFbCfg();if(!cfg)return null;
+  updateSyncDot('pending');
+  try{
+    const res=await fetch(`${cfg.url}/sw/${cfg.path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+    if(res.ok){localStorage.setItem('sw_last_sync',new Date().toISOString());updateSyncDot('ok');return true;}
+    updateSyncDot('fail');return false;
+  }catch(e){updateSyncDot('fail');return false;}
+}
+async function syncFromCloud(){
+  const cfg=getFbCfg();if(!cfg)return false;
+  updateSyncDot('pending');
+  try{
+    const res=await fetch(`${cfg.url}/sw/${cfg.path}.json`);
+    if(!res.ok){updateSyncDot('fail');return false;}
+    const d=await res.json();
+    if(!d||!d.transactions){updateSyncDot('ok');return false;}
+    S={...DEFAULT,...d,bankBalance:d.bankBalance||DEFAULT.bankBalance,investments:d.investments||DEFAULT.investments,mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,creditCards:d.creditCards||DEFAULT.creditCards};
+    localStorage.setItem('sw_v4',JSON.stringify(S));
+    localStorage.setItem('sw_last_sync',new Date().toISOString());
+    updateSyncDot('ok');return true;
+  }catch(e){updateSyncDot('fail');return false;}
+}
+function openCloudSync(){
+  const url=localStorage.getItem('sw_fb_url')||'';
+  const key=localStorage.getItem('sw_fb_key')||'';
+  const last=localStorage.getItem('sw_last_sync');
+  openModal(`<div class="modal-title">☁️ Cloud Sync Setup</div>
+    <div style="background:#6366F112;border:1px solid #6366F130;border-radius:12px;padding:13px 14px;font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
+      <b style="color:var(--text);font-size:13px;">One-time setup (5 min, free):</b><br>
+      1. Open <b style="color:var(--text);">console.firebase.google.com</b><br>
+      2. Create Project → Build → Realtime Database → Create<br>
+      3. Choose <b>Start in test mode</b> → Enable<br>
+      4. Copy the <b>Database URL</b> (shown at top of Realtime DB page)<br>
+      5. Paste it below with any personal sync key you choose
+    </div>
+    <div class="form-group"><label class="form-label">Firebase Database URL</label>
+      <input class="form-input" id="cs-url" value="${url}" placeholder="https://your-project-default-rtdb.firebaseio.com"></div>
+    <div class="form-group"><label class="form-label">Personal Sync Key (acts as your password)</label>
+      <input class="form-input" id="cs-key" value="${key}" placeholder="e.g. pravveen_spendwise_2024" autocomplete="off"></div>
+    <div style="background:var(--card2);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
+      💡 Save these two values in your Notes app. On reinstall, just enter them again and all data comes back instantly.
+    </div>
+    ${url&&key?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:10px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">✅ Cloud sync active · Last sync: ${last?new Date(last).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</div>`:''}
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveCloudSync()" class="btn btn-primary" style="flex:2;padding:13px;">Save & Connect</button>
+    </div>`);
+}
+async function saveCloudSync(){
+  const url=document.getElementById('cs-url').value.trim();
+  const key=document.getElementById('cs-key').value.trim();
+  if(!url||!key){toast('Fill both fields',true);return;}
+  localStorage.setItem('sw_fb_url',url);
+  localStorage.setItem('sw_fb_key',key);
+  closeModal();toast('Connecting to cloud...');
+  const ok=await syncToCloud();
+  toast(ok?'✅ Cloud sync enabled! Data saved to cloud.':'❌ Connection failed — check the Database URL.',!ok);
+  if(ok)renderSettings();
+}
+async function forceSyncFromCloud(){
+  toast('Pulling latest data from cloud...');
+  const ok=await syncFromCloud();
+  if(ok){renderPage(currentPage);toast('✅ Data restored from cloud!');}
+  else toast('No cloud data found — check your sync key.',true);
+}
+function disableCloudSync(){
+  if(!confirm('Disable cloud sync? Your local data stays intact.'))return;
+  localStorage.removeItem('sw_fb_url');localStorage.removeItem('sw_fb_key');localStorage.removeItem('sw_last_sync');
+  document.getElementById('sync-dot').style.display='none';
+  renderSettings();toast('Cloud sync disabled.');
+}
 
 // ── HELPERS ──────────────────────────────────────────────────
 function fmt(n){
@@ -703,9 +803,43 @@ function renderSettings(){
     </div>
 
     <div class="card">
-      <div class="sec-title" style="font-size:13px;">📂 Data & Reports</div>
-      <button onclick="downloadMonthlyReport()" class="btn btn-teal" style="margin-bottom:10px;">📄 Download Monthly Report</button>
+      <div class="sec-title" style="font-size:13px;">📊 Reports & Analysis</div>
+      <button onclick="openMonthlyReport()" class="btn btn-teal" style="margin-bottom:10px;">📊 Monthly Report & Analysis</button>
       <button onclick="exportCSV()" class="btn btn-ghost" style="margin-bottom:10px;">📤 Export CSV</button>
+    </div>
+
+    <div class="card cindigo">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <div class="sec-title" style="font-size:13px;margin-bottom:0;">☁️ Cloud Sync</div>
+        ${getFbCfg()?`<span class="pill pill-green">● Active</span>`:`<span class="pill pill-amber">Not set up</span>`}
+      </div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
+        ${getFbCfg()?`Last synced: <b style="color:var(--text);">${localStorage.getItem('sw_last_sync')?new Date(localStorage.getItem('sw_last_sync')).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</b>`:'Auto-saves every change to the cloud. Data survives app reinstall on any device — iPhone, Android, anywhere.'}
+      </div>
+      ${getFbCfg()?`
+      <div style="display:flex;gap:8px;margin-bottom:8px;">
+        <button onclick="forceSyncFromCloud()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬇️ Pull from Cloud</button>
+        <button onclick="syncToCloud().then(ok=>toast(ok?'✅ Synced!':'❌ Sync failed',!ok))" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬆️ Push to Cloud</button>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <button onclick="openCloudSync()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⚙️ Settings</button>
+        <button onclick="disableCloudSync()" class="btn btn-red btn-sm" style="flex:1;text-align:center;">✕ Disable</button>
+      </div>
+      `:`<button onclick="openCloudSync()" class="btn btn-primary">🔧 Set Up Cloud Sync</button>`}
+    </div>
+
+    <div class="card">
+      <div class="sec-title" style="font-size:13px;">🔒 Backup & Restore</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">Save your data to Files / iCloud Drive. If you delete and reinstall the app, import your backup to get everything back instantly.</div>
+      <button onclick="exportBackup()" class="btn btn-green" style="margin-bottom:10px;">⬇️ Download Backup (.json)</button>
+      <button onclick="importBackup()" class="btn btn-ghost" style="margin-bottom:14px;">⬆️ Restore from Backup</button>
+      <div style="background:var(--card2);border-radius:12px;padding:11px 13px;font-size:11px;color:var(--muted);line-height:1.5;">
+        💡 <b style="color:var(--text);">Sharing with others?</b> Each person's phone has its own separate database. Just share the app link — their data will never mix with yours.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sec-title" style="font-size:13px;">⚠️ Danger Zone</div>
       <button onclick="clearData()" class="btn btn-red">🗑️ Clear All Data</button>
     </div>
 
@@ -722,8 +856,98 @@ function toggleBill(id){const b=S.mandatoryBills.find(x=>x.id===id);if(!b)return
 function exportCSV(){const rows=['Date,Merchant,Category,Amount,Note,Loan,CreditCard,Wasteful,Pending'];S.transactions.forEach(t=>{const ln=t.loanId?S.loans.find(l=>l.id===t.loanId):null;const cc=t.creditCardId?S.creditCards.find(c=>c.id===t.creditCardId):null;rows.push(`${t.date},"${t.merchant}","${t.category}",${t.amount},"${t.note||''}","${ln?ln.name:''}","${cc?cc.name:''}",${t.isWaste?'Yes':'No'},${t.isPending?'Yes':'No'}`);});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');}
 function clearData(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('sw_v4');S=JSON.parse(JSON.stringify(DEFAULT));renderPage(currentPage);toast('Data cleared');}
 
-function downloadMonthlyReport(){
-  const ym=thisMonth();const mn=new Date().toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+function exportBackup(){
+  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download='SpendWise_backup_'+today()+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(url),1000);
+  toast('✅ Backup downloaded! Save it to iCloud / Files.');
+}
+
+function importBackup(){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='.json,application/json';
+  inp.onchange=function(e){
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(!d.transactions||!d.loans){toast('❌ Invalid backup file',true);return;}
+        if(!confirm('Replace ALL current data with this backup?\n\nThis cannot be undone.'))return;
+        S={...DEFAULT,...d,
+          bankBalance:d.bankBalance||DEFAULT.bankBalance,
+          investments:d.investments||DEFAULT.investments,
+          mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,
+          creditCards:d.creditCards||DEFAULT.creditCards
+        };
+        save();renderPage(currentPage);toast('✅ Data restored from backup!');
+      }catch(err){toast('❌ Could not read backup file',true);}
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+function openMonthlyReport(){
+  // Build list of months that have transactions + last 12 months
+  const seen=new Set();
+  S.transactions.forEach(t=>seen.add(t.date.substring(0,7)));
+  for(let i=0;i<12;i++){const d=new Date();d.setMonth(d.getMonth()-i);seen.add(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`);}
+  const months=[...seen].sort().reverse().slice(0,18);
+  const cur=thisMonth();
+  openModal(`<div class="modal-title">📊 Monthly Analysis</div>
+    <div class="form-group"><label class="form-label">Select Month</label>
+      <select class="form-input" id="rpt-month" onchange="renderMonthReport()">
+        ${months.map(ym=>{const[y,m]=ym.split('-');const lbl=new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});return`<option value="${ym}"${ym===cur?' selected':''}>${lbl}</option>`;}).join('')}
+      </select>
+    </div>
+    <div id="mrpt-body"></div>
+    <div style="display:flex;gap:9px;margin-top:14px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Close</button>
+      <button onclick="downloadMonthlyReport(document.getElementById('rpt-month').value)" class="btn btn-teal" style="flex:2;padding:13px;">⬇️ Download PDF</button>
+    </div>`);
+  renderMonthReport();
+}
+
+function renderMonthReport(){
+  const ym=document.getElementById('rpt-month')?.value||thisMonth();
+  const txs=S.transactions.filter(t=>t.date.startsWith(ym));
+  const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
+  const waste=txs.filter(t=>t.isWaste).reduce((s,t)=>s+t.amount,0);
+  const emiAmt=txs.filter(t=>t.category==='emi').reduce((s,t)=>s+t.amount,0);
+  const savings=inc-exp;
+  const catSpend={};
+  txs.filter(t=>t.category!=='income'&&t.category!=='savings').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
+  const catRows=Object.entries(catSpend).sort((a,b)=>b[1]-a[1]);
+  const el=document.getElementById('mrpt-body');if(!el)return;
+  el.innerHTML=`
+    <div class="grid2" style="margin-bottom:12px;">
+      <div class="mini-card"><div class="lbl">Income</div><div class="val" style="color:var(--green);font-size:17px;">${fmtFull(inc)}</div></div>
+      <div class="mini-card"><div class="lbl">Expenses</div><div class="val" style="color:var(--red);font-size:17px;">${fmtFull(exp)}</div></div>
+      <div class="mini-card"><div class="lbl">Net Savings</div><div class="val" style="color:${savings>=0?'var(--green)':'var(--red)'};font-size:17px;">${fmtFull(Math.abs(savings))}</div><div class="sub">${savings>=0?'saved':'deficit'}</div></div>
+      <div class="mini-card"><div class="lbl">Wasteful</div><div class="val" style="color:var(--amber);font-size:17px;">${fmtFull(waste)}</div></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:10px;">Spending by Category</div>
+    ${catRows.length===0?'<div style="color:var(--muted);text-align:center;padding:14px;font-size:13px;">No transactions this month</div>':''}
+    ${catRows.map(([id,amt])=>{const c=cat(id);const pct=exp>0?Math.round((amt/exp)*100):0;return`
+      <div style="margin-bottom:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;margin-bottom:3px;">
+          <span>${c.icon} ${c.label}</span>
+          <span style="font-weight:700;color:${c.color};">${fmtFull(amt)} <span style="color:var(--muted);font-weight:400;">(${pct}%)</span></span>
+        </div>
+        <div class="prog-bar" style="margin:0;"><div class="prog-fill" style="width:${pct}%;background:${c.color};"></div></div>
+      </div>`;}).join('')}
+    <div style="font-size:10px;color:var(--muted);text-align:center;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+      ${txs.length} transactions · EMIs: ${fmtFull(emiAmt)}${inc>0?` · Savings rate: ${Math.round((savings/inc)*100)}%`:''}
+    </div>`;
+}
+
+function downloadMonthlyReport(ym){
+  if(!ym)ym=thisMonth();
+  const mn=new Date(ym+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
   const txs=S.transactions.filter(t=>t.date.startsWith(ym));
   const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
   const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
@@ -1087,6 +1311,13 @@ load();
 updateClock();
 setInterval(updateClock,30000);
 renderPage('home');
+// On startup: if cloud sync configured, pull latest data silently
+if(getFbCfg()){
+  document.getElementById('sync-dot').style.display='block';
+  syncFromCloud().then(synced=>{
+    if(synced)renderPage(currentPage);
+  });
+}
 </script>
 </body>
 </html>
