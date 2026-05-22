@@ -1,6 +1,7 @@
 package com.spendwise.app;
 
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.net.Uri;
@@ -97,5 +98,33 @@ public class SMSBridge {
     @JavascriptInterface
     public int getAndroidVersion() {
         return android.os.Build.VERSION.SDK_INT;
+    }
+
+    /** Share plain-text report via Android share sheet (WhatsApp, Gmail, Drive, etc.) */
+    @JavascriptInterface
+    public void shareText(String subject, String body) {
+        Intent intent = new Intent(Intent.ACTION_SEND);
+        intent.setType("text/plain");
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+        intent.putExtra(Intent.EXTRA_TEXT, body);
+        Intent chooser = Intent.createChooser(intent, "Share Report via...");
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        ctx.startActivity(chooser);
+    }
+
+    /** Open email composer pre-filled with the monthly report. */
+    @JavascriptInterface
+    public void emailReport(String subject, String body) {
+        Intent intent = new Intent(Intent.ACTION_SENDTO);
+        intent.setData(Uri.parse("mailto:"));
+        intent.putExtra(Intent.EXTRA_SUBJECT, subject);
+        intent.putExtra(Intent.EXTRA_TEXT, body);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        if (intent.resolveActivity(ctx.getPackageManager()) != null) {
+            ctx.startActivity(intent);
+        } else {
+            // Fallback to generic share if no email app installed
+            shareText(subject, body);
+        }
     }
 }

@@ -157,6 +157,22 @@ html.sw-sa #app{padding-top:max(calc(env(safe-area-inset-top) + 54px),104px);}
 html.sw-sa #nav{padding-bottom:max(env(safe-area-inset-bottom),20px);}
 html.sw-sa #toast{bottom:max(calc(env(safe-area-inset-bottom) + 72px),92px);}
 
+/* Android native app — status bar handled by MainActivity, no env() needed */
+html.sw-android #statusbar{padding-top:12px;padding-bottom:8px;}
+html.sw-android #app{padding-top:52px;}
+html.sw-android #nav{padding-bottom:8px;}
+html.sw-android #toast{bottom:80px;}
+
+/* ── AUTH SCREEN ─────────────────────────────────────────────── */
+#auth-screen{position:fixed;inset:0;background:var(--bg);z-index:999;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow-y:auto;}
+.auth-logo{font-size:48px;margin-bottom:6px;text-align:center;}
+.auth-brand{font-size:28px;font-weight:900;background:linear-gradient(135deg,#6C63FF,#EC4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px;text-align:center;}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:28px;text-align:center;}
+.auth-card{background:var(--card);border-radius:22px;padding:24px 22px;width:100%;max-width:390px;border:1px solid var(--border);}
+.auth-tab{display:flex;background:var(--card2);border-radius:12px;padding:3px;margin-bottom:20px;}
+.auth-tab-btn{flex:1;padding:8px;border-radius:10px;font-size:13px;font-weight:700;color:var(--muted);transition:all 0.2s;text-align:center;cursor:pointer;border:none;background:none;}
+.auth-tab-btn.active{background:var(--accent);color:#fff;}
+
 </style>
 </head>
 <body>
@@ -167,6 +183,44 @@ html.sw-sa #toast{bottom:max(calc(env(safe-area-inset-bottom) + 72px),92px);}
     <span id="clock"></span>
   </div>
 </div>
+<!-- ── AUTH SCREEN (shown on first launch / new install) ── -->
+<div id="auth-screen">
+  <div class="auth-logo">₹</div>
+  <div class="auth-brand">SpendWise</div>
+  <div class="auth-sub">Personal finance, securely yours</div>
+  <div class="auth-card">
+    <div class="auth-tab">
+      <button class="auth-tab-btn active" id="tab-login" onclick="switchAuthTab('login')">Login</button>
+      <button class="auth-tab-btn" id="tab-signup" onclick="switchAuthTab('signup')">Create Account</button>
+    </div>
+    <div id="auth-err" style="display:none;background:#EF444412;border:1px solid #EF444430;border-radius:10px;padding:10px 12px;font-size:12px;color:var(--red);margin-bottom:14px;line-height:1.4;"></div>
+    <div class="form-group"><label class="form-label">Email</label>
+      <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
+    <div class="form-group"><label class="form-label">Password</label>
+      <input class="form-input" id="auth-pass" type="password" placeholder="Min 6 characters" autocomplete="current-password"></div>
+    <button onclick="submitAuth()" class="btn btn-primary" id="auth-submit-btn" style="margin-bottom:10px;">Login</button>
+    <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">
+      <div onclick="toggleAuthSetup()" style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <span>⚙️ Firebase Setup (required on first use)</span>
+        <span id="auth-arrow" style="font-size:10px;">▼</span>
+      </div>
+      <div id="auth-setup-panel" style="display:none;">
+        <div class="form-group"><label class="form-label">Firebase Database URL</label>
+          <input class="form-input" id="auth-fb-url" placeholder="https://your-project-default-rtdb.firebaseio.com" style="font-size:12px;"></div>
+        <div class="form-group"><label class="form-label">Firebase Web API Key</label>
+          <input class="form-input" id="auth-fb-key" placeholder="AIzaSy..." style="font-size:12px;" autocomplete="off"></div>
+        <div style="background:var(--card2);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.7;">
+          <b style="color:var(--text);">How to get these:</b><br>
+          1. console.firebase.google.com → Create Project<br>
+          2. Build → Realtime Database → Create (Test mode)<br>
+          3. Project Settings → General → Web API Key<br>
+          4. Authentication → Sign-in method → Enable Email/Password
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="app">
   <div class="page active" id="page-home"></div>
   <div class="page" id="page-tx"></div>
@@ -189,9 +243,84 @@ html.sw-sa #toast{bottom:max(calc(env(safe-area-inset-bottom) + 72px),92px);}
 <div id="toast"></div>
 <script>
 // PWA standalone detection — adds class so CSS safe-area rules activate.
-// Works alongside @media(display-mode:standalone) as a belt-and-braces fix.
 if(window.navigator.standalone===true||window.matchMedia('(display-mode:standalone)').matches){
   document.documentElement.classList.add('sw-sa');
+}
+// Android native app detection
+const IS_ANDROID=typeof AndroidBridge!=='undefined'&&AndroidBridge.getPlatform()==='android';
+if(IS_ANDROID){document.documentElement.classList.add('sw-android');}
+
+// Called by MainActivity after SMS permission is granted
+function onAndroidSMSReady(){
+  const btn=document.getElementById('sms-btn-indicator');
+  if(btn){btn.style.color='var(--green)';btn.title='SMS access ready';}
+}
+
+// Real SMS reader for Android — replaces the demo SMS simulator
+function openAndroidSMS(){
+  if(!IS_ANDROID){openSMSSim();return;}
+  if(!AndroidBridge.hasSMSPermission()){
+    toast('SMS permission denied. Restart app and allow when prompted.',true);
+    return;
+  }
+  toast('Reading bank messages...');
+  let smsList=[];
+  try{smsList=JSON.parse(AndroidBridge.getBankSMS(90));}catch(e){}
+  if(!smsList.length){toast('No bank messages found in last 90 days.',true);return;}
+
+  openModal(`<div class="modal-title">📩 Bank Messages (${smsList.length})</div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.4;">Tap a message to add it as a transaction. Already-added messages are safe to skip.</div>
+    <div style="max-height:55vh;overflow-y:auto;" id="sms-list-wrap">
+      ${smsList.slice(0,60).map((s,i)=>{
+        let a=s.body.match(/(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d+)?)/i);
+        let amt=a?parseFloat(a[1].replace(/,/g,'')):0;
+        let isC=/credited|salary|received/i.test(s.body);
+        let d=new Date(s.date);
+        let ds=d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+        let preview=s.body.replace(/\n/g,' ').substring(0,72)+'…';
+        return`<div onclick="pickAndroidSMS(${i})" data-idx="${i}"
+          style="padding:12px;margin-bottom:8px;background:var(--card);border-radius:12px;border:1px solid var(--border);cursor:pointer;active:opacity:0.7;">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+            <span style="font-size:13px;font-weight:700;color:${isC?'var(--green)':'var(--red)'};">${isC?'+':'-'}₹${amt.toLocaleString('en-IN')}</span>
+            <span style="font-size:10px;color:var(--muted);">${ds} · ${s.address||''}</span>
+          </div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4;">${preview}</div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button onclick="closeModal()" class="btn btn-ghost" style="margin-top:12px;">Close</button>`);
+  window._androidSMSList=smsList;
+}
+
+function pickAndroidSMS(i){
+  const sms=window._androidSMSList[i];
+  const p=parseSMS(sms.body);
+  _smsData=p;
+  if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:today()};save();}
+  const guessed=guessCat(p.merchant);
+  closeModal();
+  setTimeout(()=>{
+    openModal(`<div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
+      <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${sms.body.substring(0,130)}"</div>
+      ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ₹${p.bankBal.toLocaleString('en-IN')}</div>`:''}
+      <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;background:var(--card2);border-radius:14px;">
+        <div style="width:48px;height:48px;border-radius:13px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:22px;">${p.isCredit?'💰':'💸'}</div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
+      </div>
+      <div style="font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;">Category · Tap to change</div>
+      <div class="cat-grid" id="sms-cats">${CATS.map(c=>`<button class="cat-btn${c.id===guessed?' sel':''}" id="sc-${c.id}" style="${c.id===guessed?`border-color:${c.color};color:${c.color};background:${c.color}18;`:''}" onclick="pickSMSCat('${c.id}','${c.color}')">${c.icon} ${c.label}</button>`).join('')}</div>
+      ${!p.isCredit?`<div class="form-group"><label class="form-label">Linked Loan (if EMI)</label><select class="form-input" id="sms-loan"><option value="">None</option>${S.loans.map(l=>`<option value="${l.id}">${l.name}</option>`).join('')}</select></div>`:''}
+      <div class="form-group"><label class="form-label">Note / Description</label><input class="form-input" id="sms-note" placeholder="Add description..."></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
+        <div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div>
+        <div class="toggle" id="sms-waste" onclick="this.classList.toggle('on')"></div>
+      </div>
+      <div style="display:flex;gap:9px;">
+        <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Skip</button>
+        <button onclick="saveSMSTx()" class="btn btn-primary" style="flex:2;padding:13px;">Save ✓</button>
+      </div>`);
+    _smsData._cat=guessed;
+  },120);
 }
 
 // ── CONSTANTS ────────────────────────────────────────────────
@@ -228,39 +357,16 @@ const DEFAULT={
   profile:{name:''},
   salary:{amount:0,expectedDay:1,history:[]},
   bankBalance:{amount:0,lastUpdated:''},
-  investments:{angelOne:{monthlyAmount:5000,currentBalance:0,history:[]}},
+  investments:{angelOne:{monthlyAmount:0,currentBalance:0,history:[]}},
   mandatoryBills:[
-    {id:1,name:'Internet',icon:'🌐',amount:799,dueDay:5,paidThisMonth:false},
+    {id:1,name:'Internet',icon:'🌐',amount:0,dueDay:5,paidThisMonth:false},
     {id:2,name:'Electricity',icon:'💡',amount:0,dueDay:10,paidThisMonth:false},
     {id:3,name:'Water',icon:'💧',amount:0,dueDay:15,paidThisMonth:false},
-    {id:4,name:'Mobile/Phone',icon:'📱',amount:299,dueDay:1,paidThisMonth:false},
+    {id:4,name:'Mobile/Phone',icon:'📱',amount:0,dueDay:1,paidThisMonth:false},
   ],
-  creditCards:[
-    {id:1,name:'HDFC Regalia',limit:200000,outstanding:45000,color:'#EC4899',dueDay:15,minDue:2250},
-    {id:2,name:'SBI Simply Click',limit:100000,outstanding:12500,color:'#6C63FF',dueDay:20,minDue:625},
-  ],
-  loans:[
-    {id:1,name:'RBL Bank',emi:14007,outstanding:270000,rate:22,remaining:22,color:'#EF4444'},
-    {id:2,name:'Cred',emi:9624,outstanding:72405,rate:16.5,remaining:7,color:'#EC4899'},
-    {id:3,name:'Cred2',emi:5128,outstanding:38584,rate:16.5,remaining:7,color:'#8B5CF6'},
-    {id:4,name:'Kotak',emi:20184,outstanding:98082,rate:11.5,remaining:5,color:'#06B6D4'},
-    {id:5,name:'ICICI',emi:16527,outstanding:392560,rate:11.25,remaining:27,color:'#F97316'},
-    {id:6,name:'Car Loan',emi:35725,outstanding:1068641,rate:8.95,remaining:34,color:'#22C55E'},
-  ],
-  transactions:[
-    {id:1,amount:14007,merchant:'RBL Bank EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:1,creditCardId:null,contactName:''},
-    {id:2,amount:9624,merchant:'Cred EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:2,creditCardId:null,contactName:''},
-    {id:3,amount:20184,merchant:'Kotak EMI',category:'emi',date:'2026-05-01',note:'May EMI',isWaste:false,isPending:false,loanId:4,creditCardId:null,contactName:''},
-    {id:4,amount:16527,merchant:'ICICI EMI',category:'emi',date:'2026-05-02',note:'May EMI',isWaste:false,isPending:false,loanId:5,creditCardId:null,contactName:''},
-    {id:5,amount:35725,merchant:'Car Loan EMI',category:'emi',date:'2026-05-02',note:'May EMI',isWaste:false,isPending:false,loanId:6,creditCardId:null,contactName:''},
-    {id:6,amount:850,merchant:'SWIGGY',category:'food',date:'2026-05-03',note:'Lunch',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
-    {id:7,amount:2500,merchant:'PETROL PUMP',category:'fuel',date:'2026-05-05',note:'',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
-    {id:8,amount:3200,merchant:'AMAZON',category:'shopping',date:'2026-05-08',note:'Shirt',isWaste:false,isPending:false,loanId:null,creditCardId:1,contactName:''},
-    {id:9,amount:1500,merchant:'ZOMATO',category:'food',date:'2026-05-10',note:'Party',isWaste:true,isPending:false,loanId:null,creditCardId:null,contactName:''},
-    {id:10,amount:5000,merchant:'Mom - Monthly',category:'family',date:'2026-05-12',note:'Monthly support',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:'Mom'},
-    {id:11,amount:5000,merchant:'Angel One SIP',category:'investment',date:'2026-05-05',note:'May SIP',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''},
-    {id:12,amount:1200,merchant:'Unknown Debit',category:'other',date:'2026-05-14',note:'',isWaste:false,isPending:true,loanId:null,creditCardId:null,contactName:''},
-  ],
+  creditCards:[],
+  loans:[],
+  transactions:[],
   budgets:{food:5000,fuel:3000,shopping:5000,bills:2000,entertainment:1500,health:2000,travel:3000,other:2000},
 };
 
@@ -273,92 +379,155 @@ let _smsData=null;
 function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
 function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:p.investments||DEFAULT.investments,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards};}}catch(e){}}
 
-// ── CLOUD SYNC (Firebase Realtime Database) ───────────────────
+// ── FIREBASE AUTH + CLOUD SYNC ────────────────────────────────
+let _fbUser=null; // {uid,email,idToken,refreshToken,expiresAt}
 let _syncTimer=null;
-function getFbCfg(){
-  const url=(localStorage.getItem('sw_fb_url')||'').replace(/\/$/,'');
-  const key=localStorage.getItem('sw_fb_key')||'';
-  if(!url||!key)return null;
-  const path=btoa(unescape(encodeURIComponent(key))).replace(/\+/g,'_').replace(/\//g,'-').replace(/=/g,'');
-  return{url,path};
-}
+let _authMode='login';
+
+function getFbUrl(){return(localStorage.getItem('sw_fb_url')||'').replace(/\/$/,'');}
+function getFbApiKey(){return localStorage.getItem('sw_fb_apikey')||'';}
+function getStoredUser(){try{return JSON.parse(localStorage.getItem('sw_user')||'null');}catch(e){return null;}}
+function storeUser(u){localStorage.setItem('sw_user',JSON.stringify(u));}
+
 function updateSyncDot(state){
   const el=document.getElementById('sync-dot');if(!el)return;
   el.style.display='block';
   el.style.background=state==='ok'?'var(--green)':state==='fail'?'var(--red)':'var(--amber)';
 }
 function debouncedSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(syncToCloud,2500);}
+
 async function syncToCloud(){
-  const cfg=getFbCfg();if(!cfg)return null;
+  if(!_fbUser)return false;
+  if(!await ensureFreshToken())return false;
+  const url=getFbUrl();if(!url)return false;
   updateSyncDot('pending');
   try{
-    const res=await fetch(`${cfg.url}/sw/${cfg.path}.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+    const res=await fetch(`${url}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`,
+      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
     if(res.ok){localStorage.setItem('sw_last_sync',new Date().toISOString());updateSyncDot('ok');return true;}
     updateSyncDot('fail');return false;
   }catch(e){updateSyncDot('fail');return false;}
 }
 async function syncFromCloud(){
-  const cfg=getFbCfg();if(!cfg)return false;
+  if(!_fbUser)return false;
+  if(!await ensureFreshToken())return false;
+  const url=getFbUrl();if(!url)return false;
   updateSyncDot('pending');
   try{
-    const res=await fetch(`${cfg.url}/sw/${cfg.path}.json`);
+    const res=await fetch(`${url}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`);
     if(!res.ok){updateSyncDot('fail');return false;}
     const d=await res.json();
     if(!d||!d.transactions){updateSyncDot('ok');return false;}
-    S={...DEFAULT,...d,bankBalance:d.bankBalance||DEFAULT.bankBalance,investments:d.investments||DEFAULT.investments,mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,creditCards:d.creditCards||DEFAULT.creditCards};
+    S={...DEFAULT,...d,bankBalance:d.bankBalance||DEFAULT.bankBalance,investments:d.investments||DEFAULT.investments,
+      mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,creditCards:d.creditCards||DEFAULT.creditCards,
+      loans:d.loans||DEFAULT.loans};
     localStorage.setItem('sw_v4',JSON.stringify(S));
     localStorage.setItem('sw_last_sync',new Date().toISOString());
     updateSyncDot('ok');return true;
   }catch(e){updateSyncDot('fail');return false;}
 }
-function openCloudSync(){
-  const url=localStorage.getItem('sw_fb_url')||'';
-  const key=localStorage.getItem('sw_fb_key')||'';
-  const last=localStorage.getItem('sw_last_sync');
-  openModal(`<div class="modal-title">☁️ Cloud Sync Setup</div>
-    <div style="background:#6366F112;border:1px solid #6366F130;border-radius:12px;padding:13px 14px;font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7;">
-      <b style="color:var(--text);font-size:13px;">One-time setup (5 min, free):</b><br>
-      1. Open <b style="color:var(--text);">console.firebase.google.com</b><br>
-      2. Create Project → Build → Realtime Database → Create<br>
-      3. Choose <b>Start in test mode</b> → Enable<br>
-      4. Copy the <b>Database URL</b> (shown at top of Realtime DB page)<br>
-      5. Paste it below with any personal sync key you choose
-    </div>
-    <div class="form-group"><label class="form-label">Firebase Database URL</label>
-      <input class="form-input" id="cs-url" value="${url}" placeholder="https://your-project-default-rtdb.firebaseio.com"></div>
-    <div class="form-group"><label class="form-label">Personal Sync Key (acts as your password)</label>
-      <input class="form-input" id="cs-key" value="${key}" placeholder="e.g. pravveen_spendwise_2024" autocomplete="off"></div>
-    <div style="background:var(--card2);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">
-      💡 Save these two values in your Notes app. On reinstall, just enter them again and all data comes back instantly.
-    </div>
-    ${url&&key?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:10px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">✅ Cloud sync active · Last sync: ${last?new Date(last).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</div>`:''}
-    <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
-      <button onclick="saveCloudSync()" class="btn btn-primary" style="flex:2;padding:13px;">Save & Connect</button>
-    </div>`);
+
+async function refreshAuthToken(){
+  if(!_fbUser?.refreshToken)return false;
+  const k=getFbApiKey();if(!k)return false;
+  try{
+    const res=await fetch(`https://securetoken.googleapis.com/v1/token?key=${k}`,
+      {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+       body:`grant_type=refresh_token&refresh_token=${_fbUser.refreshToken}`});
+    const d=await res.json();if(!res.ok)return false;
+    _fbUser.idToken=d.id_token;_fbUser.refreshToken=d.refresh_token;
+    _fbUser.expiresAt=Date.now()+3500000;storeUser(_fbUser);return true;
+  }catch(e){return false;}
 }
-async function saveCloudSync(){
-  const url=document.getElementById('cs-url').value.trim();
-  const key=document.getElementById('cs-key').value.trim();
-  if(!url||!key){toast('Fill both fields',true);return;}
-  localStorage.setItem('sw_fb_url',url);
-  localStorage.setItem('sw_fb_key',key);
-  closeModal();toast('Connecting to cloud...');
-  const ok=await syncToCloud();
-  toast(ok?'✅ Cloud sync enabled! Data saved to cloud.':'❌ Connection failed — check the Database URL.',!ok);
-  if(ok)renderSettings();
+async function ensureFreshToken(){
+  if(!_fbUser)return false;
+  if(Date.now()<(_fbUser.expiresAt||0)-60000)return true;
+  return await refreshAuthToken();
 }
+
+// ── AUTH UI ───────────────────────────────────────────────────
+function showAuthScreen(){
+  document.getElementById('auth-screen').style.display='flex';
+  document.getElementById('auth-fb-url').value=getFbUrl();
+  document.getElementById('auth-fb-key').value=getFbApiKey();
+}
+function hideAuthScreen(){document.getElementById('auth-screen').style.display='none';}
+function switchAuthTab(mode){
+  _authMode=mode;
+  document.getElementById('tab-login').classList.toggle('active',mode==='login');
+  document.getElementById('tab-signup').classList.toggle('active',mode==='signup');
+  document.getElementById('auth-submit-btn').textContent=mode==='login'?'Login':'Create Account';
+  authClearErr();
+}
+function toggleAuthSetup(){
+  const p=document.getElementById('auth-setup-panel');
+  const a=document.getElementById('auth-arrow');
+  const open=p.style.display==='none';
+  p.style.display=open?'block':'none';a.textContent=open?'▲':'▼';
+}
+function authErr(msg){const el=document.getElementById('auth-err');el.textContent=msg;el.style.display='block';}
+function authClearErr(){const el=document.getElementById('auth-err');if(el)el.style.display='none';}
+function setAuthLoading(v){const b=document.getElementById('auth-submit-btn');if(b){b.disabled=v;b.textContent=v?'Please wait...':(_authMode==='login'?'Login':'Create Account');}}
+
+async function submitAuth(){
+  authClearErr();
+  const email=(document.getElementById('auth-email').value||'').trim();
+  const pass=document.getElementById('auth-pass').value||'';
+  const fbUrl=(document.getElementById('auth-fb-url').value||'').trim().replace(/\/$/,'');
+  const fbKey=(document.getElementById('auth-fb-key').value||'').trim();
+  if(!email||!pass){authErr('Enter your email and password');return;}
+  if(_authMode==='signup'&&pass.length<6){authErr('Password must be at least 6 characters');return;}
+  if(!fbUrl||!fbKey){
+    toggleAuthSetup();
+    authErr('Fill in the Firebase URL and API Key above');return;
+  }
+  setAuthLoading(true);
+  localStorage.setItem('sw_fb_url',fbUrl);
+  localStorage.setItem('sw_fb_apikey',fbKey);
+  const endpoint=_authMode==='login'
+    ?'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword'
+    :'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
+  try{
+    const res=await fetch(`${endpoint}?key=${fbKey}`,{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({email,password:pass,returnSecureToken:true})});
+    const d=await res.json();
+    if(!res.ok){authErr(d.error?.message==='EMAIL_NOT_FOUND'||d.error?.message==='INVALID_PASSWORD'?'Wrong email or password':d.error?.message==='EMAIL_EXISTS'?'Email already registered — try Login':'Auth failed: '+(d.error?.message||'unknown'));setAuthLoading(false);return;}
+    _fbUser={uid:d.localId,email:d.email,idToken:d.idToken,refreshToken:d.refreshToken,expiresAt:Date.now()+3500000};
+    storeUser(_fbUser);
+    await afterAuth();
+  }catch(e){authErr('Network error — check your connection');}
+  setAuthLoading(false);
+}
+
+async function afterAuth(){
+  hideAuthScreen();
+  load();
+  updateSyncDot('pending');
+  document.getElementById('sync-dot').style.display='block';
+  const synced=await syncFromCloud();
+  renderPage(currentPage);
+  if(!synced&&_authMode==='login')toast('No cloud data yet — your data will sync here automatically.');
+}
+
+async function doLogout(){
+  if(!confirm('Log out? Your data is safely saved in the cloud.'))return;
+  _fbUser=null;
+  localStorage.removeItem('sw_user');
+  localStorage.removeItem('sw_v4');
+  localStorage.removeItem('sw_last_sync');
+  S=JSON.parse(JSON.stringify(DEFAULT));
+  document.getElementById('sync-dot').style.display='none';
+  _authMode='login';
+  switchAuthTab('login');
+  showAuthScreen();
+}
+
 async function forceSyncFromCloud(){
   toast('Pulling latest data from cloud...');
   const ok=await syncFromCloud();
   if(ok){renderPage(currentPage);toast('✅ Data restored from cloud!');}
-  else toast('No cloud data found — check your sync key.',true);
-}
-function disableCloudSync(){
-  if(!confirm('Disable cloud sync? Your local data stays intact.'))return;
-  localStorage.removeItem('sw_fb_url');localStorage.removeItem('sw_fb_key');localStorage.removeItem('sw_last_sync');
-  document.getElementById('sync-dot').style.display='none';
-  renderSettings();toast('Cloud sync disabled.');
+  else toast('No cloud data found yet.',true);
 }
 
 // ── HELPERS ──────────────────────────────────────────────────
@@ -460,7 +629,7 @@ function renderHome(){
         <div style="color:var(--muted);font-size:12px;">${greet}, ${name} 👋</div>
         <div style="font-size:19px;font-weight:900;letter-spacing:-0.5px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
       </div>
-      <button onclick="openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:8px 12px;border-radius:12px;font-size:11px;font-weight:700;">📩 SMS</button>
+      <button onclick="IS_ANDROID?openAndroidSMS():openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:8px 12px;border-radius:12px;font-size:11px;font-weight:700;">📩 SMS</button>
     </div>
 
     ${pending.length?`<div class="pending-bar" onclick="goTo('tx');setTxFilter('pending')">
@@ -573,7 +742,7 @@ function renderTx(){
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <div class="sec-title" style="margin-bottom:0;">Transactions (${filtered.length})</div>
       <div style="display:flex;gap:7px;">
-        <button onclick="openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:7px 11px;border-radius:11px;font-size:11px;font-weight:700;">📩</button>
+        <button onclick="IS_ANDROID?openAndroidSMS():openSMSSim()" style="background:#22C55E18;border:1px solid #22C55E33;color:var(--green);padding:7px 11px;border-radius:11px;font-size:11px;font-weight:700;">📩</button>
         <button onclick="openAddTx()" style="background:var(--accent);color:#fff;padding:7px 14px;border-radius:11px;font-size:12px;font-weight:700;">+ Add</button>
       </div>
     </div>
@@ -822,22 +991,22 @@ function renderSettings(){
 
     <div class="card cindigo">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <div class="sec-title" style="font-size:13px;margin-bottom:0;">☁️ Cloud Sync</div>
-        ${getFbCfg()?`<span class="pill pill-green">● Active</span>`:`<span class="pill pill-amber">Not set up</span>`}
+        <div class="sec-title" style="font-size:13px;margin-bottom:0;">👤 Account & Sync</div>
+        <span class="pill pill-green">● Active</span>
       </div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5;">
-        ${getFbCfg()?`Last synced: <b style="color:var(--text);">${localStorage.getItem('sw_last_sync')?new Date(localStorage.getItem('sw_last_sync')).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</b>`:'Auto-saves every change to the cloud. Data survives app reinstall on any device — iPhone, Android, anywhere.'}
+      <div style="background:var(--card2);border-radius:12px;padding:12px 14px;margin-bottom:12px;">
+        <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">Logged in as</div>
+        <div style="font-size:14px;font-weight:700;">${_fbUser?.email||'—'}</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;">UID: ${(_fbUser?.uid||'').substring(0,16)}…</div>
       </div>
-      ${getFbCfg()?`
+      <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
+        Last synced: <b style="color:var(--text);">${localStorage.getItem('sw_last_sync')?new Date(localStorage.getItem('sw_last_sync')).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</b>
+      </div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <button onclick="forceSyncFromCloud()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬇️ Pull from Cloud</button>
-        <button onclick="syncToCloud().then(ok=>toast(ok?'✅ Synced!':'❌ Sync failed',!ok))" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬆️ Push to Cloud</button>
+        <button onclick="forceSyncFromCloud()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬇️ Pull</button>
+        <button onclick="syncToCloud().then(ok=>toast(ok?'✅ Synced!':'❌ Sync failed',!ok))" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬆️ Push</button>
       </div>
-      <div style="display:flex;gap:8px;">
-        <button onclick="openCloudSync()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⚙️ Settings</button>
-        <button onclick="disableCloudSync()" class="btn btn-red btn-sm" style="flex:1;text-align:center;">✕ Disable</button>
-      </div>
-      `:`<button onclick="openCloudSync()" class="btn btn-primary">🔧 Set Up Cloud Sync</button>`}
+      <button onclick="doLogout()" class="btn btn-red" style="width:100%;">🚪 Log Out</button>
     </div>
 
     <div class="card">
@@ -916,9 +1085,10 @@ function openMonthlyReport(){
       </select>
     </div>
     <div id="mrpt-body"></div>
-    <div style="display:flex;gap:9px;margin-top:14px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Close</button>
-      <button onclick="downloadMonthlyReport(document.getElementById('rpt-month').value)" class="btn btn-teal" style="flex:2;padding:13px;">⬇️ Download PDF</button>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:12px;">Close</button>
+      <button onclick="emailMonthlyReport(document.getElementById('rpt-month').value)" class="btn btn-ghost" style="flex:1;padding:12px;">📧 Share</button>
+      <button onclick="downloadMonthlyReport(document.getElementById('rpt-month').value)" class="btn btn-teal" style="flex:1;padding:12px;">⬇️ Download</button>
     </div>`);
   renderMonthReport();
 }
@@ -1004,6 +1174,37 @@ function downloadMonthlyReport(ym){
   <script>window.onload=()=>window.print();<\/script></body></html>`;
   const w=window.open('','_blank');if(w){w.document.write(html);w.document.close();}
 }
+
+function emailMonthlyReport(ym){
+  if(!ym)ym=thisMonth();
+  const mn=new Date(ym+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const txs=S.transactions.filter(t=>t.date.startsWith(ym));
+  const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
+  const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
+  const waste=txs.filter(t=>t.isWaste).reduce((s,t)=>s+t.amount,0);
+  const catSpend={};
+  txs.filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
+  let body=`SpendWise Monthly Report — ${mn}\n${'='.repeat(40)}\n\n`;
+  body+=`Income:    ₹${inc.toLocaleString('en-IN')}\nExpenses:  ₹${exp.toLocaleString('en-IN')}\n`;
+  body+=`Savings:   ₹${(inc-exp).toLocaleString('en-IN')}\nWasteful:  ₹${waste.toLocaleString('en-IN')}\n`;
+  body+=`\nSpending by Category:\n${'─'.repeat(30)}\n`;
+  Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).forEach(([id,amt])=>{
+    const c=cat(id);body+=`${c.icon} ${c.label}: ₹${amt.toLocaleString('en-IN')}\n`;
+  });
+  body+=`\nTransactions (${txs.length}):\n${'─'.repeat(30)}\n`;
+  txs.sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
+    body+=`${t.date}  ${t.merchant.padEnd(20)}  ₹${String(t.amount.toLocaleString('en-IN')).padStart(10)}  ${cat(t.category).label}\n`;
+  });
+  const subject=`SpendWise Report — ${mn}`;
+  if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){
+    AndroidBridge.shareText(subject,body);
+  }else if(navigator.share){
+    navigator.share({title:subject,text:body}).catch(()=>{});
+  }else{
+    window.location.href=`mailto:?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  }
+}
+
 
 // ── MODALS ───────────────────────────────────────────────────
 function openModal(html){document.getElementById('modal-body').innerHTML=html;document.getElementById('overlay').classList.add('show');}
@@ -1323,13 +1524,18 @@ load();
 updateClock();
 setInterval(updateClock,30000);
 renderPage('home');
-// On startup: if cloud sync configured, pull latest data silently
-if(getFbCfg()){
-  document.getElementById('sync-dot').style.display='block';
-  syncFromCloud().then(synced=>{
-    if(synced)renderPage(currentPage);
-  });
-}
+// Check for existing session → skip login screen if token can be refreshed
+(async()=>{
+  const user=getStoredUser();
+  if(user&&user.refreshToken){
+    _fbUser=user;
+    if(await ensureFreshToken()){
+      await afterAuth();
+      return;
+    }
+  }
+  showAuthScreen();
+})();
 </script>
 </body>
 </html>

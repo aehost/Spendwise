@@ -108,8 +108,13 @@ public class MainActivity extends AppCompatActivity {
         // JavaScript bridge — exposes AndroidBridge object to the web app
         webView.addJavascriptInterface(new SMSBridge(this), "AndroidBridge");
 
-        // Handle external links (Firebase console, etc.)
+        // Handle external links and request SMS only after page fully loads
         webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // Page is loaded — JS functions now exist, safe to request permission
+                requestSMSPermission();
+            }
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
                 String url = req.getUrl().toString();
@@ -124,16 +129,12 @@ public class MainActivity extends AppCompatActivity {
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
             public boolean onConsoleMessage(ConsoleMessage msg) {
-                // Silent in production
                 return true;
             }
         });
 
         // Load the SpendWise app from assets
         webView.loadUrl("file:///android_asset/index.html");
-
-        // Request SMS permission after WebView loads
-        requestSMSPermission();
     }
 
     private void requestSMSPermission() {
