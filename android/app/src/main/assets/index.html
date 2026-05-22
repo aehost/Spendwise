@@ -649,9 +649,10 @@ async function afterAuth(){
 
 async function saveUserProfile(user){
   try{
-    const profile={email:user.email,uid:user.uid,createdAt:new Date().toISOString()};
-    await fetch(`${FB_URL}/users/${user.uid}/profile.json?auth=${user.idToken}`,
-      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)});
+    // Create the initial Firestore document for a new user with default data + email
+    await fetch(`${FS_URL}/users/${user.uid}`,
+      {method:'PATCH',headers:{'Content-Type':'application/json','Authorization':`Bearer ${user.idToken}`},
+       body:JSON.stringify(_fsDoc({...DEFAULT,email:user.email,createdAt:new Date().toISOString()}))});
   }catch(e){}
 }
 
@@ -679,8 +680,9 @@ async function deleteAccount(){
     const rd=await reAuth.json();
     if(!reAuth.ok){toast('Wrong password — account NOT deleted.',true);return;}
     const freshToken=rd.idToken;
-    // Delete all database data (profile + spendwise)
-    await fetch(`${FB_URL}/users/${_fbUser.uid}.json?auth=${freshToken}`,{method:'DELETE'});
+    // Delete all Firestore data for this user
+    await fetch(`${FS_URL}/users/${_fbUser.uid}`,
+      {method:'DELETE',headers:{'Authorization':`Bearer ${freshToken}`}});
     // Delete Firebase Auth account
     await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${FB_API_KEY}`,
       {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:freshToken})});
