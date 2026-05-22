@@ -172,6 +172,7 @@ html.sw-android #toast{bottom:80px;}
 .auth-tab{display:flex;background:var(--card2);border-radius:12px;padding:3px;margin-bottom:20px;}
 .auth-tab-btn{flex:1;padding:8px;border-radius:10px;font-size:13px;font-weight:700;color:var(--muted);transition:all 0.2s;text-align:center;cursor:pointer;border:none;background:none;}
 .auth-tab-btn.active{background:var(--accent);color:#fff;}
+.pw-req{font-size:10px;color:var(--muted);transition:color 0.2s;}
 
 </style>
 </head>
@@ -197,7 +198,23 @@ html.sw-android #toast{bottom:80px;}
     <div class="form-group"><label class="form-label">Email</label>
       <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
     <div class="form-group"><label class="form-label">Password</label>
-      <input class="form-input" id="auth-pass" type="password" placeholder="Min 6 characters" autocomplete="current-password"></div>
+      <div style="position:relative;">
+        <input class="form-input" id="auth-pass" type="password" placeholder="Min 8 characters" autocomplete="current-password" oninput="updatePasswordStrength()" style="padding-right:44px;">
+        <button type="button" onclick="togglePassVis()" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:16px;color:var(--muted);background:none;border:none;cursor:pointer;" id="pass-vis-btn">👁</button>
+      </div>
+    </div>
+    <div id="pw-strength-wrap" style="display:none;margin:-4px 0 13px;">
+      <div style="height:4px;background:var(--border);border-radius:99px;margin-bottom:8px;overflow:hidden;">
+        <div id="pw-strength-bar" style="height:100%;width:0%;border-radius:99px;transition:all 0.3s;"></div>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px;">
+        <span class="pw-req" id="req-len">○ 8+ chars</span>
+        <span class="pw-req" id="req-upper">○ Uppercase</span>
+        <span class="pw-req" id="req-num">○ Number</span>
+        <span class="pw-req" id="req-special">○ Special (!@#$)</span>
+      </div>
+      <div style="text-align:right;"><span id="pw-strength-hint" style="font-size:10px;font-weight:700;color:var(--muted);"></span></div>
+    </div>
     <button onclick="submitAuth()" class="btn btn-primary" id="auth-submit-btn">Login</button>
   </div>
 </div>
@@ -439,18 +456,55 @@ function switchAuthTab(mode){
   document.getElementById('tab-login').classList.toggle('active',mode==='login');
   document.getElementById('tab-signup').classList.toggle('active',mode==='signup');
   document.getElementById('auth-submit-btn').textContent=mode==='login'?'Login':'Create Account';
+  document.getElementById('auth-pass').placeholder=mode==='signup'?'Min 8 chars, A-Z, 0-9, !@#$':'Password';
+  const sw=document.getElementById('pw-strength-wrap');if(sw)sw.style.display=mode==='signup'?'block':'none';
   authClearErr();
 }
 function authErr(msg){const el=document.getElementById('auth-err');el.textContent=msg;el.style.display='block';}
 function authClearErr(){const el=document.getElementById('auth-err');if(el)el.style.display='none';}
 function setAuthLoading(v){const b=document.getElementById('auth-submit-btn');if(b){b.disabled=v;b.textContent=v?'Please wait...':(_authMode==='login'?'Login':'Create Account');}}
 
+function validatePassword(p){
+  const e=[];
+  if(p.length<8)e.push('8+ characters');
+  if(!/[A-Z]/.test(p))e.push('uppercase letter');
+  if(!/[0-9]/.test(p))e.push('number');
+  if(!/[^A-Za-z0-9]/.test(p))e.push('special character (!@#$%...)');
+  return e;
+}
+function updatePasswordStrength(){
+  const p=document.getElementById('auth-pass').value||'';
+  const bar=document.getElementById('pw-strength-bar');
+  const hint=document.getElementById('pw-strength-hint');
+  if(!bar)return;
+  const checks=[p.length>=8,/[A-Z]/.test(p),/[0-9]/.test(p),/[^A-Za-z0-9]/.test(p)];
+  const score=checks.filter(Boolean).length;
+  const colors=['#EF4444','#EF4444','#F59E0B','#F59E0B','#22C55E'];
+  const labels=['','Weak','Fair','Good','Strong ✓'];
+  bar.style.width=(score/4*100)+'%';
+  bar.style.background=colors[score];
+  hint.textContent=labels[score];hint.style.color=colors[score];
+  const ids=['req-len','req-upper','req-num','req-special'];
+  const reqs=['8+ chars','Uppercase','Number','Special char'];
+  ids.forEach((id,i)=>{const el=document.getElementById(id);if(el){el.style.color=checks[i]?'var(--green)':'var(--muted)';el.textContent=(checks[i]?'✓ ':'○ ')+reqs[i];}});
+}
+function togglePassVis(){
+  const inp=document.getElementById('auth-pass');
+  const btn=document.getElementById('pass-vis-btn');
+  const show=inp.type==='password';
+  inp.type=show?'text':'password';
+  btn.textContent=show?'🙈':'👁';
+}
+
 async function submitAuth(){
   authClearErr();
   const email=(document.getElementById('auth-email').value||'').trim();
   const pass=document.getElementById('auth-pass').value||'';
   if(!email||!pass){authErr('Enter your email and password');return;}
-  if(_authMode==='signup'&&pass.length<6){authErr('Password must be at least 6 characters');return;}
+  if(_authMode==='signup'){
+    const pwErr=validatePassword(pass);
+    if(pwErr.length){authErr('Password needs: '+pwErr.join(' · '));return;}
+  }
   setAuthLoading(true);
   const endpoint=_authMode==='login'
     ?'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword'
@@ -471,12 +525,15 @@ async function submitAuth(){
 
 async function afterAuth(){
   hideAuthScreen();
-  load();
+  // Always start clean and pull from Firebase — never trust stale local data
+  localStorage.removeItem('sw_v4');
+  S=JSON.parse(JSON.stringify(DEFAULT));
   updateSyncDot('pending');
   document.getElementById('sync-dot').style.display='block';
   const synced=await syncFromCloud();
+  if(!synced)S=JSON.parse(JSON.stringify(DEFAULT));
   renderPage(currentPage);
-  if(!synced&&_authMode==='login')toast('No cloud data yet — your data will sync here automatically.');
+  if(!synced)toast('Welcome! Start by setting your salary and adding transactions.');
 }
 
 async function saveUserProfile(user){
@@ -490,14 +547,42 @@ async function saveUserProfile(user){
 async function doLogout(){
   if(!confirm('Log out? Your data is safely saved in the cloud.'))return;
   _fbUser=null;
-  localStorage.removeItem('sw_user');
-  localStorage.removeItem('sw_v4');
-  localStorage.removeItem('sw_last_sync');
+  localStorage.clear();
   S=JSON.parse(JSON.stringify(DEFAULT));
   document.getElementById('sync-dot').style.display='none';
   _authMode='login';
   switchAuthTab('login');
   showAuthScreen();
+}
+
+async function deleteAccount(){
+  if(!confirm('⚠️ Permanently delete your account?\n\nThis will erase ALL your data from Firebase and cannot be undone.'))return;
+  const pw=prompt('Enter your password to confirm deletion:');
+  if(!pw)return;
+  toast('Verifying...');
+  try{
+    // Re-authenticate to get a fresh token (Firebase requires this for account deletion)
+    const reAuth=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FB_API_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},
+       body:JSON.stringify({email:_fbUser.email,password:pw,returnSecureToken:true})});
+    const rd=await reAuth.json();
+    if(!reAuth.ok){toast('Wrong password — account NOT deleted.',true);return;}
+    const freshToken=rd.idToken;
+    // Delete all database data (profile + spendwise)
+    await fetch(`${FB_URL}/users/${_fbUser.uid}.json?auth=${freshToken}`,{method:'DELETE'});
+    // Delete Firebase Auth account
+    await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${FB_API_KEY}`,
+      {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({idToken:freshToken})});
+    // Wipe local state
+    _fbUser=null;
+    localStorage.clear();
+    S=JSON.parse(JSON.stringify(DEFAULT));
+    document.getElementById('sync-dot').style.display='none';
+    _authMode='login';
+    switchAuthTab('login');
+    showAuthScreen();
+    toast('Account permanently deleted.');
+  }catch(e){toast('Error deleting account. Check your connection.',true);}
 }
 
 async function forceSyncFromCloud(){
@@ -998,7 +1083,8 @@ function renderSettings(){
 
     <div class="card">
       <div class="sec-title" style="font-size:13px;">⚠️ Danger Zone</div>
-      <button onclick="clearData()" class="btn btn-red">🗑️ Clear All Data</button>
+      <button onclick="clearData()" class="btn btn-red" style="margin-bottom:10px;">🗑️ Clear All Local Data</button>
+      <button onclick="deleteAccount()" class="btn btn-red">💀 Delete Account & All Data Forever</button>
     </div>
 
     <div class="card" style="text-align:center;padding:20px;">
