@@ -748,6 +748,8 @@ function renderHome(){
   const catSpend={};
   monthTxs().filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
   const alerts=Object.entries(S.budgets).filter(([id,b])=>(catSpend[id]||0)>b*0.8);
+  const savings=salAmt-spent;
+  const savRate=salAmt>0?Math.round((savings/salAmt)*100):0;
 
   // Smart suggestions
   const tips=[];
