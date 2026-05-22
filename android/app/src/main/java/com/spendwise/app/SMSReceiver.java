@@ -77,10 +77,11 @@ public class SMSReceiver extends BroadcastReceiver {
         } catch (Exception e) {
             // JSON failed — continue to show notification anyway
         }
-        // Persist to SharedPreferences so SMS survives process restart when user taps notification
+        // Persist to SharedPreferences so SMS survives process restart when user taps notification.
+        // commit() is synchronous — guarantees write completes before onReceive() returns and process can die.
         if (smsJson != null) {
             context.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
-                .edit().putString("pending_sms", smsJson).apply();
+                .edit().putString("pending_sms", smsJson).commit();
         }
 
         // Create notification channel (required Android 8.0+)

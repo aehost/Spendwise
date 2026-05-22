@@ -450,16 +450,40 @@ let _smsData=null;
 function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
 function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:{angelOne:{...DEFAULT.investments.angelOne,...((p.investments&&p.investments.angelOne)||{})}},mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})}};}}catch(e){}}
 
-// ── FIREBASE AUTH + CLOUD SYNC ────────────────────────────────
-const FB_URL='https://spendwise-4bc4f-default-rtdb.asia-southeast1.firebasedatabase.app';
+// ── FIREBASE AUTH + FIRESTORE BACKEND ────────────────────────
 const FB_API_KEY='AIzaSyDyzzeh0ibIQn-ck3V3u-qASbNLElSBksE';
+// Firestore: scalable, queryable, per-user security rules
+const FS_URL='https://firestore.googleapis.com/v1/projects/spendwise-4bc4f/databases/(default)/documents';
+// Legacy Realtime DB — used only for one-time migration of existing data
+const FB_RT_URL='https://spendwise-4bc4f-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 let _fbUser=null; // {uid,email,idToken,refreshToken,expiresAt}
 let _syncTimer=null;
 let _authMode='login';
 
-function getFbUrl(){return FB_URL;}
 function getFbApiKey(){return FB_API_KEY;}
+
+// ── FIRESTORE TYPE CONVERTERS ─────────────────────────────────
+// JS value → Firestore typed field
+function _fsV(v){if(v===null||v===undefined)return{nullValue:null};if(typeof v==='boolean')return{booleanValue:v};if(typeof v==='number')return Number.isInteger(v)?{integerValue:String(v)}:{doubleValue:v};if(typeof v==='string')return{stringValue:v};if(Array.isArray(v))return{arrayValue:{values:v.map(_fsV)}};if(typeof v==='object')return{mapValue:{fields:Object.fromEntries(Object.entries(v).map(([k,vv])=>[k,_fsV(vv)]))}};return{stringValue:String(v)};}
+// Firestore typed field → JS value
+function _fromFsV(f){if(!f)return null;if('nullValue' in f)return null;if('booleanValue' in f)return f.booleanValue;if('integerValue' in f)return parseInt(f.integerValue);if('doubleValue' in f)return f.doubleValue;if('stringValue' in f)return f.stringValue;if('arrayValue' in f)return(f.arrayValue.values||[]).map(_fromFsV);if('mapValue' in f)return Object.fromEntries(Object.entries(f.mapValue.fields||{}).map(([k,v])=>[k,_fromFsV(v)]));return null;}
+function _fsDoc(obj){return{fields:Object.fromEntries(Object.entries(obj).map(([k,v])=>[k,_fsV(v)]))};}
+function _fromFsDoc(doc){return Object.fromEntries(Object.entries(doc.fields||{}).map(([k,v])=>[k,_fromFsV(v)]));}
+
+// Merge cloud data into S — shared by Firestore and legacy Realtime DB paths
+function _applyCloudData(d){
+  S={...DEFAULT,...d,
+    bankBalance:d.bankBalance||DEFAULT.bankBalance,
+    investments:{angelOne:{...DEFAULT.investments.angelOne,...((d.investments&&d.investments.angelOne)||{})}},
+    mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,
+    creditCards:d.creditCards||DEFAULT.creditCards,
+    loans:d.loans||DEFAULT.loans,
+    salary:{...DEFAULT.salary,...(d.salary||{}),history:(d.salary&&d.salary.history)||[]},
+    budgets:{...DEFAULT.budgets,...(d.budgets||{})}};
+  localStorage.setItem('sw_v4',JSON.stringify(S));
+  localStorage.setItem('sw_last_sync',new Date().toISOString());
+}
 function getStoredUser(){try{return JSON.parse(localStorage.getItem('sw_user')||'null');}catch(e){return null;}}
 function storeUser(u){localStorage.setItem('sw_user',JSON.stringify(u));}
 
@@ -473,11 +497,11 @@ function debouncedSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(syncToCl
 async function syncToCloud(){
   if(!_fbUser)return false;
   if(!await ensureFreshToken())return false;
-  const url=getFbUrl();if(!url)return false;
   updateSyncDot('pending');
   try{
-    const res=await fetch(`${url}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`,
-      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(S)});
+    const res=await fetch(`${FS_URL}/users/${_fbUser.uid}`,
+      {method:'PATCH',headers:{'Content-Type':'application/json','Authorization':`Bearer ${_fbUser.idToken}`},
+       body:JSON.stringify(_fsDoc(S))});
     if(res.ok){localStorage.setItem('sw_last_sync',new Date().toISOString());updateSyncDot('ok');return true;}
     updateSyncDot('fail');return false;
   }catch(e){updateSyncDot('fail');return false;}
@@ -485,24 +509,27 @@ async function syncToCloud(){
 async function syncFromCloud(){
   if(!_fbUser)return false;
   if(!await ensureFreshToken())return false;
-  const url=getFbUrl();if(!url)return false;
   updateSyncDot('pending');
   try{
-    const res=await fetch(`${url}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`);
-    if(!res.ok){updateSyncDot('fail');return false;}
-    const d=await res.json();
-    if(!d){updateSyncDot('ok');return false;}
-    S={...DEFAULT,...d,
-      bankBalance:d.bankBalance||DEFAULT.bankBalance,
-      investments:{angelOne:{...DEFAULT.investments.angelOne,...((d.investments&&d.investments.angelOne)||{})}},
-      mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,
-      creditCards:d.creditCards||DEFAULT.creditCards,
-      loans:d.loans||DEFAULT.loans,
-      salary:{...DEFAULT.salary,...(d.salary||{}),history:(d.salary&&d.salary.history)||[]},
-      budgets:{...DEFAULT.budgets,...(d.budgets||{})}};
-    localStorage.setItem('sw_v4',JSON.stringify(S));
-    localStorage.setItem('sw_last_sync',new Date().toISOString());
-    updateSyncDot('ok');return true;
+    // Primary: Firestore
+    const fsRes=await fetch(`${FS_URL}/users/${_fbUser.uid}`,
+      {headers:{'Authorization':`Bearer ${_fbUser.idToken}`}});
+    if(fsRes.ok){
+      const doc=await fsRes.json();
+      if(doc.fields){_applyCloudData(_fromFsDoc(doc));updateSyncDot('ok');return true;}
+    }
+    // One-time migration: Firestore has no data → try legacy Realtime DB
+    if(fsRes.status===404){
+      try{
+        const rtRes=await fetch(`${FB_RT_URL}/users/${_fbUser.uid}/spendwise.json?auth=${_fbUser.idToken}`);
+        if(rtRes.ok){
+          const d=await rtRes.json();
+          if(d){_applyCloudData(d);syncToCloud();updateSyncDot('ok');return true;} // migrate to Firestore
+        }
+      }catch(e2){}
+      updateSyncDot('ok');return false; // new user — no data anywhere
+    }
+    updateSyncDot('fail');return false;
   }catch(e){updateSyncDot('fail');return false;}
 }
 
@@ -612,6 +639,7 @@ async function afterAuth(){
   else if(!S.salary.amount&&!S.bankBalance.amount&&!S.transactions.length){
     toast('Welcome! Start by setting your salary and adding transactions.');
   }
+  setTimeout(autoImportNewSMS,1200); // scan last 3 days of SMS after auth settles
   if(window._pendingIncomingSMS){
     const sms=window._pendingIncomingSMS;
     window._pendingIncomingSMS=null;
@@ -725,6 +753,38 @@ function parseSMS(msg){
   const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\s*Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
   const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
   return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal};
+}
+
+// Auto-scan SMS inbox for unrecorded bank transactions (last 3 days).
+// More reliable than SMSReceiver BroadcastReceiver which battery optimizers kill on many devices.
+function autoImportNewSMS(){
+  if(!IS_ANDROID||!_fbUser)return;
+  try{
+    if(!AndroidBridge.hasSMSPermission())return;
+    const list=JSON.parse(AndroidBridge.getBankSMS(3)||'[]');
+    if(!list||!list.length)return;
+    // Dedup by first 80 chars of body — enough to uniquely identify a bank SMS
+    const seen=new Set(S.transactions.filter(t=>t.smsRaw).map(t=>t.smsRaw.substring(0,80)));
+    let added=0;
+    list.forEach(s=>{
+      const key=(s.body||'').substring(0,80);
+      if(seen.has(key))return; // already imported
+      const p=parseSMS(s.body||'');
+      if(!p.amount||p.amount<=0)return; // skip if no parseable amount
+      const txDate=s.date?new Date(s.date).toISOString().split('T')[0]:today();
+      S.transactions.push({id:Date.now()+added,amount:p.amount,
+        merchant:p.merchant||'Bank Transaction',category:'other',
+        date:txDate,note:'',isWaste:false,isPending:true,
+        loanId:null,creditCardId:null,contactName:'',
+        isCredit:p.isCredit,smsRaw:(s.body||'').substring(0,200)});
+      if(p.bankBal&&!S.bankBalance.amount){
+        S.bankBalance={amount:p.bankBal,lastUpdated:txDate};
+      }
+      seen.add(key);
+      added++;
+    });
+    if(added>0){save();renderPage(currentPage);toast(`📩 ${added} bank transaction${added>1?'s':''} auto-imported from SMS`);}
+  }catch(e){}
 }
 
 // ── NAVIGATION ───────────────────────────────────────────────
@@ -1250,16 +1310,27 @@ function saveName(){S.profile.name=document.getElementById('set-name').value.tri
 function saveBudgets(){['food','fuel','shopping','bills','entertainment','health','travel','other'].forEach(id=>{S.budgets[id]=parseFloat(document.getElementById('bgt-'+id).value)||0;});save();toast('Budgets saved ✓');}
 function saveBills(){S.mandatoryBills.forEach(b=>{const n=document.getElementById('bill-name-'+b.id);const a=document.getElementById('bill-amt-'+b.id);const d=document.getElementById('bill-day-'+b.id);if(n)b.name=n.value;if(a)b.amount=parseFloat(a.value)||0;if(d)b.dueDay=parseInt(d.value)||1;});save();toast('Bills saved ✓');renderPage(currentPage);}
 function toggleBill(id){const b=S.mandatoryBills.find(x=>x.id===id);if(!b)return;b.paidThisMonth=!b.paidThisMonth;if(b.paidThisMonth&&b.amount>0){S.transactions.push({id:Date.now(),amount:b.amount,merchant:b.name,category:'bills',date:today(),note:'Auto from bill',isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});toast('✅ Bill marked paid & transaction added!');}else{toast(b.name+' marked unpaid');}save();renderPage(currentPage);}
-function exportCSV(){const rows=['Date,Merchant,Category,Amount,Note,Loan,CreditCard,Wasteful,Pending'];S.transactions.forEach(t=>{const ln=t.loanId?S.loans.find(l=>l.id===t.loanId):null;const cc=t.creditCardId?S.creditCards.find(c=>c.id===t.creditCardId):null;rows.push(`${t.date},"${t.merchant}","${t.category}",${t.amount},"${t.note||''}","${ln?ln.name:''}","${cc?cc.name:''}",${t.isWaste?'Yes':'No'},${t.isPending?'Yes':'No'}`);});const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(rows.join('\n'));a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');}
+function exportCSV(){
+  const rows=['Date,Merchant,Category,Amount,Note,Type,Wasteful,Pending'];
+  S.transactions.forEach(t=>{const ln=t.loanId?S.loans.find(l=>l.id===t.loanId):null;const cc=t.creditCardId?S.creditCards.find(c=>c.id===t.creditCardId):null;rows.push(`${t.date},"${t.merchant}","${t.category}",${t.amount},"${t.note||''}","${t.isCredit?'Credit':'Debit'}",${t.isWaste?'Yes':'No'},${t.isPending?'Yes':'No'}`);});
+  const csv=rows.join('\n');
+  if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){AndroidBridge.shareText('SpendWise_export_'+today()+'.csv',csv);toast('CSV shared ✓');return;}
+  const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');
+}
 function clearData(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('sw_v4');S=JSON.parse(JSON.stringify(DEFAULT));renderPage(currentPage);toast('Data cleared');}
 
 function exportBackup(){
-  const blob=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});
+  const json=JSON.stringify(S,null,2);
+  if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){
+    AndroidBridge.shareText('SpendWise Backup '+today()+'.json',json);
+    toast('✅ Backup shared via share sheet');return;
+  }
+  const blob=new Blob([json],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;a.download='SpendWise_backup_'+today()+'.json';a.click();
   setTimeout(()=>URL.revokeObjectURL(url),1000);
-  toast('✅ Backup downloaded! Save it to iCloud / Files.');
+  toast('✅ Backup downloaded!');
 }
 
 function importBackup(){
@@ -1350,6 +1421,20 @@ function downloadMonthlyReport(ym){
   const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
   const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
   const emi=emiTotal();const waste=txs.filter(t=>t.isWaste).reduce((s,t)=>s+t.amount,0);
+  // On Android, window.open() leaves the WebView and goes to the system browser with no back path.
+  // Use the native share sheet instead — works with WhatsApp, Gmail, Drive, etc.
+  if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){
+    const catSpend={};txs.filter(t=>t.category!=='income'&&t.category!=='savings').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
+    let body=`SpendWise Report — ${mn}\n${'='.repeat(42)}\n\n`;
+    body+=`Income:   ${fmtFull(inc)}\nExpenses: ${fmtFull(exp)}\nSavings:  ${fmtFull(inc-exp)}\nWasteful: ${fmtFull(waste)}\n\n`;
+    body+=`Spending by Category:\n${'─'.repeat(30)}\n`;
+    Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).forEach(([id,amt])=>{const c=cat(id);body+=`${c.icon} ${c.label}: ${fmtFull(amt)}\n`;});
+    body+=`\nTransactions (${txs.length}):\n${'─'.repeat(30)}\n`;
+    txs.sort((a,b)=>b.date.localeCompare(a.date)).forEach(t=>{body+=`${t.date}  ${t.category==='income'?'+':'-'}${fmtFull(t.amount).padStart(10)}  ${t.merchant}${t.note?' — '+t.note:''}\n`;});
+    body+=`\n🔒 SpendWise — Private & encrypted`;
+    AndroidBridge.shareText(`SpendWise Report — ${mn}`,body);
+    return;
+  }
   const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>SpendWise Report - ${mn}</title>
   <style>body{font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px;background:#f9f9f9;color:#1a1a2e;}
   h1{color:#6C63FF;border-bottom:2px solid #6C63FF;padding-bottom:8px;}h2{color:#444;font-size:16px;margin-top:24px;}

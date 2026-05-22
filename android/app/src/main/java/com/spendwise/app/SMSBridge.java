@@ -32,14 +32,14 @@ public class SMSBridge {
         if (result != null) {
             // Same process — also clear SharedPreferences so it won't re-deliver after restart
             ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
-                .edit().remove("pending_sms").apply();
+                .edit().remove("pending_sms").commit();
         } else {
             // Process was restarted — recover from SharedPreferences
             android.content.SharedPreferences prefs =
                 ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE);
             result = prefs.getString("pending_sms", null);
             if (result != null) {
-                prefs.edit().remove("pending_sms").apply();
+                prefs.edit().remove("pending_sms").commit();
             }
         }
         return result != null ? result : "null";
