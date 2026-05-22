@@ -271,7 +271,11 @@ function onAndroidSMSReady(){
 // Called by MainActivity when a bank SMS notification is tapped.
 // sms = {body, sender, time} parsed from AndroidBridge.getPendingSMS()
 function onIncomingSMS(sms){
-  if(!_fbUser)return; // not logged in yet — ignore
+  if(!_fbUser){
+    // Auth not ready yet — stash and retry once afterAuth() completes
+    window._pendingIncomingSMS=sms;
+    return;
+  }
   const p=parseSMS(sms.body);
 
   // Save a pending tx immediately so it shows in Spends even if user skips
@@ -608,6 +612,12 @@ async function afterAuth(){
   if(!synced)S=JSON.parse(JSON.stringify(DEFAULT));
   renderPage(currentPage);
   if(!synced)toast('Welcome! Start by setting your salary and adding transactions.');
+  // Deliver any SMS that arrived before auth completed (cold-start notification tap)
+  if(window._pendingIncomingSMS){
+    const sms=window._pendingIncomingSMS;
+    window._pendingIncomingSMS=null;
+    onIncomingSMS(sms);
+  }
 }
 
 async function saveUserProfile(user){
@@ -678,7 +688,7 @@ function cat(id){return CATS.find(c=>c.id===id)||CATS[CATS.length-1];}
 function today(){return new Date().toISOString().split('T')[0];}
 function thisMonth(){const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;}
 function monthTxs(){const ym=thisMonth();return S.transactions.filter(t=>t.date.startsWith(ym));}
-function totalSpent(){return monthTxs().filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);}
+function totalSpent(){return monthTxs().filter(t=>t.category!=='income'&&t.category!=='savings'&&!t.isCredit).reduce((s,t)=>s+t.amount,0);}
 function totalIncome(){return monthTxs().filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);}
 function totalWaste(){return monthTxs().filter(t=>t.isWaste||t.category==='waste').reduce((s,t)=>s+t.amount,0);}
 function emiTotal(){return S.loans.reduce((s,l)=>s+l.emi,0);}
@@ -756,7 +766,7 @@ function renderHome(){
 
   // Budget alerts
   const catSpend={};
-  monthTxs().filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
+  monthTxs().filter(t=>t.category!=='income'&&!t.isCredit).forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
   const alerts=Object.entries(S.budgets).filter(([id,b])=>(catSpend[id]||0)>b*0.8);
   const savings=salAmt-spent;
   const savRate=salAmt>0?Math.round((savings/salAmt)*100):0;
@@ -1427,8 +1437,8 @@ function openBankBalance(){
       <button onclick="saveBankBalance()" class="btn btn-primary" style="flex:2;padding:13px;">Update Balance</button>
     </div>`);
 }
-function clearBankBalance(){S.bankBalance={amount:0,lastUpdated:''};save();closeModal();toast('Bank balance cleared');renderPage(currentPage);}
-function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:amt>0?dt:''};save();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
+function clearBankBalance(){S.bankBalance={amount:0,lastUpdated:''};localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('Bank balance cleared');renderPage(currentPage);}
+function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:amt>0?dt:''};localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
 
 function openInvestModal(){
   const ao=(S.investments&&S.investments.angelOne)||DEFAULT.investments.angelOne;

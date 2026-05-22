@@ -22,9 +22,9 @@ public class SMSReceiver extends BroadcastReceiver {
     private static final String CHANNEL_ID = "spendwise_bank";
 
     private static final Pattern BANK_PATTERN = Pattern.compile(
-        "debited|debit|credited|credit|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
+        "debited|debit|credited|credit|deducted|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|₹\\s*[\\d,]+|" +
         "Avail\\s*Bal|Avl\\s*Bal|available\\s*balance|transaction|payment|" +
-        "spent|purchase|EMI|UPI|A/C|account|withdrawn|deposit|refund",
+        "spent|purchase|\\bEMI\\b|UPI|A/C|account|withdrawn|deposit|refund",
         Pattern.CASE_INSENSITIVE
     );
 
