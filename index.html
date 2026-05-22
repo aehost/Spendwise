@@ -16,14 +16,14 @@
   --accent:#6C63FF;--green:#22C55E;--red:#EF4444;--amber:#F59E0B;
   --cyan:#06B6D4;--pink:#EC4899;--orange:#F97316;--teal:#10B981;--indigo:#6366F1;
   --text:#F1F1F5;--muted:#6B7280;--muted2:#9CA3AF;
-  --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+  --sb:env(safe-area-inset-bottom,0px);
 }
 html{overflow-y:scroll;}body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display',sans-serif;max-width:430px;margin:0 auto;min-height:100dvh;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
 input,select,textarea,button{font-family:inherit;color:inherit;}
 button{cursor:pointer;border:none;background:none;}
 *::-webkit-scrollbar{display:none;}*{-ms-overflow-style:none;scrollbar-width:none;}
 
-#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:calc(var(--st)+8px) 16px 8px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
+#statusbar{position:fixed;top:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;padding:8px 16px;display:flex;justify-content:space-between;align-items:center;background:var(--bg);z-index:100;border-bottom:1px solid var(--border);}
 #statusbar .logo{font-weight:900;font-size:17px;letter-spacing:-0.5px;background:linear-gradient(135deg,#6C63FF,#EC4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
 #statusbar .right{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--muted);}
 
@@ -31,7 +31,7 @@ button{cursor:pointer;border:none;background:none;}
 .nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;color:var(--muted);font-size:9px;font-weight:600;padding:6px 2px;transition:color 0.2s;letter-spacing:0.3px;min-height:52px;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 .nav-btn.active{color:var(--accent);}.nav-btn .ico{font-size:22px;line-height:1;}
 
-#app{padding-top:calc(var(--st)+52px);padding-bottom:calc(var(--sb)+80px);min-height:100dvh;}
+#app{padding-top:56px;padding-bottom:calc(var(--sb)+80px);min-height:100dvh;}
 .page{display:none;padding:16px 20px 8px;animation:fadeSlide 0.25s ease;}
 .page.active{display:block;}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -138,6 +138,25 @@ select.form-input{-webkit-appearance:none;}
 
 .color-dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px;}
 
+/* ── PWA HOME SCREEN SAFE AREA ─────────────────────────────────
+   Uses env() DIRECTLY (not through CSS variable) + max() floor.
+   max(env(safe-area-inset-top), 50px) guarantees:
+     iPhone Dynamic Island (59px) → 59px
+     iPhone notch (44–47px)       → 50px
+     env() broken / returns 0     → 50px  (always clears status bar)
+   Applied via BOTH @media AND html.sw-sa (JS fallback) so if one
+   fails the other catches it. ─────────────────────────────────── */
+@media (display-mode:standalone){
+  #statusbar{padding-top:max(env(safe-area-inset-top),50px);padding-bottom:8px;}
+  #app{padding-top:max(calc(env(safe-area-inset-top) + 54px),104px);}
+  #nav{padding-bottom:max(env(safe-area-inset-bottom),20px);}
+  #toast{bottom:max(calc(env(safe-area-inset-bottom) + 72px),92px);}
+}
+html.sw-sa #statusbar{padding-top:max(env(safe-area-inset-top),50px);padding-bottom:8px;}
+html.sw-sa #app{padding-top:max(calc(env(safe-area-inset-top) + 54px),104px);}
+html.sw-sa #nav{padding-bottom:max(env(safe-area-inset-bottom),20px);}
+html.sw-sa #toast{bottom:max(calc(env(safe-area-inset-bottom) + 72px),92px);}
+
 </style>
 </head>
 <body>
@@ -169,18 +188,11 @@ select.form-input{-webkit-appearance:none;}
 </div>
 <div id="toast"></div>
 <script>
-// iOS PWA safe-area fix — runs before render
-(function(){
-  if(window.navigator.standalone!==true)return;
-  // Measure actual env(safe-area-inset-top) via a positioned element
-  var m=document.createElement('div');
-  m.style.cssText='position:fixed;top:env(safe-area-inset-top,0px);left:0;width:1px;height:1px;visibility:hidden;pointer-events:none;';
-  document.body.appendChild(m);
-  var st=Math.max(m.getBoundingClientRect().top,44);
-  document.body.removeChild(m);
-  document.documentElement.style.setProperty('--st',st+'px');
-  document.documentElement.style.setProperty('--sb','34px');
-})();
+// PWA standalone detection — adds class so CSS safe-area rules activate.
+// Works alongside @media(display-mode:standalone) as a belt-and-braces fix.
+if(window.navigator.standalone===true||window.matchMedia('(display-mode:standalone)').matches){
+  document.documentElement.classList.add('sw-sa');
+}
 
 // ── CONSTANTS ────────────────────────────────────────────────
 const CATS=[
