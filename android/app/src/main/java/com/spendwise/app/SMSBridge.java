@@ -20,29 +20,60 @@ public class SMSBridge {
 
     private final Context ctx;
 
-    // Real-time SMS from SMSReceiver BroadcastReceiver — consumed once by JS
-    private static volatile String pendingSmsJson = null;
+    // Real-time SMS queue — supports simultaneous bank SMS without data loss
+    private static final java.util.concurrent.ConcurrentLinkedQueue<String> smsQueue =
+        new java.util.concurrent.ConcurrentLinkedQueue<>();
 
-    public static void setPendingSms(String json) { pendingSmsJson = json; }
+    public static void setPendingSms(String json) { smsQueue.offer(json); }
 
     @JavascriptInterface
     public String getPendingSMS() {
-        String result = pendingSmsJson;
-        pendingSmsJson = null;
+        // Drain in-process queue first
+        String result = smsQueue.poll();
         if (result != null) {
-            // Same process — also clear SharedPreferences so it won't re-deliver after restart
-            ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
-                .edit().remove("pending_sms").commit();
-        } else {
-            // Process was restarted — recover from SharedPreferences
+            removeFromPrefsQueue(ctx, result);
+            return result;
+        }
+        // Process restart recovery — read SharedPreferences queue
+        android.content.SharedPreferences prefs =
+            ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE);
+        String queueJson = prefs.getString("pending_sms_queue", null);
+        if (queueJson != null) {
+            try {
+                org.json.JSONArray arr = new org.json.JSONArray(queueJson);
+                if (arr.length() > 0) {
+                    result = arr.getString(0);
+                    org.json.JSONArray remaining = new org.json.JSONArray();
+                    for (int i = 1; i < arr.length(); i++) remaining.put(arr.getString(i));
+                    if (remaining.length() > 0) {
+                        prefs.edit().putString("pending_sms_queue", remaining.toString()).commit();
+                    } else {
+                        prefs.edit().remove("pending_sms_queue").commit();
+                    }
+                    return result;
+                }
+            } catch (Exception ignored) {}
+        }
+        return "null";
+    }
+
+    private static void removeFromPrefsQueue(Context ctx, String json) {
+        try {
             android.content.SharedPreferences prefs =
                 ctx.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE);
-            result = prefs.getString("pending_sms", null);
-            if (result != null) {
-                prefs.edit().remove("pending_sms").commit();
+            String queueJson = prefs.getString("pending_sms_queue", null);
+            if (queueJson == null) return;
+            org.json.JSONArray arr = new org.json.JSONArray(queueJson);
+            org.json.JSONArray remaining = new org.json.JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                if (!arr.getString(i).equals(json)) remaining.put(arr.getString(i));
             }
-        }
-        return result != null ? result : "null";
+            if (remaining.length() > 0) {
+                prefs.edit().putString("pending_sms_queue", remaining.toString()).commit();
+            } else {
+                prefs.edit().remove("pending_sms_queue").commit();
+            }
+        } catch (Exception ignored) {}
     }
 
     // Matches bank/financial SMS messages

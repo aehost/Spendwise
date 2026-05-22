@@ -765,22 +765,33 @@ function autoImportNewSMS(){
     if(!AndroidBridge.hasSMSPermission())return;
     const list=JSON.parse(AndroidBridge.getBankSMS(3)||'[]');
     if(!list||!list.length)return;
-    // Dedup by first 80 chars of body — enough to uniquely identify a bank SMS
-    const seen=new Set(S.transactions.filter(t=>t.smsRaw).map(t=>t.smsRaw.substring(0,80)));
+    // Dedup using full body — prevents false-match of similar short messages
+    const seen=new Set(S.transactions.filter(t=>t.smsRaw).map(t=>t.smsRaw));
     let added=0;
     list.forEach(s=>{
-      const key=(s.body||'').substring(0,80);
-      if(seen.has(key))return; // already imported
-      const p=parseSMS(s.body||'');
-      if(!p.amount||p.amount<=0)return; // skip if no parseable amount
+      const body=(s.body||'').trim();
+      if(!body)return;
+      const key=body.substring(0,200); // match on stored length
+      if(seen.has(key))return;
+      const p=parseSMS(body);
+      if(!p.amount||p.amount<=0)return;
       const txDate=s.date?new Date(s.date).toISOString().split('T')[0]:today();
-      S.transactions.push({id:Date.now()+added,amount:p.amount,
-        merchant:p.merchant||'Bank Transaction',category:'other',
-        date:txDate,note:'',isWaste:false,isPending:true,
+      // Detect salary credit
+      const isSalary=/\b(salary|sal credit|payroll|employer)\b/i.test(body);
+      const txCat=isSalary?'income':'other';
+      S.transactions.push({
+        id:Date.now()*1000+added,amount:p.amount,
+        merchant:p.merchant||'Bank Transaction',
+        category:txCat,date:txDate,note:'',isWaste:false,
+        isPending:!isSalary, // salary auto-confirmed; others need tagging
         loanId:null,creditCardId:null,contactName:'',
-        isCredit:p.isCredit,smsRaw:(s.body||'').substring(0,200)});
-      if(p.bankBal&&!S.bankBalance.amount){
-        S.bankBalance={amount:p.bankBal,lastUpdated:txDate};
+        isCredit:p.isCredit||isSalary,smsRaw:key});
+      // Always update bank balance when SMS provides Avl Bal
+      if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+      // Auto-record salary history if not already this month
+      if(isSalary&&!salaryThisMonth()){
+        S.salary.history.push({amount:p.amount,date:txDate,note:'Auto-imported from SMS'});
+        if(!S.salary.amount)S.salary.amount=p.amount;
       }
       seen.add(key);
       added++;
@@ -997,7 +1008,9 @@ function txHTML(tx,showDel){
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
       <div class="tx-amt" style="color:${amtColor};">${amtSign}${fmtFull(tx.amount)}</div>
       <div style="display:flex;gap:4px;">
-        ${!tx.smsRaw?`<button onclick="openEditTx(${tx.id})" style="font-size:10px;color:var(--accent);background:var(--card2);padding:2px 7px;border-radius:6px;">✏️</button>`:''}
+        ${tx.smsRaw
+          ?`<button onclick="openTagModal(${tx.id})" style="font-size:10px;color:var(--amber);background:#F59E0B18;border:1px solid #F59E0B30;padding:2px 7px;border-radius:6px;">🏷️ Tag</button>`
+          :`<button onclick="openEditTx(${tx.id})" style="font-size:10px;color:var(--accent);background:var(--card2);padding:2px 7px;border-radius:6px;">✏️</button>`}
         ${showDel?`<button onclick="delTx(${tx.id})" style="font-size:10px;color:var(--muted);background:var(--card2);padding:2px 7px;border-radius:6px;">✕</button>`:''}
       </div>
     </div>
@@ -1021,6 +1034,10 @@ function renderTx(){
       <span class="chip" style="${txFilter==='pending'?'background:#F59E0B18;color:var(--amber);border-color:#F59E0B33;':''}" onclick="setTxFilter('pending')">⏳ Pending</span>
       ${CATS.map(c=>`<span class="chip" style="${txFilter===c.id?`background:${c.color}18;color:${c.color};border-color:${c.color}33;`:''}" onclick="setTxFilter('${c.id}')">${c.icon} ${c.label}</span>`).join('')}
     </div>
+    ${(txFilter==='pending'||txFilter==='all')&&all.filter(t=>t.isPending).length>0?`<div style="background:#F59E0B0F;border:1px solid #F59E0B33;border-radius:14px;padding:12px 14px;margin-bottom:12px;">
+      <div style="font-size:12px;font-weight:700;color:var(--amber);margin-bottom:4px;">🏷️ How to tag: ${all.filter(t=>t.isPending).length} transaction${all.filter(t=>t.isPending).length>1?'s':''} need tagging</div>
+      <div style="font-size:11px;color:var(--muted);line-height:1.5;">Tap <b style="color:var(--amber);">🏷️ Tag</b> on any pending transaction → select the correct category → add a note → Save. Tagged transactions are excluded from wasteful/budget reports.</div>
+    </div>`:''}
     ${filtered.length===0?'<div style="color:var(--muted);text-align:center;padding:30px;font-size:13px;">No transactions here.</div>':''}
     ${filtered.map(tx=>txHTML(tx,true)).join('')}
   `;
@@ -1666,7 +1683,7 @@ function saveFamilyTx(){
 
 function openEditTx(id){
   const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
-  if(tx.smsRaw){toast('SMS transactions cannot be edited — delete and re-add manually if needed');return;}
+  if(tx.smsRaw){openTagModal(id);return;}
   openModal(`<div class="modal-title">✏️ Edit Transaction</div>
     <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="et-amt" type="number" value="${tx.amount}" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="et-mer" value="${tx.merchant}"></div>
@@ -1697,6 +1714,41 @@ function saveEditTx(id){
   tx.isPending=tx.category==='other'; // only unclassified = pending
   tx.isCredit=tx.category==='income'||tx.isCredit===true;
   save();closeModal();toast('✅ Transaction updated!');renderPage(currentPage);
+}
+
+function openTagModal(id){
+  const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
+  const c=cat(tx.category);
+  openModal(`<div class="modal-title">🏷️ Tag Transaction</div>
+    <div style="background:var(--card2);border-radius:11px;padding:12px 14px;margin-bottom:14px;">
+      <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;">Bank SMS — Amount &amp; Date are fixed</div>
+      <div style="font-size:18px;font-weight:900;color:${tx.isCredit?'var(--green)':'var(--red)'};">${tx.isCredit?'+':'-'}${fmtFull(tx.amount)}</div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px;">${tx.merchant} · ${fmtDate(tx.date)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:6px;line-height:1.4;">"${(tx.smsRaw||'').substring(0,110)}${(tx.smsRaw||'').length>110?'…':''}"</div>
+    </div>
+    <div style="font-size:11px;color:var(--muted2);margin-bottom:10px;">📌 Pick a category to clear <b style="color:var(--amber);">NEEDS TAG</b> status. Add a note to remember what this was for.</div>
+    <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="tag-cat">${CATS.map(c=>`<option value="${c.id}" ${c.id===tx.category?'selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
+    <div class="form-group"><label class="form-label">Note (optional)</label><input class="form-input" id="tag-note" value="${tx.note||''}" placeholder="e.g. Groceries, Netflix sub, EMI to HDFC…"></div>
+    ${!tx.isCredit?`<div class="form-group"><label class="form-label">Linked Loan (if EMI)</label><select class="form-input" id="tag-loan"><option value="">None</option>${S.loans.map(l=>`<option value="${l.id}" ${tx.loanId===l.id?'selected':''}>${l.name}</option>`).join('')}</select></div>`:''}
+    <div class="form-group"><label class="form-label">Linked Credit Card</label><select class="form-input" id="tag-cc"><option value="">None</option>${S.creditCards.map(cc=>`<option value="${cc.id}" ${tx.creditCardId===cc.id?'selected':''}>${cc.name}</option>`).join('')}</select></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px;padding:11px 14px;background:var(--card2);border-radius:12px;">
+      <div style="font-size:13px;font-weight:600;">Mark as Wasteful 🗑️</div>
+      <div class="toggle ${tx.isWaste?'on':''}" id="tag-waste" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveTagTx(${id})" class="btn btn-primary" style="flex:2;padding:13px;">Save Tag ✓</button>
+    </div>`);
+}
+function saveTagTx(id){
+  const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
+  tx.category=document.getElementById('tag-cat').value;
+  tx.note=document.getElementById('tag-note').value;
+  const loanEl=document.getElementById('tag-loan');tx.loanId=loanEl?parseInt(loanEl.value)||null:null;
+  const ccEl=document.getElementById('tag-cc');tx.creditCardId=ccEl?parseInt(ccEl.value)||null:null;
+  tx.isWaste=document.getElementById('tag-waste').classList.contains('on');
+  tx.isPending=tx.category==='other';
+  save();closeModal();toast('✅ Transaction tagged!');renderPage(currentPage);
 }
 
 function openAddTx(){
@@ -1810,7 +1862,17 @@ function openMarkSalary(){
     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="rv-nt" placeholder="e.g. May 2026 salary"></div>
     <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveMarkSalary()" class="btn btn-green" style="flex:2;padding:13px;">✓ Confirm</button></div>`);
 }
-function saveMarkSalary(){const amt=parseFloat(document.getElementById('rv-amt').value)||S.salary.amount;const dt=document.getElementById('rv-dt').value;const nt=document.getElementById('rv-nt').value;S.salary.history.push({amount:amt,date:dt,note:nt});S.salary.amount=amt;S.transactions.push({id:Date.now(),amount:amt,merchant:'Salary',category:'income',date:dt,note:nt,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});save();closeModal();toast('✅ Salary marked!');renderPage(currentPage);}
+function saveMarkSalary(){
+  const amt=parseFloat(document.getElementById('rv-amt').value)||S.salary.amount;
+  const dt=document.getElementById('rv-dt').value;
+  const nt=document.getElementById('rv-nt').value;
+  S.salary.history.push({amount:amt,date:dt,note:nt});
+  S.salary.amount=amt;
+  S.transactions.push({id:Date.now(),amount:amt,merchant:'Salary',category:'income',date:dt,note:nt,isWaste:false,isPending:false,loanId:null,creditCardId:null,contactName:''});
+  // Add salary to bank balance on receipt
+  S.bankBalance={amount:(S.bankBalance.amount||0)+amt,lastUpdated:dt};
+  save();closeModal();toast('✅ Salary marked! Bank balance updated.');renderPage(currentPage);
+}
 
 function openAddIncome(){
   openModal(`<div class="modal-title">+ Add Income</div>
@@ -1858,14 +1920,19 @@ updateClock();
 setInterval(updateClock,30000);
 renderPage('home');
 
-// Poll for pending SMS every 5 s — delivers immediately when app is in foreground
-// (notification tap uses onNewIntent; this handles the already-open case)
+// Poll for pending SMS every 5 s — drains the full queue to handle simultaneous bank SMS
 if(IS_ANDROID){
   setInterval(()=>{
     if(!_fbUser)return;
     try{
-      const d=AndroidBridge.getPendingSMS();
-      if(d&&d!=='null'){const sms=JSON.parse(d);if(sms&&sms.body)onIncomingSMS(sms);}
+      let d,count=0;
+      while(count<10){
+        d=AndroidBridge.getPendingSMS();
+        if(!d||d==='null')break;
+        const sms=JSON.parse(d);
+        if(sms&&sms.body)onIncomingSMS(sms);
+        count++;
+      }
     }catch(e){}
   },5000);
 }

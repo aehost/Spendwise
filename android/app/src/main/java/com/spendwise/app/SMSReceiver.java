@@ -77,11 +77,19 @@ public class SMSReceiver extends BroadcastReceiver {
         } catch (Exception e) {
             // JSON failed — continue to show notification anyway
         }
-        // Persist to SharedPreferences so SMS survives process restart when user taps notification.
-        // commit() is synchronous — guarantees write completes before onReceive() returns and process can die.
+        // Append to SharedPreferences queue (JSONArray) so simultaneous SMS are not lost.
+        // commit() is synchronous — guarantees write completes before onReceive() returns.
         if (smsJson != null) {
-            context.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE)
-                .edit().putString("pending_sms", smsJson).commit();
+            android.content.SharedPreferences prefs =
+                context.getSharedPreferences("spendwise_sms", Context.MODE_PRIVATE);
+            try {
+                String existing = prefs.getString("pending_sms_queue", "[]");
+                org.json.JSONArray arr = new org.json.JSONArray(existing);
+                arr.put(smsJson);
+                prefs.edit().putString("pending_sms_queue", arr.toString()).commit();
+            } catch (Exception e) {
+                prefs.edit().putString("pending_sms_queue", "[" + smsJson + "]").commit();
+            }
         }
 
         // Create notification channel (required Android 8.0+)
