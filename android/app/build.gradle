@@ -16,10 +16,13 @@ android {
 
     signingConfigs {
         release {
-            storeFile file('../spendwise.keystore')
-            storePassword System.getenv("KEYSTORE_PASS") ?: 'SpendWise@2025Pravveen'
-            keyAlias 'spendwise'
-            keyPassword System.getenv("KEY_PASS") ?: 'SpendWise@2025Pravveen'
+            def ks = file('../spendwise.keystore')
+            if (ks.exists()) {
+                storeFile ks
+                storePassword System.getenv("KEYSTORE_PASS") ?: 'SpendWise@2025Pravveen'
+                keyAlias 'spendwise'
+                keyPassword System.getenv("KEY_PASS") ?: 'SpendWise@2025Pravveen'
+            }
         }
     }
 
@@ -34,7 +37,8 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
                           'proguard-rules.pro'
-            signingConfig signingConfigs.release
+            def ks = file('../spendwise.keystore')
+            signingConfig ks.exists() ? signingConfigs.release : signingConfigs.debug
         }
     }
 

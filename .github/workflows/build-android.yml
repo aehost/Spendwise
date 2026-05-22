@@ -5,6 +5,9 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -18,6 +21,13 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
+
+      - name: Install Android SDK platform and build tools
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "platforms;android-34" \
+            "build-tools;34.0.0" \
+            "platform-tools" 2>&1 | grep -v "^[=\[]" | tail -5
 
       - name: Copy index.html into Android assets
         run: cp index.html android/app/src/main/assets/index.html
@@ -34,7 +44,7 @@ jobs:
           key: gradle-${{ hashFiles('android/**/*.gradle*', 'android/gradle/wrapper/gradle-wrapper.properties') }}
           restore-keys: gradle-
 
-      # Decode keystore and set output flag for conditional steps
+      # Decode keystore from GitHub Secret and set output flag
       - name: Decode keystore
         id: keystore
         env:
@@ -43,24 +53,25 @@ jobs:
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "$KEYSTORE_BASE64" | base64 -d > android/spendwise.keystore
             echo "available=true" >> $GITHUB_OUTPUT
+            echo "Keystore ready."
           else
-            echo "No KEYSTORE_BASE64 secret — building debug only."
+            echo "No KEYSTORE_BASE64 secret — building debug APK only."
             echo "available=false" >> $GITHUB_OUTPUT
           fi
 
       # Always build debug APK (no keystore needed)
       - name: Build Debug APK
         working-directory: android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # Signed release AAB for Play Store — only when keystore is available
+      # Signed release AAB for Play Store
       - name: Build Release AAB (Play Store)
         if: steps.keystore.outputs.available == 'true'
         working-directory: android
         env:
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}
-        run: ./gradlew bundleRelease --no-daemon
+        run: ./gradlew bundleRelease --no-daemon --stacktrace
 
       # Signed release APK for direct install
       - name: Build Release APK
@@ -69,7 +80,7 @@ jobs:
         env:
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}
-        run: ./gradlew assembleRelease --no-daemon
+        run: ./gradlew assembleRelease --no-daemon --stacktrace
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
