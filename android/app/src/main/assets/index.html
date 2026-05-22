@@ -189,7 +189,7 @@ html.sw-android #toast{bottom:80px;}
 </div>
 <!-- ── AUTH SCREEN (shown on first launch / new install) ── -->
 <div id="auth-screen">
-  <div class="auth-logo">₹</div>
+  <div class="auth-logo" id="auth-logo">₹</div>
   <div class="auth-brand">SpendWise</div>
   <div class="auth-sub">Personal finance, securely yours</div>
   <div class="auth-card">
@@ -251,6 +251,16 @@ if(window.navigator.standalone===true||window.matchMedia('(display-mode:standalo
 const IS_ANDROID=typeof AndroidBridge!=='undefined'&&AndroidBridge.getPlatform()==='android';
 if(IS_ANDROID){document.documentElement.classList.add('sw-android');}
 
+// ── CURRENCY DETECTION ────────────────────────────────────────
+const _locale=navigator.language||'en-IN';
+const _LOCALE_CURRENCY={'en-IN':'INR','hi-IN':'INR','hi':'INR','en-PK':'PKR','ur-PK':'PKR','ur':'PKR','en-BD':'BDT','bn-BD':'BDT','en-LK':'LKR','si-LK':'LKR','en-NP':'NPR','ne-NP':'NPR','en-US':'USD','en-CA':'CAD','en-AU':'AUD','en-NZ':'NZD','en-GB':'GBP','en-ZA':'ZAR','en-NG':'NGN','en-SG':'SGD','en-MY':'MYR','ms-MY':'MYR','en-AE':'AED','ar-AE':'AED','ar-SA':'SAR','en-SA':'SAR','de-DE':'EUR','de-AT':'EUR','de-CH':'CHF','fr-FR':'EUR','fr-BE':'EUR','fr-CH':'CHF','es-ES':'EUR','it-IT':'EUR','pt-PT':'EUR','pt-BR':'BRL','es-MX':'MXN','es-AR':'ARS','es-CO':'COP','ja-JP':'JPY','ja':'JPY','zh-CN':'CNY','zh-TW':'TWD','ko-KR':'KRW','ko':'KRW','ru-RU':'RUB','ru':'RUB','tr-TR':'TRY','tr':'TRY','id-ID':'IDR','id':'IDR','th-TH':'THB','th':'THB','vi-VN':'VND','vi':'VND','pl-PL':'PLN','cs-CZ':'CZK','hu-HU':'HUF','ro-RO':'RON','uk-UA':'UAH','el-GR':'EUR','nl-NL':'EUR','nl-BE':'EUR','sv-SE':'SEK','nb-NO':'NOK','da-DK':'DKK','fi-FI':'EUR'};
+function _detectCurrency(loc){if(_LOCALE_CURRENCY[loc])return _LOCALE_CURRENCY[loc];const country=(loc.split('-')[1]||'').toUpperCase();if(country){const f=Object.entries(_LOCALE_CURRENCY).find(([k])=>k.split('-')[1]===country);if(f)return f[1];}return'USD';}
+const CURRENCY=_detectCurrency(_locale);
+const IS_INR=CURRENCY==='INR';
+let CUR_SYM=IS_INR?'₹':'$';
+try{const parts=new Intl.NumberFormat(_locale,{style:'currency',currency:CURRENCY,minimumFractionDigits:0}).formatToParts(1);const sym=parts.find(p=>p.type==='currency');if(sym)CUR_SYM=sym.value;}catch(e){}
+const _numFmt=(()=>{try{return new Intl.NumberFormat(_locale,{style:'currency',currency:CURRENCY,minimumFractionDigits:0,maximumFractionDigits:0});}catch(e){return null;}})();
+
 // Called by MainActivity after SMS permission is granted
 function onAndroidSMSReady(){
   const btn=document.getElementById('sms-btn-indicator');
@@ -280,12 +290,12 @@ function onIncomingSMS(sms){
     openModal(`<div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
       ${sms.sender?`<div style="font-size:10px;color:var(--muted);margin-bottom:8px;">From: <b style="color:var(--text);">${sms.sender}</b></div>`:''}
       <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${sms.body.substring(0,160)}${sms.body.length>160?'…':''}"</div>
-      ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance updated: ₹${p.bankBal.toLocaleString('en-IN')}</div>`:''}
+      ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance updated: ${fmtFull(p.bankBal)}</div>`:''}
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;background:var(--card2);border-radius:14px;">
         <div style="width:48px;height:48px;border-radius:13px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:22px;">${p.isCredit?'💰':'💸'}</div>
         <div>
           <div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div>
-          <div style="font-size:26px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div>
+          <div style="font-size:26px;font-weight:900;letter-spacing:-1px;">${fmtFull(p.amount)}</div>
           <div style="font-size:12px;color:var(--muted);">${p.merchant}</div>
         </div>
       </div>
@@ -320,16 +330,16 @@ function openAndroidSMS(){
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.4;">Tap a message to add it as a transaction. Already-added messages are safe to skip.</div>
     <div style="max-height:55vh;overflow-y:auto;" id="sms-list-wrap">
       ${smsList.slice(0,60).map((s,i)=>{
-        let a=s.body.match(/(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d+)?)/i);
+        let a=s.body.match(/(?:Rs\.?|INR|₹|\$|USD|£|GBP|€|EUR|AUD|CAD|SGD|AED|SAR|PKR|LKR|NPR|BDT|NGN|MYR)\s*([\d,]+(?:\.\d+)?)/i);
         let amt=a?parseFloat(a[1].replace(/,/g,'')):0;
         let isC=/credited|salary|received/i.test(s.body);
         let d=new Date(s.date);
-        let ds=d.toLocaleDateString('en-IN',{day:'numeric',month:'short'});
+        let ds=d.toLocaleDateString(_locale,{day:'numeric',month:'short'});
         let preview=s.body.replace(/\n/g,' ').substring(0,72)+'…';
         return`<div onclick="pickAndroidSMS(${i})" data-idx="${i}"
           style="padding:12px;margin-bottom:8px;background:var(--card);border-radius:12px;border:1px solid var(--border);cursor:pointer;active:opacity:0.7;">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-            <span style="font-size:13px;font-weight:700;color:${isC?'var(--green)':'var(--red)'};">${isC?'+':'-'}₹${amt.toLocaleString('en-IN')}</span>
+            <span style="font-size:13px;font-weight:700;color:${isC?'var(--green)':'var(--red)'};">${isC?'+':'-'}${fmtFull(amt)}</span>
             <span style="font-size:10px;color:var(--muted);">${ds} · ${s.address||''}</span>
           </div>
           <div style="font-size:11px;color:var(--muted);line-height:1.4;">${preview}</div>
@@ -349,10 +359,10 @@ function pickAndroidSMS(i){
   setTimeout(()=>{
     openModal(`<div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
       <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${sms.body.substring(0,130)}"</div>
-      ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ₹${p.bankBal.toLocaleString('en-IN')}</div>`:''}
+      ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ${fmtFull(p.bankBal)}</div>`:''}
       <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;background:var(--card2);border-radius:14px;">
         <div style="width:48px;height:48px;border-radius:13px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:22px;">${p.isCredit?'💰':'💸'}</div>
-        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
+        <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">${fmtFull(p.amount)}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
       </div>
       <div style="font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;">Category · Tap to change</div>
       <div class="cat-grid" id="sms-cats">${CATS.map(c=>`<button class="cat-btn${c.id===guessed?' sel':''}" id="sc-${c.id}" style="${c.id===guessed?`border-color:${c.color};color:${c.color};background:${c.color}18;`:''}" onclick="pickSMSCat('${c.id}','${c.color}')">${c.icon} ${c.label}</button>`).join('')}</div>
@@ -648,12 +658,12 @@ async function forceSyncFromCloud(){
 
 // ── HELPERS ──────────────────────────────────────────────────
 function fmt(n){
-  if(Math.abs(n)>=10000000)return'₹'+(n/10000000).toFixed(1)+'Cr';
-  if(Math.abs(n)>=100000)return'₹'+(n/100000).toFixed(1)+'L';
-  if(Math.abs(n)>=1000)return'₹'+(n/1000).toFixed(0)+'k';
-  return'₹'+Math.round(n).toLocaleString('en-IN');
+  const abs=Math.abs(n);
+  if(IS_INR){if(abs>=10000000)return CUR_SYM+(n/10000000).toFixed(1)+'Cr';if(abs>=100000)return CUR_SYM+(n/100000).toFixed(1)+'L';if(abs>=1000)return CUR_SYM+(n/1000).toFixed(0)+'k';}
+  else{if(abs>=1000000000)return CUR_SYM+(n/1000000000).toFixed(1)+'B';if(abs>=1000000)return CUR_SYM+(n/1000000).toFixed(1)+'M';if(abs>=1000)return CUR_SYM+(n/1000).toFixed(0)+'k';}
+  return _numFmt?_numFmt.format(Math.round(n)):CUR_SYM+Math.round(abs).toLocaleString(_locale);
 }
-function fmtFull(n){return'₹'+Math.abs(Math.round(n)).toLocaleString('en-IN');}
+function fmtFull(n){return _numFmt?_numFmt.format(Math.abs(Math.round(n))):CUR_SYM+Math.abs(Math.round(n)).toLocaleString(_locale);}
 function cat(id){return CATS.find(c=>c.id===id)||CATS[CATS.length-1];}
 function today(){return new Date().toISOString().split('T')[0];}
 function thisMonth(){const n=new Date();return`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;}
@@ -664,7 +674,7 @@ function totalWaste(){return monthTxs().filter(t=>t.isWaste||t.category==='waste
 function emiTotal(){return S.loans.reduce((s,l)=>s+l.emi,0);}
 function salaryThisMonth(){return S.salary.history.find(h=>h.date&&h.date.startsWith(thisMonth()));}
 function daysUntilSalary(){const n=new Date(),t=new Date(n.getFullYear(),n.getMonth(),S.salary.expectedDay);if(t<=n)t.setMonth(t.getMonth()+1);return Math.ceil((t-n)/86400000);}
-function fmtDate(d){return new Date(d+'T00:00:00').toLocaleDateString('en-IN',{day:'numeric',month:'short'});}
+function fmtDate(d){return new Date(d+'T00:00:00').toLocaleDateString(_locale,{day:'numeric',month:'short'});}
 function pendingTxs(){return S.transactions.filter(t=>t.isPending);}
 function totalCCOutstanding(){return S.creditCards.reduce((s,c)=>s+c.outstanding,0);}
 function totalCCLimit(){return S.creditCards.reduce((s,c)=>s+c.limit,0);}
@@ -685,14 +695,14 @@ function guessCat(m){
   return'other';
 }
 function parseSMS(msg){
-  const a=msg.match(/(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d+)?)/i);
+  const a=msg.match(/(?:Rs\.?|INR|₹|\$|USD|£|GBP|€|EUR|AUD|CAD|SGD|AED|SAR|PKR|LKR|NPR|BDT|NGN|MYR|JPY|CNY|KRW|RUB|TRY|IDR|THB|VND)\s*([\d,]+(?:\.\d+)?)/i);
   const amount=a?parseFloat(a[1].replace(/,/g,'')):0;
   const atM=msg.match(/at\s+([A-Z][A-Z0-9\s&']+?)(?:\s+on|\s*\.|Avail|Bal|$)/);
   const empM=msg.match(/Employer:\s*([^\.]+)/i);
   const merchant=(atM&&atM[1].trim())||(empM&&empM[1].trim())||'Unknown';
   const isCredit=/credited|salary|received/i.test(msg);
   const isDebit=/debited|deducted|payment/i.test(msg);
-  const balM=msg.match(/(?:Avail Bal|Bal):\s*Rs\.?\s*([\d,]+)/i);
+  const balM=msg.match(/(?:Avail Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
   const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
   return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal};
 }
@@ -754,12 +764,12 @@ function renderHome(){
   document.getElementById('page-home').innerHTML=`
     <!-- Hero logo banner -->
     <div style="background:linear-gradient(135deg,#6C63FF 0%,#8B5CF6 50%,#EC4899 100%);border-radius:22px;padding:20px 22px 18px;margin-bottom:16px;position:relative;overflow:hidden;">
-      <div style="position:absolute;right:-18px;top:-18px;font-size:100px;opacity:0.08;line-height:1;pointer-events:none;user-select:none;">₹</div>
+      <div style="position:absolute;right:-18px;top:-18px;font-size:100px;opacity:0.08;line-height:1;pointer-events:none;user-select:none;">${CUR_SYM}</div>
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div>
           <div style="font-size:11px;color:rgba(255,255,255,0.75);margin-bottom:2px;">${greet}, ${name||'there'} 👋</div>
           <div style="font-size:22px;font-weight:900;color:#fff;letter-spacing:-0.5px;line-height:1.2;">SpendWise</div>
-          <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">${n.toLocaleDateString('en-IN',{month:'long',year:'numeric'})}</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.7);margin-top:2px;">${n.toLocaleDateString(_locale,{month:'long',year:'numeric'})}</div>
         </div>
         <div style="text-align:right;">
           <button onclick="IS_ANDROID?openAndroidSMS():openSMSSim()" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);color:#fff;padding:8px 13px;border-radius:12px;font-size:11px;font-weight:700;backdrop-filter:blur(4px);">📩 Import SMS</button>
@@ -797,7 +807,7 @@ function renderHome(){
     <div class="grid2" style="margin-top:10px;">
       <div class="mini-card"><div class="lbl">EMI Burden</div><div class="val" style="color:var(--red);">${fmtFull(emi)}</div><div class="sub">${salAmt?((emi/salAmt)*100).toFixed(0)+'% of salary':''}</div></div>
       <div class="mini-card"><div class="lbl">CC Outstanding</div><div class="val" style="color:var(--pink);">${fmtFull(ccOut)}</div><div class="sub">${S.creditCards.length} card${S.creditCards.length!==1?'s':''}</div></div>
-      <div class="mini-card"><div class="lbl">Daily Burn</div><div class="val" style="color:var(--cyan);">${fmt(burnRate)}</div><div class="sub">₹/day avg</div></div>
+      <div class="mini-card"><div class="lbl">Daily Burn</div><div class="val" style="color:var(--cyan);">${fmt(burnRate)}</div><div class="sub">${CUR_SYM}/day avg</div></div>
       <div class="mini-card"><div class="lbl">Month Projection</div><div class="val" style="color:${projected>salAmt?'var(--red)':'var(--green)'};">${fmt(projected)}</div><div class="sub">Estimated total</div></div>
     </div>
 
@@ -849,9 +859,9 @@ function renderHome(){
 function fmtDateTime(tx){
   // Use tx.id (Date.now() ms) for precise time; fall back to date string
   const ts=typeof tx.id==='number'&&tx.id>1000000000000?tx.id:null;
-  if(!ts){const d=tx.date?new Date(tx.date+'T00:00:00'):null;return d?d.toLocaleDateString('en-IN',{day:'numeric',month:'short'}):'—';}
+  if(!ts){const d=tx.date?new Date(tx.date+'T00:00:00'):null;return d?d.toLocaleDateString(_locale,{day:'numeric',month:'short'}):'—';}
   const d=new Date(ts);
-  return d.toLocaleDateString('en-IN',{day:'numeric',month:'short'})+' '+d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true});
+  return d.toLocaleDateString(_locale,{day:'numeric',month:'short'})+' '+d.toLocaleTimeString(_locale,{hour:'2-digit',minute:'2-digit',hour12:true});
 }
 
 function txHTML(tx,showDel){
@@ -1064,7 +1074,7 @@ function renderMoney(){
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
         <div>
           <div class="label">Angel One · Mutual Funds</div>
-          <div style="font-size:22px;font-weight:900;">${ao.currentBalance?fmtFull(ao.currentBalance):'₹0'}</div>
+          <div style="font-size:22px;font-weight:900;">${ao.currentBalance?fmtFull(ao.currentBalance):fmtFull(0)}</div>
           <div style="font-size:11px;color:var(--muted);margin-top:4px;">Invested: ${fmtFull(totalInvested)} · Monthly SIP: ${fmtFull(ao.monthlyAmount)}</div>
         </div>
         <div style="text-align:right;">
@@ -1124,7 +1134,7 @@ function renderSettings(){
       <div style="display:flex;gap:8px;align-items:center;margin-bottom:4px;padding:0 2px;">
         <span style="width:28px;"></span>
         <span style="flex:2;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Bill Name</span>
-        <span style="flex:1;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Amount ₹</span>
+        <span style="flex:1;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Amount ${CUR_SYM}</span>
         <span style="flex:1;max-width:55px;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--muted);">Due Day</span>
       </div>
       ${S.mandatoryBills.map(b=>`<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
@@ -1160,7 +1170,7 @@ function renderSettings(){
         <div style="font-size:10px;color:var(--muted);margin-top:3px;">UID: ${(_fbUser?.uid||'').substring(0,16)}…</div>
       </div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:10px;">
-        Last synced: <b style="color:var(--text);">${localStorage.getItem('sw_last_sync')?new Date(localStorage.getItem('sw_last_sync')).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</b>
+        Last synced: <b style="color:var(--text);">${localStorage.getItem('sw_last_sync')?new Date(localStorage.getItem('sw_last_sync')).toLocaleString(_locale,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'Never'}</b>
       </div>
       <div style="display:flex;gap:8px;margin-bottom:8px;">
         <button onclick="forceSyncFromCloud()" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;">⬇️ Pull</button>
@@ -1242,7 +1252,7 @@ function openMonthlyReport(){
   openModal(`<div class="modal-title">📊 Monthly Analysis</div>
     <div class="form-group"><label class="form-label">Select Month</label>
       <select class="form-input" id="rpt-month" onchange="renderMonthReport()">
-        ${months.map(ym=>{const[y,m]=ym.split('-');const lbl=new Date(y,m-1,1).toLocaleDateString('en-IN',{month:'long',year:'numeric'});return`<option value="${ym}"${ym===cur?' selected':''}>${lbl}</option>`;}).join('')}
+        ${months.map(ym=>{const[y,m]=ym.split('-');const lbl=new Date(y,m-1,1).toLocaleDateString(_locale,{month:'long',year:'numeric'});return`<option value="${ym}"${ym===cur?' selected':''}>${lbl}</option>`;}).join('')}
       </select>
     </div>
     <div id="mrpt-body"></div>
@@ -1290,7 +1300,7 @@ function renderMonthReport(){
 
 function downloadMonthlyReport(ym){
   if(!ym)ym=thisMonth();
-  const mn=new Date(ym+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const mn=new Date(ym+'-01').toLocaleDateString(_locale,{month:'long',year:'numeric'});
   const txs=S.transactions.filter(t=>t.date.startsWith(ym));
   const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
   const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
@@ -1305,31 +1315,31 @@ function downloadMonthlyReport(ym){
   th{background:#6C63FF;color:#fff;padding:10px;font-size:12px;text-align:left;}td{padding:9px 10px;font-size:12px;border-bottom:1px solid #eee;}
   .green{color:#22C55E;font-weight:700;}.red{color:#EF4444;font-weight:700;}.amber{color:#F59E0B;font-weight:700;}
   @media print{body{background:#fff;}}</style></head><body>
-  <h1>SpendWise Monthly Report</h1><p style="color:#888;font-size:13px;">Period: ${mn} · Generated: ${new Date().toLocaleDateString('en-IN')}</p>
+  <h1>SpendWise Monthly Report</h1><p style="color:#888;font-size:13px;">Period: ${mn} · Generated: ${new Date().toLocaleDateString(_locale)}</p>
   <div class="grid">
-    <div class="stat"><div class="lbl">Total Income</div><div class="val green">₹${inc.toLocaleString('en-IN')}</div></div>
-    <div class="stat"><div class="lbl">Total Expenses</div><div class="val red">₹${exp.toLocaleString('en-IN')}</div></div>
-    <div class="stat"><div class="lbl">Net Savings</div><div class="val" style="color:${inc-exp>=0?'#22C55E':'#EF4444'};">₹${Math.abs(inc-exp).toLocaleString('en-IN')}</div></div>
-    <div class="stat"><div class="lbl">Total EMIs</div><div class="val red">₹${emi.toLocaleString('en-IN')}</div></div>
-    <div class="stat"><div class="lbl">Wasteful Spend</div><div class="val amber">₹${waste.toLocaleString('en-IN')}</div></div>
-    <div class="stat"><div class="lbl">Bank Balance</div><div class="val" style="color:#6C63FF;">₹${(S.bankBalance.amount||0).toLocaleString('en-IN')}</div></div>
+    <div class="stat"><div class="lbl">Total Income</div><div class="val green">${fmtFull(inc)}</div></div>
+    <div class="stat"><div class="lbl">Total Expenses</div><div class="val red">${fmtFull(exp)}</div></div>
+    <div class="stat"><div class="lbl">Net Savings</div><div class="val" style="color:${inc-exp>=0?'#22C55E':'#EF4444'};">${fmtFull(Math.abs(inc-exp))}</div></div>
+    <div class="stat"><div class="lbl">Total EMIs</div><div class="val red">${fmtFull(emi)}</div></div>
+    <div class="stat"><div class="lbl">Wasteful Spend</div><div class="val amber">${fmtFull(waste)}</div></div>
+    <div class="stat"><div class="lbl">Bank Balance</div><div class="val" style="color:#6C63FF;">${fmtFull(S.bankBalance.amount||0)}</div></div>
   </div>
   <h2>💳 Credit Cards</h2>
   <table><tr><th>Card</th><th>Limit</th><th>Outstanding</th><th>Available</th></tr>
-  ${S.creditCards.map(cc=>`<tr><td>${cc.name}</td><td>₹${cc.limit.toLocaleString('en-IN')}</td><td class="red">₹${cc.outstanding.toLocaleString('en-IN')}</td><td class="green">₹${(cc.limit-cc.outstanding).toLocaleString('en-IN')}</td></tr>`).join('')}</table>
+  ${S.creditCards.map(cc=>`<tr><td>${cc.name}</td><td>${fmtFull(cc.limit)}</td><td class="red">${fmtFull(cc.outstanding)}</td><td class="green">${fmtFull(cc.limit-cc.outstanding)}</td></tr>`).join('')}</table>
   <h2>🏦 Loan Summary</h2>
   <table><tr><th>Loan</th><th>Rate</th><th>EMI</th><th>Outstanding</th><th>Remaining</th></tr>
-  ${S.loans.map(l=>`<tr><td>${l.name}</td><td>${l.rate}%</td><td>₹${l.emi.toLocaleString('en-IN')}</td><td class="red">₹${l.outstanding.toLocaleString('en-IN')}</td><td>${l.remaining} months</td></tr>`).join('')}</table>
+  ${S.loans.map(l=>`<tr><td>${l.name}</td><td>${l.rate}%</td><td>${fmtFull(l.emi)}</td><td class="red">${fmtFull(l.outstanding)}</td><td>${l.remaining} months</td></tr>`).join('')}</table>
   <h2>📋 Mandatory Bills</h2>
   <table><tr><th>Bill</th><th>Amount</th><th>Due Day</th><th>Status</th></tr>
-  ${S.mandatoryBills.map(b=>`<tr><td>${b.icon} ${b.name}</td><td>₹${b.amount.toLocaleString('en-IN')}</td><td>${b.dueDay}th</td><td class="${b.paidThisMonth?'green':'amber'}">${b.paidThisMonth?'✓ Paid':'⏳ Pending'}</td></tr>`).join('')}</table>
+  ${S.mandatoryBills.map(b=>`<tr><td>${b.icon} ${b.name}</td><td>${fmtFull(b.amount)}</td><td>${b.dueDay}th</td><td class="${b.paidThisMonth?'green':'amber'}">${b.paidThisMonth?'✓ Paid':'⏳ Pending'}</td></tr>`).join('')}</table>
   <h2>📈 Investments (Angel One)</h2>
   <table><tr><th>Metric</th><th>Value</th></tr>
-  <tr><td>Monthly SIP</td><td>₹${(S.investments.angelOne.monthlyAmount||0).toLocaleString('en-IN')}</td></tr>
-  <tr><td>Current Portfolio</td><td class="green">₹${(S.investments.angelOne.currentBalance||0).toLocaleString('en-IN')}</td></tr></table>
+  <tr><td>Monthly SIP</td><td>${fmtFull(S.investments.angelOne.monthlyAmount||0)}</td></tr>
+  <tr><td>Current Portfolio</td><td class="green">${fmtFull(S.investments.angelOne.currentBalance||0)}</td></tr></table>
   <h2>📊 All Transactions (${mn})</h2>
   <table><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Amount</th><th>Note</th></tr>
-  ${txs.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<tr><td>${fmtDate(t.date)}</td><td>${t.merchant}</td><td>${cat(t.category).label}</td><td class="${t.category==='income'?'green':'red'}">${t.category==='income'?'+':'-'}₹${t.amount.toLocaleString('en-IN')}</td><td>${t.note||''}</td></tr>`).join('')}
+  ${txs.sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`<tr><td>${fmtDate(t.date)}</td><td>${t.merchant}</td><td>${cat(t.category).label}</td><td class="${t.category==='income'?'green':'red'}">${t.category==='income'?'+':'-'}${fmtFull(t.amount)}</td><td>${t.note||''}</td></tr>`).join('')}
   </table>
   <p style="color:#888;font-size:11px;margin-top:24px;text-align:center;">🔒 SpendWise · All data is private and stored locally</p>
   <script>window.onload=()=>window.print();<\/script></body></html>`;
@@ -1338,7 +1348,7 @@ function downloadMonthlyReport(ym){
 
 function emailMonthlyReport(ym){
   if(!ym)ym=thisMonth();
-  const mn=new Date(ym+'-01').toLocaleDateString('en-IN',{month:'long',year:'numeric'});
+  const mn=new Date(ym+'-01').toLocaleDateString(_locale,{month:'long',year:'numeric'});
   const txs=S.transactions.filter(t=>t.date.startsWith(ym));
   const inc=txs.filter(t=>t.category==='income').reduce((s,t)=>s+t.amount,0);
   const exp=txs.filter(t=>t.category!=='income'&&t.category!=='savings').reduce((s,t)=>s+t.amount,0);
@@ -1346,15 +1356,15 @@ function emailMonthlyReport(ym){
   const catSpend={};
   txs.filter(t=>t.category!=='income').forEach(t=>{catSpend[t.category]=(catSpend[t.category]||0)+t.amount;});
   let body=`SpendWise Monthly Report — ${mn}\n${'='.repeat(40)}\n\n`;
-  body+=`Income:    ₹${inc.toLocaleString('en-IN')}\nExpenses:  ₹${exp.toLocaleString('en-IN')}\n`;
-  body+=`Savings:   ₹${(inc-exp).toLocaleString('en-IN')}\nWasteful:  ₹${waste.toLocaleString('en-IN')}\n`;
+  body+=`Income:    ${fmtFull(inc)}\nExpenses:  ${fmtFull(exp)}\n`;
+  body+=`Savings:   ${fmtFull(inc-exp)}\nWasteful:  ${fmtFull(waste)}\n`;
   body+=`\nSpending by Category:\n${'─'.repeat(30)}\n`;
   Object.entries(catSpend).sort((a,b)=>b[1]-a[1]).forEach(([id,amt])=>{
-    const c=cat(id);body+=`${c.icon} ${c.label}: ₹${amt.toLocaleString('en-IN')}\n`;
+    const c=cat(id);body+=`${c.icon} ${c.label}: ${fmtFull(amt)}\n`;
   });
   body+=`\nTransactions (${txs.length}):\n${'─'.repeat(30)}\n`;
   txs.sort((a,b)=>a.date.localeCompare(b.date)).forEach(t=>{
-    body+=`${t.date}  ${t.merchant.padEnd(20)}  ₹${String(t.amount.toLocaleString('en-IN')).padStart(10)}  ${cat(t.category).label}\n`;
+    body+=`${t.date}  ${t.merchant.padEnd(20)}  ${fmtFull(t.amount).padStart(12)}  ${cat(t.category).label}\n`;
   });
   const subject=`SpendWise Report — ${mn}`;
   if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){
@@ -1374,7 +1384,7 @@ function maybeClose(e){if(e.target===document.getElementById('overlay'))closeMod
 
 function openBankBalance(){
   openModal(`<div class="modal-title">🏦 Update Bank Balance</div>
-    <div class="form-group"><label class="form-label">Current Bank Balance (₹)</label><input class="form-input" id="bb-amt" type="number" value="${S.bankBalance.amount||''}" placeholder="e.g. 45000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Current Bank Balance (${CUR_SYM})</label><input class="form-input" id="bb-amt" type="number" value="${S.bankBalance.amount||''}" placeholder="e.g. 45000" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">As of Date</label><input class="form-input" id="bb-dt" type="date" value="${today()}"></div>
     <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Update this after checking your bank app to get accurate financial picture.</div>
     <div style="display:flex;gap:9px;">
@@ -1387,8 +1397,8 @@ function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt'
 function openInvestModal(){
   const ao=(S.investments&&S.investments.angelOne)||DEFAULT.investments.angelOne;
   openModal(`<div class="modal-title">📈 Angel One Investment</div>
-    <div class="form-group"><label class="form-label">Monthly SIP Amount (₹)</label><input class="form-input" id="ao-sip" type="number" value="${ao.monthlyAmount||''}" placeholder="e.g. 5000" inputmode="numeric"></div>
-    <div class="form-group"><label class="form-label">Current Portfolio Value (₹)</label><input class="form-input" id="ao-bal" type="number" value="${ao.currentBalance||''}" placeholder="e.g. 62000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Monthly SIP Amount (${CUR_SYM})</label><input class="form-input" id="ao-sip" type="number" value="${ao.monthlyAmount||''}" placeholder="e.g. 5000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Current Portfolio Value (${CUR_SYM})</label><input class="form-input" id="ao-bal" type="number" value="${ao.currentBalance||''}" placeholder="e.g. 62000" inputmode="numeric"></div>
     <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Log SIP for this month:</div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Month (YYYY-MM)</label><input class="form-input" id="ao-month" value="${thisMonth()}" placeholder="2026-05"></div>
@@ -1421,7 +1431,7 @@ function openAddBill(){
     <div class="form-group"><label class="form-label">Bill Name</label><input class="form-input" id="nb-name" placeholder="e.g. OTT Subscription"></div>
     <div class="form-group"><label class="form-label">Icon (emoji)</label><input class="form-input" id="nb-icon" value="📄" style="font-size:22px;"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Monthly Amount (₹)</label><input class="form-input" id="nb-amt" type="number" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Monthly Amount (${CUR_SYM})</label><input class="form-input" id="nb-amt" type="number" placeholder="0" inputmode="numeric"></div>
       <div class="form-group"><label class="form-label">Due Day</label><input class="form-input" id="nb-day" type="number" min="1" max="31" value="1"></div>
     </div>
     <div style="display:flex;gap:9px;">
@@ -1436,12 +1446,12 @@ function openAddCard(editId){
   openModal(`<div class="modal-title">${cc?'✏️ Edit Card':'+ Add Credit Card'}</div>
     <div class="form-group"><label class="form-label">Card Name</label><input class="form-input" id="cc-name" value="${cc?cc.name:''}" placeholder="e.g. HDFC Regalia"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Credit Limit (₹)</label><input class="form-input" id="cc-limit" type="number" value="${cc?cc.limit:''}" placeholder="0" inputmode="numeric"></div>
-      <div class="form-group"><label class="form-label">Outstanding (₹)</label><input class="form-input" id="cc-out" type="number" value="${cc?cc.outstanding:''}" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Credit Limit (${CUR_SYM})</label><input class="form-input" id="cc-limit" type="number" value="${cc?cc.limit:''}" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Outstanding (${CUR_SYM})</label><input class="form-input" id="cc-out" type="number" value="${cc?cc.outstanding:''}" placeholder="0" inputmode="numeric"></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label class="form-label">Due Day (1-31)</label><input class="form-input" id="cc-due" type="number" min="1" max="31" value="${cc?cc.dueDay:15}"></div>
-      <div class="form-group"><label class="form-label">Min. Due (₹)</label><input class="form-input" id="cc-min" type="number" value="${cc?cc.minDue||0:''}" placeholder="0" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Min. Due (${CUR_SYM})</label><input class="form-input" id="cc-min" type="number" value="${cc?cc.minDue||0:''}" placeholder="0" inputmode="numeric"></div>
     </div>
     <div style="display:flex;gap:9px;">
       <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
@@ -1466,7 +1476,7 @@ function openCardTx(cardId){
     <div style="background:var(--card2);border-radius:12px;padding:12px;margin-bottom:14px;display:flex;justify-content:space-between;font-size:12px;">
       <span style="color:var(--muted);">Available</span><span style="font-weight:700;color:var(--green);">${fmtFull(cc.limit-cc.outstanding)}</span>
     </div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="ctx-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="ctx-amt" type="number" placeholder="0" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Merchant</label><input class="form-input" id="ctx-mer" placeholder="e.g. Amazon, Swiggy" oninput="autoPickCat(this.value)"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="ctx-cat">${CATS.filter(c=>c.id!=='income'&&c.id!=='savings').map(c=>`<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="ctx-dt" type="date" value="${today()}"></div>
@@ -1488,7 +1498,7 @@ function openLoanPayTx(loanId){
   const loan=S.loans.find(l=>l.id===loanId);if(!loan)return;
   openModal(`<div class="modal-title">💳 Pay EMI — ${loan.name}</div>
     <div style="background:var(--card2);border-radius:12px;padding:12px;margin-bottom:14px;font-size:12px;color:var(--muted);">Rate: ${loan.rate}% · Outstanding: ${fmtFull(loan.outstanding)}</div>
-    <div class="form-group"><label class="form-label">EMI Amount (₹)</label><input class="form-input" id="lp-amt" type="number" value="${loan.emi}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">EMI Amount (${CUR_SYM})</label><input class="form-input" id="lp-amt" type="number" value="${loan.emi}" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Payment Date</label><input class="form-input" id="lp-dt" type="date" value="${today()}"></div>
     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="lp-nt" placeholder="e.g. May EMI"></div>
     <div style="display:flex;gap:9px;">
@@ -1507,7 +1517,7 @@ function saveLoanPayTx(loanId){
 function openFamilyTx(){
   openModal(`<div class="modal-title">👨‍👩‍👧 Family / Friends Transfer</div>
     <div class="form-group"><label class="form-label">Contact Name</label><input class="form-input" id="ft-contact" placeholder="e.g. Mom, Raj, Sister"></div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="ft-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="ft-amt" type="number" placeholder="0" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Type</label><select class="form-input" id="ft-type"><option value="sent">💸 Money Sent</option><option value="received">💰 Money Received</option></select></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="ft-dt" type="date" value="${today()}"></div>
     <div class="form-group"><label class="form-label">Note / Reason</label><input class="form-input" id="ft-nt" placeholder="e.g. Monthly support, Festival gift"></div>
@@ -1527,7 +1537,7 @@ function saveFamilyTx(){
 function openEditTx(id){
   const tx=S.transactions.find(t=>t.id===id);if(!tx)return;
   openModal(`<div class="modal-title">✏️ Edit Transaction</div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="et-amt" type="number" value="${tx.amount}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="et-amt" type="number" value="${tx.amount}" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="et-mer" value="${tx.merchant}"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="et-cat">${CATS.map(c=>`<option value="${c.id}" ${c.id===tx.category?'selected':''}>${c.icon} ${c.label}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="et-dt" type="date" value="${tx.date}"></div>
@@ -1560,7 +1570,7 @@ function saveEditTx(id){
 
 function openAddTx(){
   openModal(`<div class="modal-title">Add Transaction</div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="tx-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="tx-amt" type="number" placeholder="0" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Merchant / Description</label><input class="form-input" id="tx-mer" placeholder="e.g. Swiggy, RBL EMI..." oninput="autoPickCat(this.value)"></div>
     <div class="form-group"><label class="form-label">Category</label><select class="form-input" id="tx-cat">${CATS.map(c=>`<option value="${c.id}">${c.icon} ${c.label}</option>`).join('')}</select></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="tx-dt" type="date" value="${today()}"></div>
@@ -1596,10 +1606,10 @@ function openSMSSim(){
   if(p.bankBal){S.bankBalance={amount:p.bankBal,lastUpdated:today()};save();}
   openModal(`<div class="modal-title">${p.isCredit?'💰 Money Received':'💸 Transaction Detected'}</div>
     <div style="background:var(--card2);border-radius:11px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;line-height:1.5;">"${msg}"</div>
-    ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ₹${p.bankBal.toLocaleString('en-IN')}</div>`:''}
+    ${p.bankBal?`<div style="background:#22C55E12;border:1px solid #22C55E30;border-radius:10px;padding:8px 12px;font-size:11px;color:var(--green);margin-bottom:12px;">📊 Bank balance auto-updated: ${fmtFull(p.bankBal)}</div>`:''}
     <div style="display:flex;align-items:center;gap:13px;margin-bottom:16px;padding:14px;background:var(--card2);border-radius:14px;">
       <div style="width:48px;height:48px;border-radius:13px;background:${p.isCredit?'#22C55E20':'#EF444420'};display:flex;align-items:center;justify-content:center;font-size:22px;">${p.isCredit?'💰':'💸'}</div>
-      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">₹${p.amount.toLocaleString('en-IN')}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
+      <div><div style="font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:1.5px;">${p.isCredit?'CREDITED':'DEBITED'}</div><div style="font-size:26px;font-weight:900;letter-spacing:-1px;">${fmtFull(p.amount)}</div><div style="font-size:12px;color:var(--muted);">${p.merchant}</div></div>
     </div>
     <div style="font-size:9px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:9px;">Category · Tap to change</div>
     <div class="cat-grid" id="sms-cats">${CATS.map(c=>`<button class="cat-btn${c.id===guessed?' sel':''}" id="sc-${c.id}" style="${c.id===guessed?`border-color:${c.color};color:${c.color};background:${c.color}18;`:''}" onclick="pickSMSCat('${c.id}','${c.color}')">${c.icon} ${c.label}</button>`).join('')}</div>
@@ -1654,7 +1664,7 @@ function saveSMSTx(){
 
 function openSalarySettings(){
   openModal(`<div class="modal-title">⚙️ Salary Settings</div>
-    <div class="form-group"><label class="form-label">Monthly Salary (₹)</label><input class="form-input" id="sal-amt" type="number" value="${S.salary.amount||''}" placeholder="e.g. 85000" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Monthly Salary (${CUR_SYM})</label><input class="form-input" id="sal-amt" type="number" value="${S.salary.amount||''}" placeholder="e.g. 85000" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Expected Salary Day</label><input class="form-input" id="sal-day" type="number" min="1" max="31" value="${S.salary.expectedDay||1}"></div>
     <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveSalarySettings()" class="btn btn-primary" style="flex:2;padding:13px;">Save</button></div>`);
 }
@@ -1662,7 +1672,7 @@ function saveSalarySettings(){S.salary.amount=parseFloat(document.getElementById
 
 function openMarkSalary(){
   openModal(`<div class="modal-title">✅ Salary Received</div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="rv-amt" type="number" value="${S.salary.amount||''}" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="rv-amt" type="number" value="${S.salary.amount||''}" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="rv-dt" type="date" value="${today()}"></div>
     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="rv-nt" placeholder="e.g. May 2026 salary"></div>
     <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveMarkSalary()" class="btn btn-green" style="flex:2;padding:13px;">✓ Confirm</button></div>`);
@@ -1671,7 +1681,7 @@ function saveMarkSalary(){const amt=parseFloat(document.getElementById('rv-amt')
 
 function openAddIncome(){
   openModal(`<div class="modal-title">+ Add Income</div>
-    <div class="form-group"><label class="form-label">Amount (₹)</label><input class="form-input" id="inc-amt" type="number" placeholder="0" inputmode="numeric"></div>
+    <div class="form-group"><label class="form-label">Amount (${CUR_SYM})</label><input class="form-input" id="inc-amt" type="number" placeholder="0" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">Source</label><input class="form-input" id="inc-src" placeholder="e.g. Freelance, Bonus, Interest..."></div>
     <div class="form-group"><label class="form-label">Date</label><input class="form-input" id="inc-dt" type="date" value="${today()}"></div>
     <div class="form-group"><label class="form-label">Note</label><input class="form-input" id="inc-nt" placeholder="Optional"></div>
@@ -1684,11 +1694,11 @@ function openAddLoan(editId){
   openModal(`<div class="modal-title">${loan?'✏️ Edit Loan':'+ Add Loan'}</div>
     <div class="form-group"><label class="form-label">Lender Name</label><input class="form-input" id="ln-name" value="${loan?loan.name:''}" placeholder="e.g. HDFC Bank"></div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">EMI (₹/mo)</label><input class="form-input" id="ln-emi" type="number" value="${loan?loan.emi:''}" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">EMI (${CUR_SYM}/mo)</label><input class="form-input" id="ln-emi" type="number" value="${loan?loan.emi:''}" inputmode="numeric"></div>
       <div class="form-group"><label class="form-label">Rate (%)</label><input class="form-input" id="ln-rate" type="number" step="0.1" value="${loan?loan.rate:''}"></div>
     </div>
     <div class="form-row">
-      <div class="form-group"><label class="form-label">Outstanding (₹)</label><input class="form-input" id="ln-out" type="number" value="${loan?loan.outstanding:''}" inputmode="numeric"></div>
+      <div class="form-group"><label class="form-label">Outstanding (${CUR_SYM})</label><input class="form-input" id="ln-out" type="number" value="${loan?loan.outstanding:''}" inputmode="numeric"></div>
       <div class="form-group"><label class="form-label">Months Left</label><input class="form-input" id="ln-rem" type="number" value="${loan?loan.remaining:''}"></div>
     </div>
     <div style="display:flex;gap:9px;"><button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button><button onclick="saveLoan(${editId||'null'})" class="btn btn-primary" style="flex:2;padding:13px;">${loan?'Update':'Add Loan'}</button></div>`);
@@ -1708,6 +1718,8 @@ function toast(msg,isError){const t=document.getElementById('toast');t.textConte
 function updateClock(){const el=document.getElementById('clock');if(el)el.textContent=new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
 
 // ── INIT ──────────────────────────────────────────────────────
+// Set auth logo to detected currency symbol
+(function(){const el=document.getElementById('auth-logo');if(el)el.textContent=CUR_SYM;})();
 load();
 updateClock();
 setInterval(updateClock,30000);
