@@ -718,8 +718,9 @@ function parseSMS(msg){
   const a=msg.match(/(?:Rs\.?|INR|₹|\$|USD|£|GBP|€|EUR|AUD|CAD|SGD|AED|SAR|PKR|LKR|NPR|BDT|NGN|MYR|JPY|CNY|KRW|RUB|TRY|IDR|THB|VND)\s*([\d,]+(?:\.\d+)?)/i);
   const amount=a?parseFloat(a[1].replace(/,/g,'')):0;
   const atM=msg.match(/at\s+([A-Z][A-Z0-9\s&']+?)(?:\s+on|\s*\.|Avail|Bal|$)/);
+  const upiM=msg.match(/UPI\/[A-Z0-9]+\/\d+\/([^\n\/]+)/i);
   const empM=msg.match(/Employer:\s*([^\.]+)/i);
-  const merchant=(atM&&atM[1].trim())||(empM&&empM[1].trim())||'Unknown';
+  const merchant=(atM&&atM[1].trim())||(upiM&&upiM[1].trim())||(empM&&empM[1].trim())||'Unknown';
   const isCredit=/credited|credit|salary|received|refund|cashback|deposit/i.test(msg);
   const isDebit=/debited|debit|deducted|payment|spent|purchase|withdrawn/i.test(msg);
   const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\s*Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
