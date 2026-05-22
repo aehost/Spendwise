@@ -785,6 +785,29 @@ function renderHome(){
       </div>`:''}
     </div>
 
+    <!-- Setup banners — shown when key data is missing -->
+    ${!salAmt?`<div style="background:linear-gradient(135deg,#F59E0B12,#F59E0B1A);border:1px solid #F59E0B44;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="display:flex;align-items:center;gap:11px;">
+        <span style="font-size:26px;">💰</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--amber);margin-bottom:2px;">Set Up Your Salary</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4;">Add your monthly salary &amp; payday to track budget accurately.</div>
+        </div>
+      </div>
+      <button onclick="openSalarySettings()" style="background:var(--amber);color:#000;padding:8px 13px;border-radius:11px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;">Set Up →</button>
+    </div>`:''}
+
+    ${S.mandatoryBills.every(b=>b.amount===0)?`<div style="background:linear-gradient(135deg,#06B6D412,#06B6D41A);border:1px solid #06B6D444;border-radius:16px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;gap:12px;">
+      <div style="display:flex;align-items:center;gap:11px;">
+        <span style="font-size:26px;">📋</span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:2px;">Configure Monthly Bills</div>
+          <div style="font-size:11px;color:var(--muted);line-height:1.4;">Set bill amounts so SpendWise can track what's due each month.</div>
+        </div>
+      </div>
+      <button onclick="goTo('settings')" style="background:var(--cyan);color:#000;padding:8px 13px;border-radius:11px;font-size:11px;font-weight:700;white-space:nowrap;flex-shrink:0;">Set Up →</button>
+    </div>`:''}
+
     <!-- Smart suggestion tip -->
     ${tip?`<div style="background:linear-gradient(135deg,#6C63FF0D,#8B5CF60D);border:1px solid #6C63FF22;border-radius:14px;padding:11px 14px;margin-bottom:12px;display:flex;align-items:flex-start;gap:10px;">
       <span style="font-size:18px;flex-shrink:0;">${tip.icon}</span>
@@ -1253,7 +1276,7 @@ function openMonthlyReport(){
   const cur=thisMonth();
   openModal(`<div class="modal-title">📊 Monthly Analysis</div>
     <div class="form-group"><label class="form-label">Select Month</label>
-      <select class="form-input" id="rpt-month" onchange="renderMonthReport()">
+      <select class="form-input" id="rpt-month" onchange="renderMonthReport()" style="background:var(--card2)!important;color:var(--text)!important;color-scheme:dark;-webkit-appearance:none;">
         ${months.map(ym=>{const[y,m]=ym.split('-');const lbl=new Date(y,m-1,1).toLocaleDateString(_locale,{month:'long',year:'numeric'});return`<option value="${ym}"${ym===cur?' selected':''}>${lbl}</option>`;}).join('')}
       </select>
     </div>
@@ -1390,11 +1413,12 @@ function openBankBalance(){
     <div class="form-group"><label class="form-label">As of Date</label><input class="form-input" id="bb-dt" type="date" value="${today()}"></div>
     <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Update this after checking your bank app to get accurate financial picture.</div>
     <div style="display:flex;gap:9px;">
-      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="clearBankBalance()" class="btn btn-red" style="flex:1;padding:13px;">Reset to 0</button>
       <button onclick="saveBankBalance()" class="btn btn-primary" style="flex:2;padding:13px;">Update Balance</button>
     </div>`);
 }
-function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:dt};save();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
+function clearBankBalance(){S.bankBalance={amount:0,lastUpdated:''};save();closeModal();toast('Bank balance cleared');renderPage(currentPage);}
+function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:amt>0?dt:''};save();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
 
 function openInvestModal(){
   const ao=(S.investments&&S.investments.angelOne)||DEFAULT.investments.angelOne;
@@ -1726,6 +1750,18 @@ load();
 updateClock();
 setInterval(updateClock,30000);
 renderPage('home');
+
+// Poll for pending SMS every 5 s — delivers immediately when app is in foreground
+// (notification tap uses onNewIntent; this handles the already-open case)
+if(IS_ANDROID){
+  setInterval(()=>{
+    if(!_fbUser)return;
+    try{
+      const d=AndroidBridge.getPendingSMS();
+      if(d&&d!=='null'){const sms=JSON.parse(d);if(sms&&sms.body)onIncomingSMS(sms);}
+    }catch(e){}
+  },5000);
+}
 // Check for existing session → skip login screen if token can be refreshed
 (async()=>{
   const user=getStoredUser();
