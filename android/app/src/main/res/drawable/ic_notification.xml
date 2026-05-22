@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Rupee coin icon for bank SMS notifications -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Outer circle -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12,2a10,10 0,1 0,10 10A10,10 0,0 0,12 2z"/>
+    <!-- ₹ symbol (cut out via clip or overlay — use dark foreground) -->
+    <path
+        android:fillColor="#FF6C63FF"
+        android:pathData="M8.5,7h7v1.5h-2.8A2.5,2.5 0,0 1,12.5 13l3.5,4h-2l-3.5,-4v-1h1.5A1,1 0,0 0,13 10.5H8.5V9h7V7"/>
+</vector>

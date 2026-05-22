@@ -1,0 +1,128 @@
+package com.spendwise.app;
+
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.os.Build;
+import android.os.Bundle;
+import android.telephony.SmsMessage;
+
+import androidx.core.app.NotificationCompat;
+
+import org.json.JSONObject;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+public class SMSReceiver extends BroadcastReceiver {
+
+    private static final String CHANNEL_ID = "spendwise_bank";
+
+    private static final Pattern BANK_PATTERN = Pattern.compile(
+        "debited|credited|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +
+        "Avail\\s*Bal|available\\s*balance|transaction|payment|EMI|UPI|" +
+        "A/C|account|withdrawn|deposit",
+        Pattern.CASE_INSENSITIVE
+    );
+
+    private static final Pattern AMOUNT_PATTERN = Pattern.compile(
+        "(?:Rs\\.?|INR|₹)\\s*([\\d,]+(?:\\.\\d+)?)",
+        Pattern.CASE_INSENSITIVE
+    );
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        Bundle bundle = intent.getExtras();
+        if (bundle == null) return;
+
+        Object[] pdus = (Object[]) bundle.get("pdus");
+        String format = bundle.getString("format");
+        if (pdus == null || pdus.length == 0) return;
+
+        StringBuilder fullBody = new StringBuilder();
+        String sender = "";
+
+        for (Object pdu : pdus) {
+            SmsMessage sms;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                sms = SmsMessage.createFromPdu((byte[]) pdu, format);
+            } else {
+                sms = SmsMessage.createFromPdu((byte[]) pdu);
+            }
+            if (sms != null) {
+                fullBody.append(sms.getMessageBody());
+                if (sender.isEmpty()) {
+                    String addr = sms.getOriginatingAddress();
+                    if (addr != null) sender = addr;
+                }
+            }
+        }
+
+        String body = fullBody.toString();
+        if (!BANK_PATTERN.matcher(body).find()) return;
+
+        // Store SMS in bridge so JS can consume it via AndroidBridge.getPendingSMS()
+        try {
+            JSONObject obj = new JSONObject();
+            obj.put("body", body);
+            obj.put("sender", sender);
+            obj.put("time", System.currentTimeMillis());
+            SMSBridge.setPendingSms(obj.toString());
+        } catch (Exception e) {
+            return;
+        }
+
+        // Create notification channel (required Android 8.0+)
+        NotificationManager nm = (NotificationManager)
+            context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            NotificationChannel ch = new NotificationChannel(
+                CHANNEL_ID, "Bank Transactions", NotificationManager.IMPORTANCE_HIGH);
+            ch.setDescription("Tap to tag bank debits and credits in SpendWise");
+            ch.enableVibration(true);
+            nm.createNotificationChannel(ch);
+        }
+
+        // Intent: open SpendWise and deliver the SMS for tagging
+        Intent launch = new Intent(context, MainActivity.class);
+        launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        launch.putExtra("from_sms_notification", true);
+        int piFlags = PendingIntent.FLAG_UPDATE_CURRENT |
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
+        PendingIntent pi = PendingIntent.getActivity(context, 0, launch, piFlags);
+
+        String title = buildNotificationTitle(body);
+        String preview = body.length() > 120 ? body.substring(0, 117) + "…" : body;
+
+        NotificationCompat.Builder nb = new NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(preview)
+            .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setAutoCancel(true)
+            .setContentIntent(pi);
+
+        nm.notify((int) (System.currentTimeMillis() % Integer.MAX_VALUE), nb.build());
+    }
+
+    private String buildNotificationTitle(String body) {
+        String lower = body.toLowerCase();
+        boolean isCredit = lower.contains("credited") || lower.contains("salary")
+                        || lower.contains("received");
+        Matcher m = AMOUNT_PATTERN.matcher(body);
+        if (m.find()) {
+            String raw = m.group(1).replace(",", "");
+            try {
+                double amt = Double.parseDouble(raw);
+                return String.format("₹%.0f %s — Tap to tag in SpendWise",
+                    amt, isCredit ? "Credited" : "Debited");
+            } catch (NumberFormatException ignored) {}
+        }
+        return isCredit ? "Money Credited — Tap to tag" : "Money Debited — Tap to tag";
+    }
+}

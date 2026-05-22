@@ -20,6 +20,18 @@ public class SMSBridge {
 
     private final Context ctx;
 
+    // Real-time SMS from SMSReceiver BroadcastReceiver — consumed once by JS
+    private static volatile String pendingSmsJson = null;
+
+    public static void setPendingSms(String json) { pendingSmsJson = json; }
+
+    @JavascriptInterface
+    public String getPendingSMS() {
+        String result = pendingSmsJson;
+        pendingSmsJson = null; // consume: JS reads it once then it's gone
+        return result != null ? result : "null";
+    }
+
     // Matches bank/financial SMS messages
     private static final Pattern BANK_PATTERN = Pattern.compile(
         "debited|credited|Rs\\.?\\s*[\\d,]+|INR\\s*[\\d,]+|" +

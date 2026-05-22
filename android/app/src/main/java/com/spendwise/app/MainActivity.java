@@ -9,7 +9,6 @@ import android.os.Bundle;
 import android.view.View;
 import android.view.WindowManager;
 import android.webkit.*;
-import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
@@ -18,38 +17,60 @@ import androidx.biometric.BiometricPrompt;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.Executor;
 
 public class MainActivity extends AppCompatActivity {
 
     private WebView webView;
-    private static final int SMS_PERMISSION_CODE = 101;
+    private boolean pageLoaded = false;
+    private boolean pendingSmsDelivery = false;
 
+    private static final int SMS_PERMISSION_CODE  = 101;
+    private static final int NOTIF_PERMISSION_CODE = 102;
+
+    // ── LIFECYCLE ─────────────────────────────────────────────────
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // ── SECURITY: prevent screenshots & screen recording ──
+        // Prevent screenshots / screen recording
         getWindow().setFlags(
             WindowManager.LayoutParams.FLAG_SECURE,
             WindowManager.LayoutParams.FLAG_SECURE
         );
 
-        // ── Match app dark theme with system bars ─────────────
+        // Match dark theme with system bars
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             getWindow().setStatusBarColor(0xFF0A0A0F);
             getWindow().setNavigationBarColor(0xFF0A0A0F);
-            // Light icons on dark background
-            View decorView = getWindow().getDecorView();
-            decorView.setSystemUiVisibility(0); // dark icons = off (white icons on dark bg)
+            getWindow().getDecorView().setSystemUiVisibility(0);
         }
 
         setContentView(R.layout.activity_main);
 
-        // ── BIOMETRIC AUTH before showing the app ─────────────
+        // Check if we were launched from a bank-SMS notification
+        if (getIntent() != null && getIntent().getBooleanExtra("from_sms_notification", false)) {
+            pendingSmsDelivery = true;
+        }
+
         authenticateThenInit();
     }
 
+    // Called when app is already running (singleTop) and a new intent arrives
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        if (intent != null && intent.getBooleanExtra("from_sms_notification", false)) {
+            pendingSmsDelivery = true;
+            // If page already loaded, deliver immediately; otherwise onPageFinished will do it
+            if (pageLoaded) deliverPendingSms();
+        }
+    }
+
+    // ── BIOMETRIC ─────────────────────────────────────────────────
     private void authenticateThenInit() {
         BiometricManager bm = BiometricManager.from(this);
         int canAuth = bm.canAuthenticate(
@@ -68,13 +89,10 @@ public class MainActivity extends AppCompatActivity {
                     }
                     @Override
                     public void onAuthenticationError(int code, @NonNull CharSequence err) {
-                        // User cancelled or no hardware — close app
                         finish();
                     }
                     @Override
-                    public void onAuthenticationFailed() {
-                        // Wrong fingerprint — prompt stays open, handled by system
-                    }
+                    public void onAuthenticationFailed() {}
                 });
 
             BiometricPrompt.PromptInfo info = new BiometricPrompt.PromptInfo.Builder()
@@ -87,11 +105,11 @@ public class MainActivity extends AppCompatActivity {
 
             prompt.authenticate(info);
         } else {
-            // No biometric enrolled — proceed directly
             initWebView();
         }
     }
 
+    // ── WEBVIEW ───────────────────────────────────────────────────
     private void initWebView() {
         webView = findViewById(R.id.webview);
 
@@ -105,15 +123,15 @@ public class MainActivity extends AppCompatActivity {
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_ALWAYS_ALLOW);
         ws.setMediaPlaybackRequiresUserGesture(false);
 
-        // JavaScript bridge — exposes AndroidBridge object to the web app
         webView.addJavascriptInterface(new SMSBridge(this), "AndroidBridge");
 
-        // Handle external links and request SMS only after page fully loads
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public void onPageFinished(WebView view, String url) {
-                // Page is loaded — JS functions now exist, safe to request permission
-                requestSMSPermission();
+                pageLoaded = true;
+                requestSMSPermission();      // ask for READ_SMS + RECEIVE_SMS
+                requestNotificationPermission(); // ask for POST_NOTIFICATIONS (API 33+)
+                deliverPendingSms();         // hand real-time SMS to JS if pending
             }
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest req) {
@@ -128,23 +146,51 @@ public class MainActivity extends AppCompatActivity {
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
-            public boolean onConsoleMessage(ConsoleMessage msg) {
-                return true;
-            }
+            public boolean onConsoleMessage(ConsoleMessage msg) { return true; }
         });
 
-        // Load the SpendWise app from assets
         webView.loadUrl("file:///android_asset/index.html");
     }
 
+    // ── SMS DELIVERY ──────────────────────────────────────────────
+    /** Passes a pending bank SMS (from SMSReceiver) into JavaScript. */
+    private void deliverPendingSms() {
+        if (!pendingSmsDelivery || webView == null) return;
+        pendingSmsDelivery = false;
+        webView.post(() -> webView.evaluateJavascript(
+            "if(typeof onIncomingSMS==='function'){" +
+            "  var d=AndroidBridge.getPendingSMS();" +
+            "  if(d&&d!=='null')onIncomingSMS(JSON.parse(d));" +
+            "}", null));
+    }
+
+    // ── PERMISSIONS ───────────────────────────────────────────────
     private void requestSMSPermission() {
+        List<String> needed = new ArrayList<>();
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_SMS)
                 != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.READ_SMS);
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS)
+                != PackageManager.PERMISSION_GRANTED) {
+            needed.add(Manifest.permission.RECEIVE_SMS);
+        }
+        if (!needed.isEmpty()) {
             ActivityCompat.requestPermissions(this,
-                new String[]{Manifest.permission.READ_SMS},
-                SMS_PERMISSION_CODE);
+                needed.toArray(new String[0]), SMS_PERMISSION_CODE);
         } else {
             notifySMSReady();
+        }
+    }
+
+    private void requestNotificationPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    NOTIF_PERMISSION_CODE);
+            }
         }
     }
 
@@ -160,41 +206,34 @@ public class MainActivity extends AppCompatActivity {
             @NonNull String[] perms, @NonNull int[] grants) {
         super.onRequestPermissionsResult(code, perms, grants);
         if (code == SMS_PERMISSION_CODE) {
-            if (grants.length > 0 && grants[0] == PackageManager.PERMISSION_GRANTED) {
-                notifySMSReady();
-            } else {
-                // Permission denied — SMS button will show a message in the app
+            for (int i = 0; i < perms.length; i++) {
+                if (Manifest.permission.READ_SMS.equals(perms[i])
+                        && grants[i] == PackageManager.PERMISSION_GRANTED) {
+                    notifySMSReady();
+                }
             }
+            // Request notification permission after SMS is resolved
+            requestNotificationPermission();
         }
+        // NOTIF_PERMISSION_CODE: nothing extra needed — system handles it
     }
 
+    // ── BACK / LIFECYCLE ──────────────────────────────────────────
     @Override
     public void onBackPressed() {
-        if (webView != null && webView.canGoBack()) {
-            webView.goBack();
-        } else {
-            super.onBackPressed();
-        }
+        if (webView != null && webView.canGoBack()) webView.goBack();
+        else super.onBackPressed();
     }
 
     @Override
-    protected void onPause() {
-        super.onPause();
-        if (webView != null) webView.onPause();
-    }
+    protected void onPause() { super.onPause(); if (webView != null) webView.onPause(); }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        if (webView != null) webView.onResume();
-    }
+    protected void onResume() { super.onResume(); if (webView != null) webView.onResume(); }
 
     @Override
     protected void onDestroy() {
-        if (webView != null) {
-            webView.destroy();
-            webView = null;
-        }
+        if (webView != null) { webView.destroy(); webView = null; }
         super.onDestroy();
     }
 }
