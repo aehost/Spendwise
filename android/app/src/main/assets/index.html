@@ -198,26 +198,7 @@ html.sw-android #toast{bottom:80px;}
       <input class="form-input" id="auth-email" type="email" placeholder="you@example.com" autocomplete="email" inputmode="email"></div>
     <div class="form-group"><label class="form-label">Password</label>
       <input class="form-input" id="auth-pass" type="password" placeholder="Min 6 characters" autocomplete="current-password"></div>
-    <button onclick="submitAuth()" class="btn btn-primary" id="auth-submit-btn" style="margin-bottom:10px;">Login</button>
-    <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:14px;">
-      <div onclick="toggleAuthSetup()" style="font-size:11px;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <span>⚙️ Firebase Setup (required on first use)</span>
-        <span id="auth-arrow" style="font-size:10px;">▼</span>
-      </div>
-      <div id="auth-setup-panel" style="display:none;">
-        <div class="form-group"><label class="form-label">Firebase Database URL</label>
-          <input class="form-input" id="auth-fb-url" placeholder="https://your-project-default-rtdb.firebaseio.com" style="font-size:12px;"></div>
-        <div class="form-group"><label class="form-label">Firebase Web API Key</label>
-          <input class="form-input" id="auth-fb-key" placeholder="AIzaSy..." style="font-size:12px;" autocomplete="off"></div>
-        <div style="background:var(--card2);border-radius:10px;padding:10px 12px;font-size:11px;color:var(--muted);line-height:1.7;">
-          <b style="color:var(--text);">How to get these:</b><br>
-          1. console.firebase.google.com → Create Project<br>
-          2. Build → Realtime Database → Create (Test mode)<br>
-          3. Project Settings → General → Web API Key<br>
-          4. Authentication → Sign-in method → Enable Email/Password
-        </div>
-      </div>
-    </div>
+    <button onclick="submitAuth()" class="btn btn-primary" id="auth-submit-btn">Login</button>
   </div>
 </div>
 
@@ -380,12 +361,15 @@ function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();
 function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:p.investments||DEFAULT.investments,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards};}}catch(e){}}
 
 // ── FIREBASE AUTH + CLOUD SYNC ────────────────────────────────
+const FB_URL='https://spendwise-4bc4f-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_API_KEY='AIzaSyDyzzeh0ibIQn-ck3V3u-qASbNLElSBksE';
+
 let _fbUser=null; // {uid,email,idToken,refreshToken,expiresAt}
 let _syncTimer=null;
 let _authMode='login';
 
-function getFbUrl(){return(localStorage.getItem('sw_fb_url')||'').replace(/\/$/,'');}
-function getFbApiKey(){return localStorage.getItem('sw_fb_apikey')||'';}
+function getFbUrl(){return FB_URL;}
+function getFbApiKey(){return FB_API_KEY;}
 function getStoredUser(){try{return JSON.parse(localStorage.getItem('sw_user')||'null');}catch(e){return null;}}
 function storeUser(u){localStorage.setItem('sw_user',JSON.stringify(u));}
 
@@ -448,8 +432,6 @@ async function ensureFreshToken(){
 // ── AUTH UI ───────────────────────────────────────────────────
 function showAuthScreen(){
   document.getElementById('auth-screen').style.display='flex';
-  document.getElementById('auth-fb-url').value=getFbUrl();
-  document.getElementById('auth-fb-key').value=getFbApiKey();
 }
 function hideAuthScreen(){document.getElementById('auth-screen').style.display='none';}
 function switchAuthTab(mode){
@@ -459,12 +441,6 @@ function switchAuthTab(mode){
   document.getElementById('auth-submit-btn').textContent=mode==='login'?'Login':'Create Account';
   authClearErr();
 }
-function toggleAuthSetup(){
-  const p=document.getElementById('auth-setup-panel');
-  const a=document.getElementById('auth-arrow');
-  const open=p.style.display==='none';
-  p.style.display=open?'block':'none';a.textContent=open?'▲':'▼';
-}
 function authErr(msg){const el=document.getElementById('auth-err');el.textContent=msg;el.style.display='block';}
 function authClearErr(){const el=document.getElementById('auth-err');if(el)el.style.display='none';}
 function setAuthLoading(v){const b=document.getElementById('auth-submit-btn');if(b){b.disabled=v;b.textContent=v?'Please wait...':(_authMode==='login'?'Login':'Create Account');}}
@@ -473,28 +449,21 @@ async function submitAuth(){
   authClearErr();
   const email=(document.getElementById('auth-email').value||'').trim();
   const pass=document.getElementById('auth-pass').value||'';
-  const fbUrl=(document.getElementById('auth-fb-url').value||'').trim().replace(/\/$/,'');
-  const fbKey=(document.getElementById('auth-fb-key').value||'').trim();
   if(!email||!pass){authErr('Enter your email and password');return;}
   if(_authMode==='signup'&&pass.length<6){authErr('Password must be at least 6 characters');return;}
-  if(!fbUrl||!fbKey){
-    toggleAuthSetup();
-    authErr('Fill in the Firebase URL and API Key above');return;
-  }
   setAuthLoading(true);
-  localStorage.setItem('sw_fb_url',fbUrl);
-  localStorage.setItem('sw_fb_apikey',fbKey);
   const endpoint=_authMode==='login'
     ?'https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword'
     :'https://identitytoolkit.googleapis.com/v1/accounts:signUp';
   try{
-    const res=await fetch(`${endpoint}?key=${fbKey}`,{method:'POST',
+    const res=await fetch(`${endpoint}?key=${FB_API_KEY}`,{method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({email,password:pass,returnSecureToken:true})});
     const d=await res.json();
     if(!res.ok){authErr(d.error?.message==='EMAIL_NOT_FOUND'||d.error?.message==='INVALID_PASSWORD'?'Wrong email or password':d.error?.message==='EMAIL_EXISTS'?'Email already registered — try Login':'Auth failed: '+(d.error?.message||'unknown'));setAuthLoading(false);return;}
     _fbUser={uid:d.localId,email:d.email,idToken:d.idToken,refreshToken:d.refreshToken,expiresAt:Date.now()+3500000};
     storeUser(_fbUser);
+    if(_authMode==='signup'){await saveUserProfile(_fbUser);}
     await afterAuth();
   }catch(e){authErr('Network error — check your connection');}
   setAuthLoading(false);
@@ -508,6 +477,14 @@ async function afterAuth(){
   const synced=await syncFromCloud();
   renderPage(currentPage);
   if(!synced&&_authMode==='login')toast('No cloud data yet — your data will sync here automatically.');
+}
+
+async function saveUserProfile(user){
+  try{
+    const profile={email:user.email,uid:user.uid,createdAt:new Date().toISOString()};
+    await fetch(`${FB_URL}/users/${user.uid}/profile.json?auth=${user.idToken}`,
+      {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(profile)});
+  }catch(e){}
 }
 
 async function doLogout(){
