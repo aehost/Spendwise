@@ -1,0 +1,16 @@
+# Android build outputs
+android/app/build/
+android/build/
+android/.gradle/
+
+# Signing — NEVER commit these
+android/spendwise.keystore
+android/KEYSTORE_CREDENTIALS.txt
+android/keystore-base64.txt
+
+# Local Gradle config
+local.properties
+
+# IDE
+.idea/
+*.iml

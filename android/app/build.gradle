@@ -1,0 +1,66 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.spendwise.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "com.spendwise.app"
+        minSdk 26                  // Android 8.0+ (covers 95%+ of active devices)
+        targetSdk 34
+        versionCode 1
+        versionName "4.0.0"
+    }
+
+    signingConfigs {
+        release {
+            storeFile file('../spendwise.keystore')
+            storePassword System.getenv("KEYSTORE_PASS") ?: 'SpendWise@2025Pravveen'
+            keyAlias 'spendwise'
+            keyPassword System.getenv("KEY_PASS") ?: 'SpendWise@2025Pravveen'
+        }
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix ".debug"
+            versionNameSuffix "-debug"
+            debuggable true
+        }
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'),
+                          'proguard-rules.pro'
+            signingConfig signingConfigs.release
+        }
+    }
+
+    bundle {
+        language { enableSplit = false }
+        density  { enableSplit = true  }
+        abi      { enableSplit = true  }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    // Include HTML asset in the APK
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+}
+
+dependencies {
+    // AndroidX core
+    implementation 'androidx.appcompat:appcompat:1.7.0'
+
+    // Biometric authentication (fingerprint / face unlock)
+    implementation 'androidx.biometric:biometric:1.2.0-alpha05'
+}
