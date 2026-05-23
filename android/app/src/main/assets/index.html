@@ -61,12 +61,12 @@ button{cursor:pointer;border:none;background:none;}
 
 .form-group{margin-bottom:13px;}
 .form-label{font-size:11px;color:var(--muted);margin-bottom:5px;display:block;letter-spacing:0.3px;}
-.form-input{width:100%;background:#1A1A25;border:1.5px solid #1E1E2E;border-radius:12px;padding:12px 14px;color:#F1F1F5;-webkit-text-fill-color:#F1F1F5;font-size:15px;outline:none;transition:border-color 0.2s;}
+.form-input{width:100%;background:#000000;border:1.5px solid #1E1E2E;border-radius:12px;padding:12px 14px;color:#FFFFFF;-webkit-text-fill-color:#FFFFFF;font-size:15px;outline:none;transition:border-color 0.2s;}
 .form-input:focus{border-color:#6C63FF;}
-select.form-input{-webkit-appearance:none;appearance:none;background-color:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;}
+select.form-input{-webkit-appearance:none;appearance:none;background-color:#000000!important;color:#FFFFFF!important;-webkit-text-fill-color:#FFFFFF!important;}
 /* Force explicit colours on all form controls — prevents Android WebView white-on-white */
-input.form-input,textarea.form-input{background-color:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;}
-.modal-body input,.modal-body select,.modal-body textarea{background:#1A1A25!important;color:#F1F1F5!important;-webkit-text-fill-color:#F1F1F5!important;border-color:#1E1E2E!important;}
+input.form-input,textarea.form-input{background-color:#000000!important;color:#FFFFFF!important;-webkit-text-fill-color:#FFFFFF!important;}
+.modal-body input,.modal-body select,.modal-body textarea{background:#000000!important;color:#FFFFFF!important;-webkit-text-fill-color:#FFFFFF!important;border-color:#1E1E2E!important;}
 .form-row{display:flex;gap:10px;}.form-row .form-group{flex:1;}
 
 .tx-item{background:var(--card);border-radius:14px;padding:12px 14px;display:flex;align-items:center;gap:11px;margin-bottom:8px;border:1px solid var(--border);}
@@ -640,7 +640,6 @@ async function afterAuth(){
   else if(!S.salary.amount&&!S.bankBalance.amount&&!S.transactions.length){
     toast('Welcome! Start by setting your salary and adding transactions.');
   }
-  setTimeout(autoImportNewSMS,1200); // scan last 3 days of SMS after auth settles
   if(window._pendingIncomingSMS){
     const sms=window._pendingIncomingSMS;
     window._pendingIncomingSMS=null;
@@ -1345,7 +1344,19 @@ function exportCSV(){
   if(IS_ANDROID&&typeof AndroidBridge!=='undefined'){AndroidBridge.shareText('SpendWise_export_'+today()+'.csv',csv);toast('CSV shared ✓');return;}
   const a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);a.download='SpendWise_export.csv';a.click();toast('CSV exported ✓');
 }
-function clearData(){if(!confirm('Delete ALL data?'))return;localStorage.removeItem('sw_v4');S=JSON.parse(JSON.stringify(DEFAULT));renderPage(currentPage);toast('Data cleared');}
+async function clearData(){
+  if(!confirm('Delete ALL data? This will also wipe your cloud data.'))return;
+  localStorage.removeItem('sw_v4');
+  S=JSON.parse(JSON.stringify(DEFAULT));
+  renderPage(currentPage);
+  if(_fbUser){
+    toast('Clearing and syncing to cloud…');
+    await syncToCloud();
+    toast('✅ Data cleared and synced to cloud.');
+  } else {
+    toast('Data cleared');
+  }
+}
 async function forceSyncFromCloud(){
   if(!_fbUser){toast('Sign in first',true);return;}
   if(!confirm('Clear local cache and reload from Firebase?\n\nLocal changes not yet synced will be lost.'))return;

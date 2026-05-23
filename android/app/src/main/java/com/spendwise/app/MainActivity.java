@@ -231,17 +231,7 @@ public class MainActivity extends AppCompatActivity {
     @Override
     protected void onResume() {
         super.onResume();
-        if (webView != null) {
-            webView.onResume();
-            // Re-scan SMS inbox every time the app comes to foreground.
-            // This is the reliable fallback when SMSReceiver is killed by battery optimizers
-            // (common on Xiaomi/MIUI, Samsung One UI, OnePlus OxygenOS).
-            if (pageLoaded) {
-                webView.post(() -> webView.evaluateJavascript(
-                    "if(typeof autoImportNewSMS==='function'&&typeof _fbUser!=='undefined'&&_fbUser)autoImportNewSMS();",
-                    null));
-            }
-        }
+        if (webView != null) webView.onResume();
     }
 
     @Override
