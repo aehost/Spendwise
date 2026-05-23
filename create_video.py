@@ -36,10 +36,11 @@ except ImportError:
 from playwright.sync_api import sync_playwright
 
 # ── PATHS ──────────────────────────────────────────────────────────────────
-SCRIPT_DIR = Path(__file__).parent.resolve()
-WORK_DIR   = SCRIPT_DIR / "_video_work"
-OUTPUT     = SCRIPT_DIR / "SpendWise_Marketing_Video.mp4"
-HTML_FILE  = SCRIPT_DIR / "marketing-demo.html"
+SCRIPT_DIR  = Path(__file__).parent.resolve()
+WORK_DIR    = SCRIPT_DIR / "_video_work"
+OUTPUT      = SCRIPT_DIR / "SpendWise_Marketing_Video.mp4"
+HTML_FILE   = SCRIPT_DIR / "video-story.html"   # cartoon storyboard
+HTML_DEMO   = SCRIPT_DIR / "marketing-demo.html" # fallback landing page
 
 # ── VOICE SETTINGS ─────────────────────────────────────────────────────────
 # en-IN-PrabhatNeural = deep male Indian English neural voice
@@ -59,20 +60,6 @@ VOICEOVER_LINES = [
     "Your data never leaves your phone. No bank passwords. No subscriptions. No ads.",
     "Completely free. Always.",
     "Download SpendWise. Set up in thirty seconds. Finally — know where your money goes.",
-]
-
-# ── SCROLL TIMELINE ────────────────────────────────────────────────────────
-SCROLL_PLAN = [
-    (0,    8.0),
-    (550,  4.0),
-    (1150, 7.0),
-    (1900, 5.0),
-    (2700, 7.0),
-    (3500, 5.5),
-    (4200, 8.0),
-    (5000, 4.0),
-    (5700, 4.0),
-    (6300, 5.0),
 ]
 
 # ─────────────────────────────────────────────────────────────────────────
@@ -398,10 +385,15 @@ def generate_music(total_duration_sec):
     return output
 
 
-# ── STEP 3: RECORD BROWSER VIDEO ─────────────────────────────────────────
+# ── STEP 3: RECORD CARTOON STORYBOARD ────────────────────────────────────
+
+# video-story.html has 8 scenes totalling 75 seconds.
+# We just open it and wait — no scrolling needed. The scenes auto-advance.
+VIDEO_STORY_DURATION = 75   # seconds (must match TIMELINE sum in video-story.html)
 
 def record_browser(video_duration_sec):
-    banner(f"Recording animated demo in headless Chrome  (~{video_duration_sec:.0f} s)", step=3)
+    record_sec = max(video_duration_sec + 4, VIDEO_STORY_DURATION)
+    banner(f"Recording cartoon storyboard in headless Chrome  ({record_sec:.0f} s)", step=3)
 
     vid_dir = WORK_DIR / "playwright_video"
     vid_dir.mkdir(exist_ok=True)
@@ -413,9 +405,13 @@ def record_browser(video_duration_sec):
 
     url = HTML_FILE.as_uri()
     print(f"  Page: {url}")
+    print(f"  Recording {record_sec:.0f} s of cartoon animation — please wait...")
 
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, args=["--no-sandbox", "--disable-gpu"])
+        browser = pw.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-gpu", "--autoplay-policy=no-user-gesture-required"]
+        )
         ctx = browser.new_context(
             viewport={"width": 1280, "height": 720},
             record_video_dir=str(vid_dir),
@@ -424,32 +420,22 @@ def record_browser(video_duration_sec):
         )
         page = ctx.new_page()
 
-        print("  Loading page...")
+        print("  Loading cartoon scenes...")
         page.goto(url)
         page.wait_for_load_state("domcontentloaded")
-        time.sleep(3.5)
+        time.sleep(2.0)   # let first scene CSS animations initialise
 
-        page_h     = page.evaluate("() => document.body.scrollHeight")
-        max_scroll = max(0, page_h - 720)
-        print(f"  Page height: {page_h}px  |  Max scroll: {max_scroll}px")
-
-        def scroll_to(target_y, steps=30, delay=0.05):
-            current = page.evaluate("() => window.scrollY")
-            for i in range(1, steps + 1):
-                y = int(current + (target_y - current) * i / steps)
-                page.evaluate(f"window.scrollTo({{top:{y},behavior:'instant'}})")
-                time.sleep(delay)
-
-        print("  Scrolling through sections...")
-        for raw_y, pause in SCROLL_PLAN:
-            target_y = min(raw_y, max_scroll)
-            scroll_to(target_y)
-            pct = int(target_y / max(max_scroll, 1) * 100)
-            print(f"    -> {target_y}px ({pct}%)  pause {pause}s")
-            time.sleep(pause)
-
-        scroll_to(0, steps=60, delay=0.04)
-        time.sleep(2.5)
+        # Tick progress every 10 seconds so user sees activity
+        elapsed = 0
+        tick = 10
+        remaining = record_sec - 2
+        while remaining > 0:
+            wait = min(tick, remaining)
+            time.sleep(wait)
+            elapsed += wait
+            remaining -= wait
+            pct = min(100, int(elapsed / record_sec * 100))
+            print(f"    {elapsed:.0f} s / {record_sec:.0f} s  ({pct}%)")
 
         print("  Closing browser (saving recording)...")
         page.close()
@@ -537,8 +523,12 @@ def main():
         sys.exit(1)
 
     if not HTML_FILE.exists():
-        print(f"\nERROR: {HTML_FILE} not found.")
-        sys.exit(1)
+        if HTML_DEMO.exists():
+            print(f"  Warning: video-story.html not found — falling back to marketing-demo.html")
+            globals()['HTML_FILE'] = HTML_DEMO
+        else:
+            print(f"\nERROR: video-story.html not found in {SCRIPT_DIR}")
+            sys.exit(1)
 
     if args.clean and WORK_DIR.exists():
         print("  Cleaning previous work files...")
@@ -550,10 +540,11 @@ def main():
         t0 = time.time()
 
         vo_wav, vo_dur = generate_voiceover(ffmpeg)
-        music_wav      = generate_music(vo_dur)
-        webm           = record_browser(vo_dur)
-        mixed          = mix_audio(ffmpeg, vo_wav, music_wav, vo_dur)
-        produce_mp4(ffmpeg, webm, mixed, vo_dur)
+        video_dur      = max(vo_dur, VIDEO_STORY_DURATION)
+        music_wav      = generate_music(video_dur)
+        webm           = record_browser(video_dur)
+        mixed          = mix_audio(ffmpeg, vo_wav, music_wav, video_dur)
+        produce_mp4(ffmpeg, webm, mixed, video_dur)
 
         m, s = divmod(int(time.time() - t0), 60)
         print(f"\n{'='*58}")
