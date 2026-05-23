@@ -266,6 +266,8 @@ const _numFmt=(()=>{try{return new Intl.NumberFormat(_locale,{style:'currency',c
 function onAndroidSMSReady(){
   const btn=document.getElementById('sms-btn-indicator');
   if(btn){btn.style.color='var(--green)';btn.title='SMS access ready';}
+  // Permission just granted — scan inbox immediately for any missed transactions
+  if(_fbUser)setTimeout(scanNewSMS,800);
 }
 
 // ── REAL-TIME SMS HANDLER ────────────────────────────────────
@@ -453,6 +455,7 @@ const DEFAULT={
   loans:[],
   transactions:[],
   budgets:{food:5000,fuel:3000,shopping:5000,bills:2000,entertainment:1500,health:2000,travel:3000,other:2000},
+  lastSMSScanMs:0,
 };
 
 let S=JSON.parse(JSON.stringify(DEFAULT));
@@ -462,7 +465,7 @@ let txFilter='all';
 let _smsData=null;
 
 function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
-function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);const _inv=(i=>{if(Array.isArray(i))return i;if(i&&i.angelOne){const ao=i.angelOne;return(ao.monthlyAmount>0||ao.currentBalance>0)?[{id:1,name:'Angel One',monthlyAmount:ao.monthlyAmount||0,currentBalance:ao.currentBalance||0}]:[];}return[];})(p.investments);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,bankAccounts:p.bankAccounts||DEFAULT.bankAccounts,investments:_inv,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})}};}}catch(e){}}
+function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);const _inv=(i=>{if(Array.isArray(i))return i;if(i&&i.angelOne){const ao=i.angelOne;return(ao.monthlyAmount>0||ao.currentBalance>0)?[{id:1,name:'Angel One',monthlyAmount:ao.monthlyAmount||0,currentBalance:ao.currentBalance||0}]:[];}return[];})(p.investments);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,bankAccounts:p.bankAccounts||DEFAULT.bankAccounts,investments:_inv,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})},lastSMSScanMs:p.lastSMSScanMs||0};}}catch(e){}}
 
 // ── FIREBASE AUTH + FIRESTORE BACKEND ────────────────────────
 const FB_API_KEY='AIzaSyDyzzeh0ibIQn-ck3V3u-qASbNLElSBksE';
@@ -487,6 +490,7 @@ function _fromFsDoc(doc){return Object.fromEntries(Object.entries(doc.fields||{}
 
 // Merge cloud data into S — shared by Firestore and legacy Realtime DB paths
 function _applyCloudData(d){
+  const _scanMs=S.lastSMSScanMs||0; // device-local — don't let cloud overwrite it
   S={...DEFAULT,...d,
     bankBalance:d.bankBalance||DEFAULT.bankBalance,
     bankAccounts:d.bankAccounts||DEFAULT.bankAccounts,
@@ -495,7 +499,8 @@ function _applyCloudData(d){
     creditCards:d.creditCards||DEFAULT.creditCards,
     loans:d.loans||DEFAULT.loans,
     salary:{...DEFAULT.salary,...(d.salary||{}),history:(d.salary&&d.salary.history)||[]},
-    budgets:{...DEFAULT.budgets,...(d.budgets||{})}};
+    budgets:{...DEFAULT.budgets,...(d.budgets||{})},
+    lastSMSScanMs:_scanMs}; // restore device-local timestamp
   localStorage.setItem('sw_v4',JSON.stringify(S));
   localStorage.setItem('sw_last_sync',new Date().toISOString());
 }
@@ -659,6 +664,8 @@ async function afterAuth(){
     window._pendingIncomingSMS=null;
     onIncomingSMS(sms);
   }
+  // Scan SMS inbox for any transactions missed while app was closed or receiver was killed
+  if(IS_ANDROID)setTimeout(scanNewSMS,2000);
 }
 
 async function saveUserProfile(user){
@@ -758,19 +765,47 @@ function guessCat(m){
   return'other';
 }
 function parseSMS(msg){
-  const a=msg.match(/(?:Rs\.?|INR|₹|\$|USD|£|GBP|€|EUR|AUD|CAD|SGD|AED|SAR|PKR|LKR|NPR|BDT|NGN|MYR|JPY|CNY|KRW|RUB|TRY|IDR|THB|VND)\s*([\d,]+(?:\.\d+)?)/i);
+  // Amount — handles Rs., INR, ₹ and common variants
+  const a=msg.match(/(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d+)?)/i);
   const amount=a?parseFloat(a[1].replace(/,/g,'')):0;
-  const atM=msg.match(/at\s+([A-Z][A-Z0-9\s&']+?)(?:\s+on|\s*\.|Avail|Bal|$)/);
-  const upiM=msg.match(/UPI\/[A-Z0-9]+\/\d+\/([^\n\/]+)/i);
-  const empM=msg.match(/Employer:\s*([^\.]+)/i);
-  const merchant=(atM&&atM[1].trim())||(upiM&&upiM[1].trim())||(empM&&empM[1].trim())||'Unknown';
-  const isCredit=/credited|credit|salary|received|refund|cashback|deposit/i.test(msg);
-  const isDebit=/debited|debit|deducted|payment|spent|purchase|withdrawn/i.test(msg);
-  const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\s*Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
+
+  // Credit/Debit — whole-word matches to avoid false positives
+  const isCredit=/\b(?:credited|credit|salary|received|refund|cashback|deposit|reversal)\b/i.test(msg);
+  const isDebit=/\b(?:debited|debit(?:ed)?|deducted|payment|spent|purchase|withdrawn|paid|charged)\b/i.test(msg);
+
+  // Merchant extraction — tried in priority order
+  // 1. Name in parentheses e.g. "to xyz@upi (Swiggy)"  — HDFC UPI format
+  const parenM=msg.match(/\(([A-Za-z][A-Za-z0-9\s&'._-]{1,40})\)/);
+  // 2. "spent at / paid at / at MerchantName"
+  const atM=msg.match(/(?:spent at|paid at|payment at|purchase at|\bat)\s+([A-Za-z0-9][A-Za-z0-9\s&'._-]{1,35}?)(?:\s+on\s|\s*[,.]\s*(?:Avail|Avl|Bal|A\/[Cc])|\s*Avail|\s*Avl|\s*Bal|$)/i);
+  // 3. "towards / toward MerchantName" — ICICI/Axis format
+  const towardsM=msg.match(/towards?\s+([A-Za-z0-9][A-Za-z0-9\s&'._-]{1,35}?)(?:\s+on\s|\s*[,.]\s*(?:Avail|Avl|Bal)|\s*Avail|\s*Avl|\s*Bal|$)/i);
+  // 4. UPI description field e.g. "UPI/123456/987654/Swiggy"
+  const upiM=msg.match(/UPI[\/\-][A-Z0-9]{5,}[\/\-][A-Z0-9]{5,}[\/\-]([^\n\/]{3,40})(?:\/|\.|\n|$)/i);
+  // 5. "transferred to Name" — SBI NEFT/IMPS
+  const toM=msg.match(/(?:transferred?|trf)\s+to\s+([A-Za-z][A-Za-z0-9\s]{2,30}?)(?:\.|Avail|Avl|Bal|on\s|$)/i);
+  // 6. Employer / salary credit
+  const empM=msg.match(/(?:Employer|employer)[:\s]+([A-Za-z][^\.\n]{3,40})/i);
+  // 7. "for XYZ payment / transfer"
+  const forM=msg.match(/for\s+([A-Za-z][A-Za-z0-9\s&'._-]{2,30}?)\s+(?:payment|transfer|txn)/i);
+
+  const merchant=(parenM&&parenM[1].trim())
+    ||(atM&&atM[1].trim())
+    ||(towardsM&&towardsM[1].trim())
+    ||(upiM&&upiM[1].trim())
+    ||(toM&&toM[1].trim())
+    ||(empM&&empM[1].trim())
+    ||(forM&&forM[1].trim())
+    ||'Bank Transaction';
+
+  // Available balance — covers Avail Bal, Avl Bal, Balance, Bal
+  const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\.?\s*Bal\.?|Bal(?:ance)?)[\s:=]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d+)?)/i);
   const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
-  // Extract last 4 digits of account number from SMS (A/c XX1234, account ending 1234, etc.)
+
+  // Account last 4 digits — A/c XX1234, account ending 1234, acct 9087, etc.
   const acctM=msg.match(/(?:a[\/.]?c[\s.]*(?:no\.?\s*)?|account\s*(?:no\.?\s*)?|acct?\.?\s*(?:ending\s*)?|ending\s+)(?:[X*x•\s]*)(\d{4})\b/i);
   const accountLast4=acctM?acctM[1]:null;
+
   return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal,accountLast4};
 }
 
@@ -837,6 +872,104 @@ function autoImportNewSMS(){
     });
     if(added>0){save();renderPage(currentPage);toast(`📩 ${added} bank transaction${added>1?'s':''} auto-imported from SMS`);}
   }catch(e){}
+}
+
+// ── TIMESTAMP-BASED SMS SCAN ─────────────────────────────────
+// Reliable fallback for when BroadcastReceiver is killed by battery optimizer.
+// Reads the SMS inbox filtered by millisecond timestamp so we only process new messages.
+// Called: on app open, every 45 s, and when SMS permission is first granted.
+function scanNewSMS(){
+  if(!IS_ANDROID||!_fbUser)return;
+  try{
+    if(!AndroidBridge.hasSMSPermission())return;
+    const now=Date.now();
+    // First run: look back 24 h. Subsequent runs: strictly after last scan.
+    const since=S.lastSMSScanMs>0?S.lastSMSScanMs:(now-86400000);
+
+    // getBankSMS(2) = last 48 h. Timestamp filter does the precise work.
+    const raw=AndroidBridge.getBankSMS(2);
+    if(!raw||raw==='[]'){S.lastSMSScanMs=now;save();return;}
+    const list=JSON.parse(raw);
+    if(!list||!list.length){S.lastSMSScanMs=now;save();return;}
+
+    // Only messages strictly newer than last scan (ms precision)
+    const newSMS=list.filter(s=>Number(s.date)>since);
+    if(!newSMS.length){S.lastSMSScanMs=now;save();return;}
+
+    // Dedup: by smsRaw content (primary) and SMS database id (secondary)
+    const seenBody=new Set(S.transactions.filter(t=>t.smsRaw).map(t=>t.smsRaw));
+    const seenId=new Set(S.transactions.filter(t=>t.smsId).map(t=>String(t.smsId)));
+
+    let added=0;
+    // Process oldest-first so balance updates are chronologically correct
+    newSMS.sort((a,b)=>Number(a.date)-Number(b.date));
+
+    newSMS.forEach(s=>{
+      const smsId=String(s.id||'');
+      const body=(s.body||'').trim();
+      if(!body)return;
+      const key=body.substring(0,200);
+      if(seenBody.has(key))return;        // already recorded by body content
+      if(smsId&&seenId.has(smsId))return; // already recorded by SMS db id
+
+      const p=parseSMS(body);
+      if(!p.amount||p.amount<=0)return;
+      if(!p.isCredit&&!p.isDebit)return;  // not a transaction message
+
+      const smsTs=Number(s.date)||now;
+      const txDate=new Date(smsTs).toISOString().split('T')[0];
+      const acct=matchAccount(p.accountLast4);
+      const accountId=acct?acct.id:null;
+      const isSalary=/\b(salary|sal\s*credit|payroll|employer)\b/i.test(body);
+
+      S.transactions.push({
+        id:smsTs+added,                   // ms timestamp — unique and chronologically sortable
+        amount:p.amount,
+        merchant:p.merchant||'Bank Transaction',
+        category:isSalary?'income':'other',
+        date:txDate,
+        note:'',isWaste:false,
+        isPending:!isSalary,
+        loanId:null,creditCardId:null,contactName:'',
+        isCredit:p.isCredit||isSalary,
+        smsRaw:key,
+        smsId:smsId||null,               // store db id for future dedup
+        accountId,
+      });
+
+      // Update bank balance — use SMS available balance if present (most accurate)
+      if(p.bankBal){
+        if(acct){acct.balance=p.bankBal;acct.lastUpdated=txDate;recalcBankBalance();}
+        else{S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+      } else if(p.amount>0){
+        if(acct){
+          acct.balance=Math.max(0,(acct.balance||0)+(p.isCredit?p.amount:-p.amount));
+          acct.lastUpdated=txDate;recalcBankBalance();
+        } else {
+          const cur=S.bankBalance.amount||0;
+          const delta=p.isCredit?p.amount:-p.amount;
+          if(cur>0||p.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:txDate};
+        }
+      }
+
+      if(isSalary&&!salaryThisMonth()){
+        S.salary.history.push({amount:p.amount,date:txDate,note:'Auto-imported from SMS'});
+        if(!S.salary.amount)S.salary.amount=p.amount;
+      }
+
+      seenBody.add(key);
+      if(smsId)seenId.add(smsId);
+      added++;
+    });
+
+    S.lastSMSScanMs=now;
+    if(added>0){
+      save();renderPage(currentPage);
+      toast(`📩 ${added} new transaction${added>1?'s':''} found`);
+    } else {
+      save(); // persist updated lastSMSScanMs even when nothing new found
+    }
+  }catch(e){/* silent — will retry on next interval */}
 }
 
 // ── NAVIGATION ───────────────────────────────────────────────
@@ -2101,7 +2234,7 @@ updateClock();
 setInterval(updateClock,30000);
 renderPage('home');
 
-// Poll for pending SMS every 5 s — drains the full queue to handle simultaneous bank SMS
+// Fast path: drain BroadcastReceiver queue every 5 s (handles notification-tap delivery)
 if(IS_ANDROID){
   setInterval(()=>{
     if(!_fbUser)return;
@@ -2116,6 +2249,9 @@ if(IS_ANDROID){
       }
     }catch(e){}
   },5000);
+  // Reliable path: timestamp-based inbox scan every 45 s
+  // Catches debit/credit SMS missed when battery optimizer kills the BroadcastReceiver
+  setInterval(()=>{if(_fbUser)scanNewSMS();},45000);
 }
 // Check for existing session → skip login screen if token can be refreshed
 (async()=>{
