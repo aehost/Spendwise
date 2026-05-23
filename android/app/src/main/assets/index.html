@@ -167,6 +167,17 @@ html.sw-android #app{padding-top:52px;}
 html.sw-android #nav{padding-bottom:8px;}
 html.sw-android #toast{bottom:80px;}
 
+/* ── FIRST-INSTALL SETUP SCREEN ──────────────────────────────── */
+#setup-screen{position:fixed;inset:0;background:var(--bg);z-index:1000;display:none;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px;overflow-y:auto;text-align:center;}
+#setup-screen .setup-logo{font-size:56px;margin-bottom:10px;}
+#setup-screen .setup-brand{font-size:30px;font-weight:900;background:linear-gradient(135deg,#6C63FF,#EC4899);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:6px;}
+#setup-screen .setup-welcome{font-size:22px;font-weight:800;color:var(--text);margin:20px 0 10px;}
+#setup-screen .setup-desc{font-size:14px;color:var(--muted);line-height:1.65;margin-bottom:32px;}
+#setup-screen .setup-box{width:100%;max-width:370px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:22px 20px;margin-bottom:24px;text-align:left;}
+#setup-screen .setup-box-label{font-size:11px;font-weight:700;color:var(--muted2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:12px;}
+#setup-screen .setup-note{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.5;}
+#setup-screen .setup-btn{width:100%;max-width:370px;padding:17px;font-size:17px;font-weight:800;border-radius:16px;background:linear-gradient(135deg,#6C63FF,#8B5CF6);color:#fff;border:none;letter-spacing:0.3px;box-shadow:0 4px 24px rgba(108,99,255,0.4);}
+#setup-screen .setup-skip{font-size:12px;color:var(--muted);margin-top:18px;cursor:pointer;text-decoration:underline;}
 /* ── AUTH SCREEN ─────────────────────────────────────────────── */
 #auth-screen{position:fixed;inset:0;background:var(--bg);z-index:999;display:none;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow-y:auto;}
 .auth-logo{font-size:48px;margin-bottom:6px;text-align:center;}
@@ -188,6 +199,31 @@ html.sw-android #toast{bottom:80px;}
     <span id="clock"></span>
   </div>
 </div>
+<!-- ── FIRST-INSTALL SETUP SCREEN ── -->
+<div id="setup-screen">
+  <div class="setup-logo">₹</div>
+  <div class="setup-brand">SpendWise</div>
+  <div class="setup-welcome">Welcome! 🎉</div>
+  <div class="setup-desc">
+    SpendWise reads your bank SMS messages<br>
+    to track every transaction automatically.<br>
+    No logins to your bank. 100% private.
+  </div>
+
+  <div class="setup-box">
+    <div class="setup-box-label">📅 Start tracking from</div>
+    <input type="date" id="setup-date" class="form-input"
+           style="width:100%;font-size:16px;padding:13px 14px;">
+    <div class="setup-note">
+      SpendWise will import bank SMS messages from this date onwards.<br>
+      <b style="color:var(--text);">Default is today</b> — change only if you want to import older transactions.
+    </div>
+  </div>
+
+  <button class="setup-btn" onclick="completeFirstInstall()">Get Started →</button>
+  <div class="setup-skip" onclick="completeFirstInstall(true)">Skip — use today's date</div>
+</div>
+
 <!-- ── AUTH SCREEN (shown on first launch / new install) ── -->
 <div id="auth-screen">
   <div class="auth-logo" id="auth-logo">₹</div>
@@ -572,6 +608,39 @@ async function ensureFreshToken(){
 }
 
 // ── AUTH UI ───────────────────────────────────────────────────
+// ── FIRST-INSTALL SETUP ───────────────────────────────────────
+function showFirstInstallSetup(){
+  const el=document.getElementById('setup-screen');
+  if(!el)return;
+  // Populate date picker — default today, min 1 year ago
+  const inp=document.getElementById('setup-date');
+  if(inp){
+    const t=today(); // YYYY-MM-DD
+    inp.value=t;
+    inp.max=t;
+    const d=new Date();d.setFullYear(d.getFullYear()-1);
+    inp.min=d.toISOString().split('T')[0];
+  }
+  el.style.display='flex';
+}
+
+function completeFirstInstall(useToday){
+  const inp=document.getElementById('setup-date');
+  const val=(useToday||!inp||!inp.value)?today():inp.value;
+  // Parse to LOCAL midnight in ms so the filter is exact
+  const parts=val.split('-');
+  const scanMs=new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]),0,0,0,0).getTime();
+  // Reset state and stamp the chosen start point
+  S=JSON.parse(JSON.stringify(DEFAULT));
+  S.lastSMSScanMs=scanMs;
+  localStorage.setItem('sw_setup_done','1');
+  save();
+  // Hide setup screen, proceed to auth
+  const el=document.getElementById('setup-screen');
+  if(el)el.style.display='none';
+  showAuthScreen();
+}
+
 function showAuthScreen(){
   document.getElementById('auth-screen').style.display='flex';
 }
@@ -2253,8 +2322,17 @@ if(IS_ANDROID){
   // Catches debit/credit SMS missed when battery optimizer kills the BroadcastReceiver
   setInterval(()=>{if(_fbUser)scanNewSMS();},45000);
 }
-// Check for existing session → skip login screen if token can be refreshed
+// ── STARTUP ───────────────────────────────────────────────────
+// First install: clear any stale storage and show date-selection setup.
+// Returning user: attempt token refresh and skip login screen.
 (async()=>{
+  const setupDone=localStorage.getItem('sw_setup_done');
+  if(!setupDone){
+    // Fresh install — wipe any stale localStorage from a previous install
+    localStorage.clear();
+    showFirstInstallSetup();
+    return; // showAuthScreen() is called after user completes setup
+  }
   const user=getStoredUser();
   if(user&&user.refreshToken){
     _fbUser=user;
