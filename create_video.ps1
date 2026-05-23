@@ -1,5 +1,5 @@
 # ============================================================
-#  SpendWise Video Creator — Automated Setup & Launcher
+#  SpendWise Video Creator ? Automated Setup & Launcher
 #  Double-click this file or run in PowerShell terminal
 #  Output: SpendWise_Marketing_Video.mp4 (same folder)
 # ============================================================
@@ -13,7 +13,7 @@ Write-Host "  SpendWise Automated Video Creator" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host ""
 
-# ── 1. CHECK PYTHON ──────────────────────────────────────────
+# ?? 1. CHECK PYTHON ??????????????????????????????????????????
 Write-Host "[1/5] Checking Python..." -ForegroundColor Yellow
 $pythonCmd = $null
 foreach ($cmd in @("python", "python3", "py")) {
@@ -40,12 +40,12 @@ if (!$pythonCmd) {
     Write-Host "      Python installed." -ForegroundColor Green
 }
 
-# ── 2. INSTALL PIP PACKAGES ──────────────────────────────────
+# ?? 2. INSTALL PIP PACKAGES ??????????????????????????????????
 Write-Host ""
 Write-Host "[2/5] Installing Python packages..." -ForegroundColor Yellow
-Write-Host "      (playwright, gtts, numpy, requests — may take 2-3 minutes first run)" -ForegroundColor Gray
+Write-Host "      (playwright, edge-tts, numpy, requests - may take 2-3 minutes first run)" -ForegroundColor Gray
 
-$packages = @("playwright", "gtts", "numpy", "requests")
+$packages = @("playwright", "edge-tts", "numpy", "requests")
 foreach ($pkg in $packages) {
     Write-Host "      Installing $pkg..." -ForegroundColor Gray
     & $pythonCmd -m pip install $pkg -q --disable-pip-version-check 2>&1 | Out-Null
@@ -56,7 +56,7 @@ Write-Host "      Installing Playwright Chromium browser..." -ForegroundColor Gr
 & $pythonCmd -m playwright install chromium 2>&1 | Out-Null
 Write-Host "      Packages ready." -ForegroundColor Green
 
-# ── 3. GET FFMPEG ─────────────────────────────────────────────
+# ?? 3. GET FFMPEG ?????????????????????????????????????????????
 Write-Host ""
 Write-Host "[3/5] Checking ffmpeg..." -ForegroundColor Yellow
 
@@ -98,7 +98,7 @@ if ($sysffmpeg) {
     Write-Host "      ffmpeg installed." -ForegroundColor Green
 }
 
-# ── 4. VERIFY ASSETS EXIST ────────────────────────────────────
+# ?? 4. VERIFY ASSETS EXIST ????????????????????????????????????
 Write-Host ""
 Write-Host "[4/5] Verifying assets..." -ForegroundColor Yellow
 $htmlFile = Join-Path $ScriptDir "marketing-demo.html"
@@ -109,7 +109,7 @@ if (!(Test-Path $htmlFile)) {
 }
 Write-Host "      marketing-demo.html found." -ForegroundColor Green
 
-# ── 5. RUN VIDEO CREATOR ──────────────────────────────────────
+# ?? 5. RUN VIDEO CREATOR ??????????????????????????????????????
 Write-Host ""
 Write-Host "[5/5] Launching video creator..." -ForegroundColor Yellow
 Write-Host "      This will take 5-10 minutes. Do not close this window." -ForegroundColor Gray
