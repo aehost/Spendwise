@@ -278,19 +278,30 @@ function onIncomingSMS(sms){
     return;
   }
   const p=parseSMS(sms.body);
+  const acct=matchAccount(p.accountLast4);
+  const accountId=acct?acct.id:null;
 
   // Save a pending tx immediately so it shows in Spends even if user skips
   const pendingId=Date.now();
   S.transactions.push({id:pendingId,amount:p.amount,merchant:p.merchant||'Bank Transaction',
     category:'other',date:today(),note:'',isWaste:false,isPending:true,
-    loanId:null,creditCardId:null,contactName:'',isCredit:p.isCredit,smsRaw:sms.body.substring(0,200)});
-  // Immediately update bank balance so all panels reflect the debit/credit
+    loanId:null,creditCardId:null,contactName:'',isCredit:p.isCredit,
+    smsRaw:sms.body.substring(0,200),accountId});
+  // Update bank balance — per-account if matched, otherwise global
   if(p.bankBal){
-    S.bankBalance={amount:p.bankBal,lastUpdated:today()};
+    if(acct){acct.balance=p.bankBal;acct.lastUpdated=today();recalcBankBalance();}
+    else{S.bankBalance={amount:p.bankBal,lastUpdated:today()};}
   } else if(p.amount>0){
-    const cur=S.bankBalance.amount||0;
-    const delta=p.isCredit?p.amount:-p.amount;
-    if(cur>0||p.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+    if(acct){
+      const delta=p.isCredit?p.amount:-p.amount;
+      acct.balance=Math.max(0,(acct.balance||0)+delta);
+      acct.lastUpdated=today();
+      recalcBankBalance();
+    } else {
+      const cur=S.bankBalance.amount||0;
+      const delta=p.isCredit?p.amount:-p.amount;
+      if(cur>0||p.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+    }
   }
   save();
   renderPage(currentPage);
@@ -298,6 +309,7 @@ function onIncomingSMS(sms){
   _smsData=p;
   _smsData._pendingId=pendingId;
   _smsData._balUpdated=true; // skip balance update in saveSMSTx to prevent double-update
+  _smsData._accountId=accountId;
   const guessed=guessCat(p.merchant);
   _smsData._cat=guessed;
   closeModal();
@@ -429,6 +441,7 @@ const DEFAULT={
   profile:{name:''},
   salary:{amount:0,expectedDay:1,history:[]},
   bankBalance:{amount:0,lastUpdated:''},
+  bankAccounts:[],
   investments:[],
   mandatoryBills:[
     {id:1,name:'Internet',icon:'🌐',amount:0,dueDay:5,paidThisMonth:false},
@@ -449,7 +462,7 @@ let txFilter='all';
 let _smsData=null;
 
 function save(){localStorage.setItem('sw_v4',JSON.stringify(S));debouncedSync();}
-function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);const _inv=(i=>{if(Array.isArray(i))return i;if(i&&i.angelOne){const ao=i.angelOne;return(ao.monthlyAmount>0||ao.currentBalance>0)?[{id:1,name:'Angel One',monthlyAmount:ao.monthlyAmount||0,currentBalance:ao.currentBalance||0}]:[];}return[];})(p.investments);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,investments:_inv,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})}};}}catch(e){}}
+function load(){try{const d=localStorage.getItem('sw_v4');if(d){const p=JSON.parse(d);const _inv=(i=>{if(Array.isArray(i))return i;if(i&&i.angelOne){const ao=i.angelOne;return(ao.monthlyAmount>0||ao.currentBalance>0)?[{id:1,name:'Angel One',monthlyAmount:ao.monthlyAmount||0,currentBalance:ao.currentBalance||0}]:[];}return[];})(p.investments);S={...DEFAULT,...p,bankBalance:p.bankBalance||DEFAULT.bankBalance,bankAccounts:p.bankAccounts||DEFAULT.bankAccounts,investments:_inv,mandatoryBills:p.mandatoryBills||DEFAULT.mandatoryBills,creditCards:p.creditCards||DEFAULT.creditCards,loans:p.loans||DEFAULT.loans,salary:{...DEFAULT.salary,...(p.salary||{}),history:(p.salary&&p.salary.history)||[]},budgets:{...DEFAULT.budgets,...(p.budgets||{})}};}}catch(e){}}
 
 // ── FIREBASE AUTH + FIRESTORE BACKEND ────────────────────────
 const FB_API_KEY='AIzaSyDyzzeh0ibIQn-ck3V3u-qASbNLElSBksE';
@@ -476,6 +489,7 @@ function _fromFsDoc(doc){return Object.fromEntries(Object.entries(doc.fields||{}
 function _applyCloudData(d){
   S={...DEFAULT,...d,
     bankBalance:d.bankBalance||DEFAULT.bankBalance,
+    bankAccounts:d.bankAccounts||DEFAULT.bankAccounts,
     investments:(i=>{if(Array.isArray(i))return i;if(i&&i.angelOne){const ao=i.angelOne;return(ao.monthlyAmount>0||ao.currentBalance>0)?[{id:1,name:'Angel One',monthlyAmount:ao.monthlyAmount||0,currentBalance:ao.currentBalance||0}]:[];}return[];})(d.investments),
     mandatoryBills:d.mandatoryBills||DEFAULT.mandatoryBills,
     creditCards:d.creditCards||DEFAULT.creditCards,
@@ -754,7 +768,21 @@ function parseSMS(msg){
   const isDebit=/debited|debit|deducted|payment|spent|purchase|withdrawn/i.test(msg);
   const balM=msg.match(/(?:Avail(?:able)?\s*Bal(?:ance)?|Avl\s*Bal|Bal(?:ance)?)[\s:]*(?:Rs\.?|INR|₹|\$|£|€)?\s*([\d,]+)/i);
   const bankBal=balM?parseFloat(balM[1].replace(/,/g,'')):null;
-  return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal};
+  // Extract last 4 digits of account number from SMS (A/c XX1234, account ending 1234, etc.)
+  const acctM=msg.match(/(?:a[\/.]?c[\s.]*(?:no\.?\s*)?|account\s*(?:no\.?\s*)?|acct?\.?\s*(?:ending\s*)?|ending\s+)(?:[X*x•\s]*)(\d{4})\b/i);
+  const accountLast4=acctM?acctM[1]:null;
+  return{amount,merchant:merchant.trim(),isCredit,isDebit,bankBal,accountLast4};
+}
+
+const ACCT_COLORS=['#6C63FF','#22C55E','#F59E0B','#EC4899','#06B6D4','#EF4444','#8B5CF6','#14B8A6'];
+function matchAccount(last4){
+  if(!last4||!S.bankAccounts||!S.bankAccounts.length)return null;
+  return S.bankAccounts.find(a=>a.last4===last4)||null;
+}
+function recalcBankBalance(){
+  if(!S.bankAccounts||!S.bankAccounts.length)return;
+  const total=S.bankAccounts.reduce((s,a)=>s+(a.balance||0),0);
+  S.bankBalance={amount:total,lastUpdated:today()};
 }
 
 // Auto-scan SMS inbox for unrecorded bank transactions (last 3 days).
@@ -776,6 +804,8 @@ function autoImportNewSMS(){
       const p=parseSMS(body);
       if(!p.amount||p.amount<=0)return;
       const txDate=s.date?new Date(s.date).toISOString().split('T')[0]:today();
+      const acct=matchAccount(p.accountLast4);
+      const accountId=acct?acct.id:null;
       // Detect salary credit
       const isSalary=/\b(salary|sal credit|payroll|employer)\b/i.test(body);
       const txCat=isSalary?'income':'other';
@@ -783,15 +813,19 @@ function autoImportNewSMS(){
         id:Date.now()+added,amount:p.amount,
         merchant:p.merchant||'Bank Transaction',
         category:txCat,date:txDate,note:'',isWaste:false,
-        isPending:!isSalary, // salary auto-confirmed; others need tagging
+        isPending:!isSalary,
         loanId:null,creditCardId:null,contactName:'',
-        isCredit:p.isCredit||isSalary,smsRaw:key});
-      // Update bank balance from Avl Bal only when this SMS is NEWER than stored balance
-      // (prevents old inbox SMS from overwriting a Firebase-synced or manually-set balance)
+        isCredit:p.isCredit||isSalary,smsRaw:key,accountId});
+      // Update balance — per-account if matched, else global (only if SMS is newer)
       if(p.bankBal){
         const smsTs=s.date||0;
-        const balTs=S.bankBalance.lastUpdated?new Date(S.bankBalance.lastUpdated).getTime():0;
-        if(smsTs>balTs){S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+        if(acct){
+          const balTs=acct.lastUpdated?new Date(acct.lastUpdated).getTime():0;
+          if(smsTs>balTs){acct.balance=p.bankBal;acct.lastUpdated=txDate;recalcBankBalance();}
+        } else {
+          const balTs=S.bankBalance.lastUpdated?new Date(S.bankBalance.lastUpdated).getTime():0;
+          if(smsTs>balTs){S.bankBalance={amount:p.bankBal,lastUpdated:txDate};}
+        }
       }
       // Auto-record salary history if not already this month
       if(isSalary&&!salaryThisMonth()){
@@ -920,9 +954,26 @@ function renderHome(){
         <div style="font-size:10px;color:var(--muted);margin-top:4px;">${salAmt?fmtFull(salAmt)+' salary':'Not set'}</div>
       </div>
       <div class="card" style="margin-bottom:0;border-radius:16px;padding:14px;border-color:${bankAmt>0?'#22C55E33':'var(--border)'};">
-        <div class="label">Bank Balance</div>
-        <div style="font-size:22px;font-weight:900;color:${bankAmt>0?'var(--green)':'var(--muted)'};">${bankAmt>0?fmtFull(bankAmt):'—'}</div>
-        <div style="font-size:10px;color:var(--muted);margin-top:4px;">${S.bankBalance.lastUpdated?'Updated '+fmtDate(S.bankBalance.lastUpdated):'Not updated'}</div>
+        <div onclick="${S.bankAccounts&&S.bankAccounts.length>0?'toggleBankBreakdown()':''}" style="${S.bankAccounts&&S.bankAccounts.length>0?'cursor:pointer;':''}display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <div class="label">Bank Balance${S.bankAccounts&&S.bankAccounts.length>0?` <span style="color:var(--muted);font-size:9px;">(${S.bankAccounts.length} acct${S.bankAccounts.length>1?'s':''})</span>`:''}</div>
+            <div style="font-size:22px;font-weight:900;color:${bankAmt>0?'var(--green)':'var(--muted)'};">${bankAmt>0?fmtFull(bankAmt):'—'}</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">${S.bankBalance.lastUpdated?'Updated '+fmtDate(S.bankBalance.lastUpdated):'Not updated'}</div>
+          </div>
+          ${S.bankAccounts&&S.bankAccounts.length>0?`<div id="bank-chevron" style="font-size:12px;color:var(--muted);padding-top:2px;">▼</div>`:''}
+        </div>
+        ${S.bankAccounts&&S.bankAccounts.length>0?`<div id="bank-breakdown" style="display:none;margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+          ${S.bankAccounts.map(a=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;">
+            <div style="display:flex;align-items:center;gap:7px;">
+              <div style="width:8px;height:8px;border-radius:50%;background:${a.color};flex-shrink:0;"></div>
+              <div><div style="font-size:12px;font-weight:600;">${a.name}</div>${a.last4?`<div style="font-size:9px;color:var(--muted);">...${a.last4}</div>`:''}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:13px;font-weight:700;color:${(a.balance||0)>0?'var(--green)':'var(--muted)'};">${fmtFull(a.balance||0)}</div>
+              ${a.lastUpdated?`<div style="font-size:9px;color:var(--muted);">${fmtDate(a.lastUpdated)}</div>`:''}
+            </div>
+          </div>`).join('')}
+        </div>`:''}
         <button onclick="openBankBalance()" style="font-size:10px;color:var(--accent);margin-top:6px;font-weight:600;">Update →</button>
       </div>
     </div>
@@ -989,12 +1040,12 @@ function fmtDateTime(tx){
 
 function txHTML(tx,showDel){
   const c=cat(tx.category);
-  // isInc: income category OR a credited family/other transfer
   const isInc=tx.category==='income'||(tx.isCredit===true&&tx.category!=='family'?false:tx.isCredit===true&&tx.category==='family');
   const isCreditTx=tx.category==='income'||tx.isCredit===true;
   const isFamily=tx.category==='family';
   const loanName=tx.loanId?S.loans.find(l=>l.id===tx.loanId):null;
   const ccName=tx.creditCardId?S.creditCards.find(cc=>cc.id===tx.creditCardId):null;
+  const acct=tx.accountId&&S.bankAccounts?S.bankAccounts.find(a=>a.id===tx.accountId):null;
   const amtColor=isCreditTx?'var(--green)':'var(--red)';
   const amtSign=isCreditTx?'+':'-';
   return`<div class="tx-item ${tx.isPending?'pending':''}">
@@ -1008,6 +1059,7 @@ function txHTML(tx,showDel){
         ${loanName?`<span class="tag tag-loan">🏦 ${loanName.name}</span>`:''}
         ${ccName?`<span class="tag tag-card">💴 ${ccName.name}</span>`:''}
         ${isFamily?`<span class="tag tag-family">👨‍👩‍👧 ${tx.isCredit?'RECEIVED':'SENT'}</span>`:''}
+        ${acct?`<span style="font-size:9px;color:${acct.color};background:${acct.color}15;border:1px solid ${acct.color}30;border-radius:4px;padding:1px 5px;font-weight:600;">${acct.name.split(' ')[0]}${acct.last4?' ...'+acct.last4:''}</span>`:''}
       </div>
     </div>
     <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
@@ -1025,7 +1077,10 @@ function txHTML(tx,showDel){
 // ── SPENDS ───────────────────────────────────────────────────
 function renderTx(){
   const all=[...S.transactions].sort((a,b)=>{const d=b.date.localeCompare(a.date);return d!==0?d:(b.id||0)-(a.id||0);});
-  const filtered=txFilter==='all'?all:txFilter==='pending'?all.filter(t=>t.isPending):all.filter(t=>t.category===txFilter);
+  const filtered=txFilter==='all'?all
+    :txFilter==='pending'?all.filter(t=>t.isPending)
+    :txFilter.startsWith('acct_')?all.filter(t=>t.accountId===parseInt(txFilter.slice(5)))
+    :all.filter(t=>t.category===txFilter);
   document.getElementById('page-tx').innerHTML=`
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
       <div class="sec-title" style="margin-bottom:0;">Transactions (${filtered.length})</div>
@@ -1037,6 +1092,7 @@ function renderTx(){
     <div class="chip-scroll">
       <span class="chip" style="${txFilter==='all'?'background:#6C63FF18;color:var(--accent);border-color:#6C63FF33;':''}" onclick="setTxFilter('all')">All</span>
       <span class="chip" style="${txFilter==='pending'?'background:#F59E0B18;color:var(--amber);border-color:#F59E0B33;':''}" onclick="setTxFilter('pending')">⏳ Pending</span>
+      ${(S.bankAccounts&&S.bankAccounts.length>0)?S.bankAccounts.map(a=>`<span class="chip" style="${txFilter==='acct_'+a.id?`background:${a.color}18;color:${a.color};border-color:${a.color}33;`:''}" onclick="setTxFilter('acct_${a.id}')"><span style="color:${a.color};">●</span> ${a.name.split(' ')[0]}${a.last4?' ...'+a.last4:''}</span>`).join(''):''}
       ${CATS.map(c=>`<span class="chip" style="${txFilter===c.id?`background:${c.color}18;color:${c.color};border-color:${c.color}33;`:''}" onclick="setTxFilter('${c.id}')">${c.icon} ${c.label}</span>`).join('')}
     </div>
     ${(txFilter==='pending'||txFilter==='all')&&all.filter(t=>t.isPending).length>0?`<div style="background:#F59E0B0F;border:1px solid #F59E0B33;border-radius:14px;padding:12px 14px;margin-bottom:12px;">
@@ -1248,9 +1304,22 @@ function renderSettings(){
     </div>
 
     <div class="card">
-      <div class="sec-title" style="font-size:13px;">🏦 Bank Balance</div>
-      <div style="font-size:12px;color:var(--muted);margin-bottom:12px;">Current: <b style="color:var(--text);">${S.bankBalance.amount?fmtFull(S.bankBalance.amount):'Not set'}</b>${S.bankBalance.lastUpdated?' · '+fmtDate(S.bankBalance.lastUpdated):''}</div>
-      <button onclick="openBankBalance()" class="btn btn-ghost">📊 Update Bank Balance</button>
+      <div class="sec-title" style="font-size:13px;">🏦 Bank Accounts</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;">Last 4 digits from bank SMS auto-tag transactions to the right account. Consolidated total shows on home.</div>
+      ${(S.bankAccounts&&S.bankAccounts.length>0)?S.bankAccounts.map(a=>`
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--card2);border-radius:12px;margin-bottom:8px;border-left:3px solid ${a.color};">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:700;">${a.name}</div>
+            <div style="font-size:11px;color:var(--muted);">${a.last4?'...'+a.last4:'No digits set'} · <span style="color:var(--green);">${fmtFull(a.balance||0)}</span></div>
+          </div>
+          <button onclick="openAddBankAccount(${a.id})" style="font-size:11px;color:var(--accent);background:var(--card);padding:5px 10px;border-radius:8px;flex-shrink:0;">Edit</button>
+          <button onclick="deleteBankAccount(${a.id})" style="font-size:11px;color:var(--red);background:var(--card);padding:5px 10px;border-radius:8px;flex-shrink:0;">✕</button>
+        </div>`).join('')
+      :`<div style="text-align:center;padding:14px 0;color:var(--muted);font-size:12px;">No accounts yet. Add your bank accounts to track per-account balances and auto-tag SMS transactions.</div>`}
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <button onclick="openAddBankAccount()" class="btn btn-ghost" style="flex:1;">+ Add Account</button>
+        <button onclick="openBankBalance()" class="btn btn-ghost" style="flex:1;">📊 Update Balance</button>
+      </div>
     </div>
 
     <div class="card">
@@ -1562,19 +1631,89 @@ function openModal(html){document.getElementById('modal-body').innerHTML=html;do
 function closeModal(){document.getElementById('overlay').classList.remove('show');}
 function maybeClose(e){if(e.target===document.getElementById('overlay'))closeModal();}
 
+function toggleBankBreakdown(){
+  const el=document.getElementById('bank-breakdown');
+  const ch=document.getElementById('bank-chevron');
+  if(!el)return;
+  const show=el.style.display==='none';
+  el.style.display=show?'block':'none';
+  if(ch)ch.textContent=show?'▲':'▼';
+}
 function openBankBalance(){
+  const hasAccts=S.bankAccounts&&S.bankAccounts.length>0;
+  const firstBal=hasAccts?S.bankAccounts[0].balance||'':'';
   openModal(`<div class="modal-title">🏦 Update Bank Balance</div>
-    <div class="form-group"><label class="form-label">Current Bank Balance (${CUR_SYM})</label><input class="form-input" id="bb-amt" type="number" value="${S.bankBalance.amount||''}" placeholder="e.g. 45000" inputmode="numeric"></div>
+    ${hasAccts?`<div class="form-group"><label class="form-label">Account</label><select class="form-input" id="bb-acct" onchange="(()=>{const a=S.bankAccounts.find(x=>x.id===parseInt(this.value));if(a)document.getElementById('bb-amt').value=a.balance||'';})()">
+      ${S.bankAccounts.map(a=>`<option value="${a.id}">${a.name}${a.last4?' (...'+a.last4+')':''} — ${fmtFull(a.balance||0)}</option>`).join('')}
+    </select></div>`:''}
+    <div class="form-group"><label class="form-label">Current Balance (${CUR_SYM})</label>
+      <input class="form-input" id="bb-amt" type="number" value="${hasAccts?firstBal:S.bankBalance.amount||''}" placeholder="e.g. 45000" inputmode="numeric"></div>
     <div class="form-group"><label class="form-label">As of Date</label><input class="form-input" id="bb-dt" type="date" value="${today()}"></div>
-    <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Update this after checking your bank app to get accurate financial picture.</div>
+    <div style="background:var(--card2);border-radius:12px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:14px;">💡 Update after checking your bank app for accuracy.</div>
     <div style="display:flex;gap:9px;">
       <button onclick="clearBankBalance()" class="btn btn-red" style="flex:1;padding:13px;">Reset to 0</button>
       <button onclick="saveBankBalance()" class="btn btn-primary" style="flex:2;padding:13px;">Update Balance</button>
     </div>`);
 }
-function clearBankBalance(){S.bankBalance={amount:0,lastUpdated:''};localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('Bank balance cleared');renderPage(currentPage);}
-function saveBankBalance(){const amt=parseFloat(document.getElementById('bb-amt').value)||0;const dt=document.getElementById('bb-dt').value;S.bankBalance={amount:amt,lastUpdated:amt>0?dt:''};localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);}
+function clearBankBalance(){
+  const acctEl=document.getElementById('bb-acct');
+  if(acctEl&&S.bankAccounts&&S.bankAccounts.length>0){
+    const acct=S.bankAccounts.find(a=>a.id===parseInt(acctEl.value));
+    if(acct){acct.balance=0;acct.lastUpdated='';recalcBankBalance();}
+  } else {S.bankBalance={amount:0,lastUpdated:''};}
+  localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('Bank balance cleared');renderPage(currentPage);
+}
+function saveBankBalance(){
+  const amt=parseFloat(document.getElementById('bb-amt').value)||0;
+  const dt=document.getElementById('bb-dt').value;
+  const acctEl=document.getElementById('bb-acct');
+  if(acctEl&&S.bankAccounts&&S.bankAccounts.length>0){
+    const acct=S.bankAccounts.find(a=>a.id===parseInt(acctEl.value));
+    if(acct){acct.balance=amt;acct.lastUpdated=amt>0?dt:'';recalcBankBalance();}
+  } else {S.bankBalance={amount:amt,lastUpdated:amt>0?dt:''};}
+  localStorage.setItem('sw_v4',JSON.stringify(S));syncToCloud();closeModal();toast('✅ Bank balance updated!');renderPage(currentPage);
+}
 
+function openAddBankAccount(editId){
+  const accts=S.bankAccounts||[];
+  const acc=editId?accts.find(a=>a.id===editId):null;
+  openModal(`<div class="modal-title">${acc?'✏️ Edit Account':'🏦 Add Bank Account'}</div>
+    <div class="form-group"><label class="form-label">Account Name</label>
+      <input class="form-input" id="ba-name" value="${acc?acc.name:''}" placeholder="e.g. HDFC Salary, SBI Savings"></div>
+    <div class="form-group"><label class="form-label">Last 4 Digits of Account Number</label>
+      <input class="form-input" id="ba-last4" type="number" maxlength="4" inputmode="numeric" value="${acc&&acc.last4?acc.last4:''}" placeholder="e.g. 1234"></div>
+    <div class="form-group"><label class="form-label">Current Balance (${CUR_SYM})</label>
+      <input class="form-input" id="ba-balance" type="number" value="${acc?acc.balance||'':''}" placeholder="e.g. 45000" inputmode="numeric"></div>
+    <div style="background:var(--card2);border-radius:12px;padding:11px 13px;font-size:11px;color:var(--muted);margin-bottom:14px;">💡 The last 4 digits auto-match bank SMS messages to this account (e.g. "A/c XX<b style="color:var(--text);">1234</b>" or "account ending <b style="color:var(--text);">1234</b>").</div>
+    <div style="display:flex;gap:9px;">
+      <button onclick="closeModal()" class="btn btn-ghost" style="flex:1;padding:13px;">Cancel</button>
+      <button onclick="saveBankAccountEntry(${editId||'null'})" class="btn btn-primary" style="flex:2;padding:13px;">${acc?'Save Changes':'Add Account'}</button>
+    </div>`);
+}
+function saveBankAccountEntry(editId){
+  const name=(document.getElementById('ba-name').value||'').trim();
+  const last4Raw=(document.getElementById('ba-last4').value||'').trim();
+  const last4=last4Raw.length===4&&/^\d{4}$/.test(last4Raw)?last4Raw:null;
+  const balance=parseFloat(document.getElementById('ba-balance').value)||0;
+  if(!name){toast('Enter an account name',true);return;}
+  if(last4Raw&&!last4){toast('Last 4 digits must be exactly 4 numbers',true);return;}
+  if(!S.bankAccounts)S.bankAccounts=[];
+  if(editId){
+    const acc=S.bankAccounts.find(a=>a.id===editId);
+    if(acc){acc.name=name;acc.last4=last4;acc.balance=balance;acc.lastUpdated=today();}
+  } else {
+    const color=ACCT_COLORS[S.bankAccounts.length%ACCT_COLORS.length];
+    S.bankAccounts.push({id:Date.now(),name,last4,balance,lastUpdated:balance>0?today():'',color});
+  }
+  recalcBankBalance();
+  save();closeModal();toast('✅ Account saved!');renderPage(currentPage);
+}
+function deleteBankAccount(id){
+  if(!confirm('Delete this bank account?'))return;
+  S.bankAccounts=(S.bankAccounts||[]).filter(a=>a.id!==id);
+  recalcBankBalance();
+  save();renderPage(currentPage);toast('Account deleted');
+}
 function openAddInvestment(editId){
   const inv=editId?(Array.isArray(S.investments)?S.investments:[]).find(i=>i.id===editId):null;
   openModal(`<div class="modal-title">${inv?'✏️ Edit Investment':'+ Add Investment'}</div>
@@ -1851,14 +1990,23 @@ function saveSMSTx(){
   // Pending only if category is still unclassified
   const isPending=catId==='other';
 
+  const accountId=_smsData._accountId||null;
   // Update bank balance; skip if onIncomingSMS already updated (real-time SMS path)
   if(!_smsData._balUpdated){
+    const acct=accountId?S.bankAccounts&&S.bankAccounts.find(a=>a.id===accountId):null;
     if(_smsData.bankBal){
-      S.bankBalance={amount:_smsData.bankBal,lastUpdated:today()};
+      if(acct){acct.balance=_smsData.bankBal;acct.lastUpdated=today();recalcBankBalance();}
+      else{S.bankBalance={amount:_smsData.bankBal,lastUpdated:today()};}
     } else if(_smsData.amount>0){
-      const cur=S.bankBalance.amount||0;
-      const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
-      if(cur>0||_smsData.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+      if(acct){
+        const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
+        acct.balance=Math.max(0,(acct.balance||0)+delta);
+        acct.lastUpdated=today();recalcBankBalance();
+      } else {
+        const cur=S.bankBalance.amount||0;
+        const delta=_smsData.isCredit?_smsData.amount:-_smsData.amount;
+        if(cur>0||_smsData.isCredit)S.bankBalance={amount:Math.max(0,cur+delta),lastUpdated:today()};
+      }
     }
   }
 
@@ -1871,10 +2019,10 @@ function saveSMSTx(){
   if(_smsData._pendingId){
     // Update the pre-saved pending tx (from onIncomingSMS)
     const tx=S.transactions.find(t=>t.id===_smsData._pendingId);
-    if(tx){tx.category=catId;tx.note=note;tx.isWaste=isWaste;tx.isPending=isPending;tx.loanId=loanId;tx.merchant=_smsData.merchant;}
+    if(tx){tx.category=catId;tx.note=note;tx.isWaste=isWaste;tx.isPending=isPending;tx.loanId=loanId;tx.merchant=_smsData.merchant;tx.accountId=accountId;}
   } else {
     // pickAndroidSMS / openSMSSim path — add fresh tx
-    S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:'',isCredit:_smsData.isCredit});
+    S.transactions.push({id:Date.now(),amount:_smsData.amount,merchant:_smsData.merchant,category:catId,date:today(),note,isWaste,isPending,loanId,creditCardId:null,contactName:'',isCredit:_smsData.isCredit,accountId});
   }
   _smsData=null;
   save();closeModal();toast('✅ Transaction saved!');renderPage(currentPage);
