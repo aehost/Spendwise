@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpendWise — Smart Money, Zero Effort</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#07070F;--card:#0F0F1A;--card2:#13131F;--border:#1E1E2E;
+  --accent:#6C63FF;--green:#22C55E;--red:#EF4444;--amber:#F59E0B;
+  --cyan:#06B6D4;--pink:#EC4899;--text:#F1F1F5;--muted:#6B7280;
+}
+html{scroll-behavior:smooth;}
+body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;overflow-x:hidden;}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;position:relative;overflow:hidden;padding:40px 20px;}
+.hero-glow{position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,#6C63FF22 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-60%);animation:pulse 4s ease-in-out infinite;}
+@keyframes pulse{0%,100%{transform:translate(-50%,-60%) scale(1);}50%{transform:translate(-50%,-60%) scale(1.15);}}
+.badge{display:inline-flex;align-items:center;gap:6px;background:#6C63FF18;border:1px solid #6C63FF33;border-radius:20px;padding:6px 14px;font-size:12px;color:var(--accent);letter-spacing:1px;text-transform:uppercase;margin-bottom:24px;animation:fadeUp 0.8s ease both;}
+.hero h1{font-size:clamp(36px,7vw,80px);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:20px;animation:fadeUp 0.9s ease 0.1s both;}
+.hero h1 span{background:linear-gradient(135deg,#6C63FF,#22C55E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.hero p{font-size:clamp(15px,2.5vw,20px);color:var(--muted);max-width:560px;line-height:1.6;margin-bottom:36px;animation:fadeUp 1s ease 0.2s both;}
+.hero-cta{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;animation:fadeUp 1s ease 0.3s both;}
+.btn-primary{background:var(--accent);color:#fff;padding:14px 32px;border-radius:14px;font-size:15px;font-weight:700;border:none;cursor:pointer;transition:transform 0.2s,box-shadow 0.2s;}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px #6C63FF44;}
+.btn-ghost{background:transparent;color:var(--text);padding:14px 28px;border-radius:14px;font-size:15px;font-weight:600;border:1.5px solid var(--border);cursor:pointer;transition:border-color 0.2s;}
+.btn-ghost:hover{border-color:var(--accent);}
+@keyframes fadeUp{from{opacity:0;transform:translateY(24px);}to{opacity:1;transform:translateY(0);}}
+
+/* ── PHONE MOCKUP ── */
+.phone-wrap{animation:floatPhone 5s ease-in-out infinite;margin-top:48px;}
+@keyframes floatPhone{0%,100%{transform:translateY(0);}50%{transform:translateY(-14px);}}
+.phone{width:240px;border-radius:36px;background:var(--card);border:2px solid var(--border);overflow:hidden;box-shadow:0 30px 80px #00000088,0 0 0 1px #ffffff08;}
+.phone-notch{width:80px;height:20px;background:var(--bg);border-radius:0 0 12px 12px;margin:0 auto;}
+.phone-screen{padding:12px;background:var(--card);}
+
+/* ── STATS ROW ── */
+.stats{display:flex;gap:40px;justify-content:center;flex-wrap:wrap;padding:60px 20px;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.stat{text-align:center;}
+.stat-num{font-size:40px;font-weight:900;background:linear-gradient(135deg,var(--accent),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+.stat-lbl{font-size:12px;color:var(--muted);margin-top:4px;letter-spacing:1px;text-transform:uppercase;}
+
+/* ── SECTION ── */
+.section{padding:80px 20px;max-width:1100px;margin:0 auto;}
+.section-badge{display:inline-block;font-size:11px;color:var(--accent);background:#6C63FF12;border:1px solid #6C63FF25;border-radius:20px;padding:4px 12px;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:16px;}
+.section h2{font-size:clamp(28px,4vw,48px);font-weight:900;line-height:1.1;letter-spacing:-1px;margin-bottom:12px;}
+.section p{font-size:15px;color:var(--muted);line-height:1.7;max-width:480px;}
+
+/* ── FEATURE CARDS ── */
+.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:48px;}
+.feat-card{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:28px;transition:transform 0.3s,border-color 0.3s;position:relative;overflow:hidden;}
+.feat-card:hover{transform:translateY(-4px);border-color:var(--accent);}
+.feat-card::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,var(--accent)06,transparent);opacity:0;transition:opacity 0.3s;}
+.feat-card:hover::before{opacity:1;}
+.feat-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px;}
+.feat-card h3{font-size:17px;font-weight:700;margin-bottom:8px;}
+.feat-card p{font-size:13px;color:var(--muted);line-height:1.6;}
+.feat-tag{display:inline-block;font-size:10px;padding:2px 8px;border-radius:6px;font-weight:700;margin-top:12px;letter-spacing:0.5px;}
+
+/* ── HOW IT WORKS ── */
+.steps{display:flex;flex-direction:column;gap:0;margin-top:48px;position:relative;}
+.steps::before{content:'';position:absolute;left:23px;top:24px;bottom:24px;width:2px;background:linear-gradient(to bottom,var(--accent),var(--cyan));opacity:0.3;}
+.step{display:flex;gap:20px;padding:28px 0;}
+.step-num{width:46px;height:46px;border-radius:50%;border:2px solid var(--accent);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:900;color:var(--accent);flex-shrink:0;background:var(--bg);}
+.step-body h3{font-size:17px;font-weight:700;margin-bottom:6px;}
+.step-body p{font-size:13px;color:var(--muted);line-height:1.6;}
+
+/* ── SMS ANIMATION ── */
+.sms-demo{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:24px;margin-top:48px;position:relative;overflow:hidden;}
+.sms-line{display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);opacity:0;animation:fadeIn 0.5s ease forwards;}
+.sms-line:last-child{border-bottom:none;}
+.sms-arrow{font-size:18px;flex-shrink:0;margin-top:2px;}
+.sms-body{flex:1;}
+.sms-raw{font-size:11px;color:var(--muted);font-family:monospace;line-height:1.4;margin-bottom:6px;}
+.sms-parsed{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:8px;font-size:11px;font-weight:700;}
+.chip-green{background:#22C55E15;color:#22C55E;border:1px solid #22C55E30;}
+.chip-red{background:#EF444415;color:#EF4444;border:1px solid #EF444430;}
+.chip-blue{background:#6C63FF15;color:#6C63FF;border:1px solid #6C63FF30;}
+.chip-amber{background:#F59E0B15;color:#F59E0B;border:1px solid #F59E0B30;}
+@keyframes fadeIn{to{opacity:1;}}
+
+/* ── BALANCE CARD DEMO ── */
+.balance-demo{background:linear-gradient(135deg,#0F0F1A,#13131F);border:1px solid #22C55E30;border-radius:20px;padding:24px;margin-top:48px;}
+.bal-total{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:4px;}
+.bal-amount{font-size:42px;font-weight:900;color:var(--green);letter-spacing:-1px;margin-bottom:4px;}
+.bal-accounts{margin-top:20px;border-top:1px solid var(--border);padding-top:16px;display:flex;flex-direction:column;gap:10px;}
+.bal-row{display:flex;justify-content:space-between;align-items:center;}
+.bal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+.bal-name{font-size:13px;font-weight:600;}
+.bal-last4{font-size:10px;color:var(--muted);}
+.bal-val{font-size:14px;font-weight:700;color:var(--green);}
+
+/* ── SECURITY SECTION ── */
+.security-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-top:32px;}
+.sec-item{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;text-align:center;}
+.sec-icon{font-size:28px;margin-bottom:10px;}
+.sec-label{font-size:13px;font-weight:700;margin-bottom:4px;}
+.sec-desc{font-size:11px;color:var(--muted);}
+
+/* ── CTA SECTION ── */
+.cta-section{text-align:center;padding:80px 20px;position:relative;overflow:hidden;}
+.cta-glow{position:absolute;width:500px;height:300px;background:radial-gradient(circle,#6C63FF18,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);}
+.cta-section h2{font-size:clamp(32px,5vw,56px);font-weight:900;margin-bottom:16px;position:relative;}
+.cta-section p{font-size:16px;color:var(--muted);margin-bottom:36px;position:relative;}
+.cta-features{display:flex;gap:24px;justify-content:center;flex-wrap:wrap;margin-bottom:40px;position:relative;}
+.cta-feat{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);}
+.cta-feat span{color:var(--green);}
+
+/* ── FOOTER ── */
+footer{text-align:center;padding:32px 20px;border-top:1px solid var(--border);font-size:12px;color:var(--muted);}
+
+/* ── SCROLL REVEAL ── */
+.reveal{opacity:0;transform:translateY(32px);transition:opacity 0.7s ease,transform 0.7s ease;}
+.reveal.visible{opacity:1;transform:translateY(0);}
+
+/* ── COUNTER ANIMATION ── */
+.counter{display:inline-block;}
+
+/* ── TICKER ── */
+.ticker-wrap{overflow:hidden;padding:14px 0;background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+.ticker{display:flex;gap:48px;animation:ticker 18s linear infinite;white-space:nowrap;}
+@keyframes ticker{from{transform:translateX(0);}to{transform:translateX(-50%);}}
+.ticker-item{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px;}
+.ticker-item b{color:var(--text);}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;background:#07070Fcc;backdrop-filter:blur(12px);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;justify-content:space-between;align-items:center;}
+.nav-logo{font-size:18px;font-weight:900;letter-spacing:-0.5px;}
+.nav-logo span{color:var(--accent);}
+.nav-links{display:flex;gap:24px;font-size:13px;color:var(--muted);}
+.nav-links a{text-decoration:none;color:var(--muted);transition:color 0.2s;}
+.nav-links a:hover{color:var(--text);}
+
+/* ── TRANSACTION DEMO ── */
+.tx-list{display:flex;flex-direction:column;gap:10px;margin-top:24px;}
+.tx-row{display:flex;align-items:center;gap:12px;background:var(--card2);border-radius:14px;padding:12px 14px;border:1px solid var(--border);transition:border-color 0.3s;}
+.tx-row:hover{border-color:var(--accent);}
+.tx-icon-box{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.tx-info{flex:1;}
+.tx-name{font-size:13px;font-weight:700;}
+.tx-meta{font-size:11px;color:var(--muted);}
+.tx-amt{font-size:14px;font-weight:900;}
+.tx-tag{display:inline-block;font-size:9px;padding:2px 6px;border-radius:5px;font-weight:700;margin-left:6px;}
+
+/* ── MOBILE ── */
+@media(max-width:600px){.nav-links{display:none;}.stats{gap:24px;}.hero h1{font-size:36px;}.section h2{font-size:28px;}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">Spend<span>Wise</span></div>
+  <div class="nav-links">
+    <a href="#features">Features</a>
+    <a href="#how">How it works</a>
+    <a href="#security">Security</a>
+    <a href="#cta">Get Started</a>
+  </div>
+  <button class="btn-primary" style="padding:8px 20px;font-size:13px;" onclick="document.getElementById('cta').scrollIntoView({behavior:'smooth'})">Download Free</button>
+</nav>
+
+<!-- HERO -->
+<section class="hero" style="padding-top:90px;">
+  <div class="hero-glow"></div>
+  <div class="badge">✦ Free · Secure · Private</div>
+  <h1>Your money,<br><span>tracked automatically.</span></h1>
+  <p>SpendWise reads your bank SMS messages and builds a complete picture of your finances — budgets, balances, and trends — without you lifting a finger.</p>
+  <div class="hero-cta">
+    <button class="btn-primary" onclick="document.getElementById('cta').scrollIntoView({behavior:'smooth'})">Get Started Free →</button>
+    <button class="btn-ghost" onclick="document.getElementById('features').scrollIntoView({behavior:'smooth'})">See Features</button>
+  </div>
+
+  <!-- Phone mockup -->
+  <div class="phone-wrap">
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <!-- Mini home screen preview -->
+        <div style="font-size:10px;color:var(--muted);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">Bank Balance</div>
+        <div style="font-size:24px;font-weight:900;color:var(--green);margin-bottom:2px;" id="hero-balance">₹0</div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:12px;">3 accounts · Updated today</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+          <div style="background:var(--card2);border-radius:10px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);">Spent</div>
+            <div style="font-size:14px;font-weight:900;color:var(--red);">₹18,420</div>
+          </div>
+          <div style="background:var(--card2);border-radius:10px;padding:8px;">
+            <div style="font-size:9px;color:var(--muted);">Saved</div>
+            <div style="font-size:14px;font-weight:900;color:var(--green);">₹26,580</div>
+          </div>
+        </div>
+        <div style="font-size:9px;color:var(--muted);margin-bottom:6px;">Recent Transactions</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card2);border-radius:8px;padding:6px 8px;">
+            <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:13px;">🛒</span><span style="font-size:10px;font-weight:600;">Swiggy</span></div>
+            <span style="font-size:10px;font-weight:700;color:var(--red);">-₹340</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card2);border-radius:8px;padding:6px 8px;">
+            <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:13px;">💰</span><span style="font-size:10px;font-weight:600;">Salary</span></div>
+            <span style="font-size:10px;font-weight:700;color:var(--green);">+₹45,000</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;background:var(--card2);border-radius:8px;padding:6px 8px;">
+            <div style="display:flex;align-items:center;gap:5px;"><span style="font-size:13px;">⛽</span><span style="font-size:10px;font-weight:600;">BPCL</span></div>
+            <span style="font-size:10px;font-weight:700;color:var(--red);">-₹2,100</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TICKER -->
+<div class="ticker-wrap">
+  <div class="ticker" id="ticker">
+    <div class="ticker-item">📩 <b>SMS Auto-Import</b> — Zero manual entry</div>
+    <div class="ticker-item">🏦 <b>Multi-Bank</b> — All accounts in one place</div>
+    <div class="ticker-item">📊 <b>Monthly Reports</b> — Know where money goes</div>
+    <div class="ticker-item">🔒 <b>Biometric Lock</b> — Your data stays private</div>
+    <div class="ticker-item">🎯 <b>Budget Alerts</b> — Never overspend</div>
+    <div class="ticker-item">☁️ <b>Cloud Sync</b> — Secure, across devices</div>
+    <div class="ticker-item">💳 <b>Credit Card Tracker</b> — No surprises</div>
+    <div class="ticker-item">🏠 <b>EMI & Loan Tracker</b> — Stay on schedule</div>
+    <!-- duplicate for seamless loop -->
+    <div class="ticker-item">📩 <b>SMS Auto-Import</b> — Zero manual entry</div>
+    <div class="ticker-item">🏦 <b>Multi-Bank</b> — All accounts in one place</div>
+    <div class="ticker-item">📊 <b>Monthly Reports</b> — Know where money goes</div>
+    <div class="ticker-item">🔒 <b>Biometric Lock</b> — Your data stays private</div>
+    <div class="ticker-item">🎯 <b>Budget Alerts</b> — Never overspend</div>
+    <div class="ticker-item">☁️ <b>Cloud Sync</b> — Secure, across devices</div>
+    <div class="ticker-item">💳 <b>Credit Card Tracker</b> — No surprises</div>
+    <div class="ticker-item">🏠 <b>EMI & Loan Tracker</b> — Stay on schedule</div>
+  </div>
+</div>
+
+<!-- STATS -->
+<div class="stats reveal" id="features">
+  <div class="stat"><div class="stat-num counter" data-target="100">0</div><div style="font-size:14px;color:var(--muted);font-weight:700;">%</div><div class="stat-lbl">Free Forever</div></div>
+  <div class="stat"><div class="stat-num counter" data-target="0">0</div><div style="font-size:14px;color:var(--muted);font-weight:700;">Ads</div><div class="stat-lbl">Ad-Free Experience</div></div>
+  <div class="stat"><div class="stat-num counter" data-target="30">0</div><div style="font-size:14px;color:var(--muted);font-weight:700;">sec</div><div class="stat-lbl">Setup Time</div></div>
+  <div class="stat"><div class="stat-num counter" data-target="15">0</div><div style="font-size:14px;color:var(--muted);font-weight:700;">+</div><div class="stat-lbl">Spending Categories</div></div>
+</div>
+
+<!-- FEATURES GRID -->
+<section class="section reveal">
+  <div class="section-badge">Core Features</div>
+  <h2>Everything you need,<br>nothing you don't.</h2>
+  <p>SpendWise is built for real life — automatic, private, and beautifully simple.</p>
+  <div class="features-grid">
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#22C55E15;">📩</div>
+      <h3>Auto SMS Import</h3>
+      <p>Bank messages are read instantly and converted into transactions. No typing, no manual entry — ever.</p>
+      <div class="feat-tag chip-green">AUTO</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#6C63FF15;">🏦</div>
+      <h3>Multi-Bank Accounts</h3>
+      <p>Track HDFC, SBI, Axis, Kotak — all at once. Consolidated total on home, per-account breakdown one tap away.</p>
+      <div class="feat-tag chip-blue">SMART</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#F59E0B15;">📊</div>
+      <h3>Budget Tracking</h3>
+      <p>Set monthly limits per category. Visual progress bars show where you stand before you overspend.</p>
+      <div class="feat-tag chip-amber">INSIGHTS</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#06B6D415;">📋</div>
+      <h3>Monthly Reports</h3>
+      <p>Beautiful downloadable reports: income vs. expenses, category breakdowns, savings rate, wasteful spending.</p>
+      <div class="feat-tag" style="background:#06B6D415;color:#06B6D4;border:1px solid #06B6D430;">REPORT</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#EC489915;">💳</div>
+      <h3>Credit Card & EMI Tracker</h3>
+      <p>Link credit card transactions. Track EMI amounts, loan balances, and outstanding dues in one view.</p>
+      <div class="feat-tag" style="background:#EC489915;color:#EC4899;border:1px solid #EC489930;">LINKED</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#EF444415;">🔒</div>
+      <h3>Biometric Security</h3>
+      <p>Fingerprint or face unlock. No screenshots allowed. Your financial data stays completely private.</p>
+      <div class="feat-tag chip-red">SECURE</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#22C55E15;">💰</div>
+      <h3>Salary & Income Tracker</h3>
+      <p>Mark salary day, track history, and watch your bank balance update automatically when your pay arrives.</p>
+      <div class="feat-tag chip-green">INCOME</div>
+    </div>
+    <div class="feat-card">
+      <div class="feat-icon" style="background:#6C63FF15;">☁️</div>
+      <h3>Cloud Backup & Sync</h3>
+      <p>Firebase-powered sync keeps your data safe. Switch phones, reinstall — your history comes right back.</p>
+      <div class="feat-tag chip-blue">SYNC</div>
+    </div>
+  </div>
+</section>
+
+<!-- SMS PARSING DEMO -->
+<section class="section reveal">
+  <div class="section-badge">Magic Under the Hood</div>
+  <h2>From SMS to insight<br>in milliseconds.</h2>
+  <p>SpendWise understands your bank messages and extracts amount, merchant, account number — automatically.</p>
+  <div class="sms-demo">
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:2px;margin-bottom:16px;">Live SMS Parsing</div>
+    <div class="sms-line" style="animation-delay:0.2s;">
+      <div class="sms-arrow">📩</div>
+      <div class="sms-body">
+        <div class="sms-raw">"INR 45,000.00 credited to A/c XX1234. Salary from ACME Corp. Avl Bal: INR 1,23,456.00"</div>
+        <div class="sms-parsed">
+          <div class="chip chip-green">💰 +₹45,000 Credit</div>
+          <div class="chip chip-blue">Account ...1234</div>
+          <div class="chip chip-amber">Bal ₹1,23,456</div>
+          <div class="chip" style="background:#8B5CF615;color:#8B5CF6;border:1px solid #8B5CF630;">💼 Income</div>
+        </div>
+      </div>
+    </div>
+    <div class="sms-line" style="animation-delay:0.6s;">
+      <div class="sms-arrow">📩</div>
+      <div class="sms-body">
+        <div class="sms-raw">"Rs. 2,340.00 debited from A/c No. XX5678 for UPI/Swiggy/Order. Avl Bal Rs. 89,432.00"</div>
+        <div class="sms-parsed">
+          <div class="chip chip-red">💸 -₹2,340 Debit</div>
+          <div class="chip chip-blue">Account ...5678</div>
+          <div class="chip chip-amber">Bal ₹89,432</div>
+          <div class="chip" style="background:#22C55E15;color:#22C55E;border:1px solid #22C55E30;">🍔 Food</div>
+        </div>
+      </div>
+    </div>
+    <div class="sms-line" style="animation-delay:1s;">
+      <div class="sms-arrow">📩</div>
+      <div class="sms-body">
+        <div class="sms-raw">"EMI of Rs. 8,500.00 debited from A/c XX1234 for Home Loan. Avl Bal INR 74,932.00"</div>
+        <div class="sms-parsed">
+          <div class="chip chip-red">🏠 -₹8,500 EMI</div>
+          <div class="chip chip-blue">Account ...1234</div>
+          <div class="chip chip-amber">Bal ₹74,932</div>
+          <div class="chip" style="background:#EF444415;color:#EF4444;border:1px solid #EF444430;">🏦 Loan Linked</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- MULTI-BANK BALANCE DEMO -->
+<section class="section reveal">
+  <div class="section-badge">Multi-Bank</div>
+  <h2>All your money,<br>one clean view.</h2>
+  <p>Add multiple bank accounts. SpendWise uses the last 4 digits of your account number from SMS to automatically tag which account each transaction belongs to.</p>
+  <div class="balance-demo">
+    <div class="bal-total">Total Bank Balance</div>
+    <div class="bal-amount" id="bal-counter">₹2,87,888</div>
+    <div style="font-size:11px;color:var(--muted);">3 accounts · Tap to expand</div>
+    <div class="bal-accounts">
+      <div class="bal-row">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div class="bal-dot" style="background:#6C63FF;"></div>
+          <div><div class="bal-name">HDFC Salary</div><div class="bal-last4">...1234</div></div>
+        </div>
+        <div class="bal-val">₹1,23,456</div>
+      </div>
+      <div class="bal-row">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div class="bal-dot" style="background:#22C55E;"></div>
+          <div><div class="bal-name">SBI Savings</div><div class="bal-last4">...5678</div></div>
+        </div>
+        <div class="bal-val">₹89,432</div>
+      </div>
+      <div class="bal-row">
+        <div style="display:flex;align-items:center;gap:9px;">
+          <div class="bal-dot" style="background:#F59E0B;"></div>
+          <div><div class="bal-name">Axis Business</div><div class="bal-last4">...9012</div></div>
+        </div>
+        <div class="bal-val">₹75,000</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="section reveal" id="how">
+  <div class="section-badge">How It Works</div>
+  <h2>Set up in<br>under 30 seconds.</h2>
+  <p>No bank login. No data sharing. No complicated setup.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-body">
+        <h3>Download & Sign Up</h3>
+        <p>Create a free account with your email. That's the only information SpendWise ever needs from you.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-body">
+        <h3>Allow SMS Permission</h3>
+        <p>Grant read-SMS access. SpendWise only reads bank messages — never personal conversations. All processing happens on your phone.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-body">
+        <h3>Add Your Bank Accounts</h3>
+        <p>Enter your bank name and last 4 digits of your account number. SpendWise auto-matches incoming SMS to the right account from that point on.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">4</div>
+      <div class="step-body">
+        <h3>Set Salary & Budgets</h3>
+        <p>Tell SpendWise your monthly salary and set budget limits per category. Now you have a complete financial picture — automatically maintained.</p>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-num">5</div>
+      <div class="step-body">
+        <h3>Live Your Life — We Track It</h3>
+        <p>Every bank SMS gets captured, parsed, and categorised in real time. Bank balance stays current. Budgets update live. Reports build themselves.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TRANSACTION DEMO -->
+<section class="section reveal">
+  <div class="section-badge">Spends</div>
+  <h2>Every rupee,<br>perfectly categorised.</h2>
+  <p>Filter by bank account, category, or pending status. Tag, edit, and organise your spending history the way you want.</p>
+  <div class="tx-list">
+    <div class="tx-row">
+      <div class="tx-icon-box" style="background:#22C55E15;">💰</div>
+      <div class="tx-info">
+        <div class="tx-name">Salary — ACME Corp
+          <span class="tx-tag" style="background:#6C63FF15;color:#6C63FF;border:1px solid #6C63FF30;">HDFC ...1234</span>
+        </div>
+        <div class="tx-meta">Income · 23 May · Auto-imported from SMS</div>
+      </div>
+      <div class="tx-amt" style="color:var(--green);">+₹45,000</div>
+    </div>
+    <div class="tx-row">
+      <div class="tx-icon-box" style="background:#F59E0B15;">🍔</div>
+      <div class="tx-info">
+        <div class="tx-name">Swiggy
+          <span class="tx-tag" style="background:#22C55E15;color:#22C55E;border:1px solid #22C55E30;">SBI ...5678</span>
+        </div>
+        <div class="tx-meta">Food · 22 May · UPI</div>
+      </div>
+      <div class="tx-amt" style="color:var(--red);">-₹340</div>
+    </div>
+    <div class="tx-row">
+      <div class="tx-icon-box" style="background:#EF444415;">🏠</div>
+      <div class="tx-info">
+        <div class="tx-name">Home Loan EMI — HDFC Bank
+          <span class="tx-tag" style="background:#6C63FF15;color:#6C63FF;border:1px solid #6C63FF30;">HDFC ...1234</span>
+          <span class="tx-tag" style="background:#EF444415;color:#EF4444;border:1px solid #EF444430;">🏦 Loan Linked</span>
+        </div>
+        <div class="tx-meta">Bills · 1 May · Auto-imported</div>
+      </div>
+      <div class="tx-amt" style="color:var(--red);">-₹8,500</div>
+    </div>
+    <div class="tx-row" style="border:1px solid #F59E0B30;background:#F59E0B06;">
+      <div class="tx-icon-box" style="background:#F59E0B15;">❓</div>
+      <div class="tx-info">
+        <div class="tx-name">Bank Transaction
+          <span class="tx-tag" style="background:#F59E0B15;color:#F59E0B;border:1px solid #F59E0B30;">⏳ NEEDS TAG</span>
+        </div>
+        <div class="tx-meta">Other · 21 May · Tap 🏷️ to categorise</div>
+      </div>
+      <div class="tx-amt" style="color:var(--red);">-₹1,200</div>
+    </div>
+  </div>
+</section>
+
+<!-- SECURITY -->
+<section class="section reveal" id="security">
+  <div class="section-badge">Privacy & Security</div>
+  <h2>Built to protect<br>your financial data.</h2>
+  <p>Your money is private. SpendWise is designed from the ground up so your data never leaks.</p>
+  <div class="security-grid">
+    <div class="sec-item">
+      <div class="sec-icon">👆</div>
+      <div class="sec-label">Biometric Lock</div>
+      <div class="sec-desc">Fingerprint or face required every time the app opens</div>
+    </div>
+    <div class="sec-item">
+      <div class="sec-icon">🚫</div>
+      <div class="sec-label">No Screenshots</div>
+      <div class="sec-desc">Screen recording blocked by Android FLAG_SECURE</div>
+    </div>
+    <div class="sec-item">
+      <div class="sec-icon">📵</div>
+      <div class="sec-label">No Bank Login</div>
+      <div class="sec-desc">SpendWise never sees your bank password or OTP</div>
+    </div>
+    <div class="sec-item">
+      <div class="sec-icon">🔐</div>
+      <div class="sec-label">Encrypted Cloud</div>
+      <div class="sec-desc">Firebase with per-user security rules — nobody else sees your data</div>
+    </div>
+    <div class="sec-item">
+      <div class="sec-icon">📱</div>
+      <div class="sec-label">On-Device Parsing</div>
+      <div class="sec-desc">SMS is processed on your phone. Raw messages never leave your device</div>
+    </div>
+    <div class="sec-item">
+      <div class="sec-icon">🗑️</div>
+      <div class="sec-label">Delete Anytime</div>
+      <div class="sec-desc">One tap to delete your account and all data, forever</div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section reveal" id="cta">
+  <div class="cta-glow"></div>
+  <div class="section-badge" style="position:relative;">Start Free Today</div>
+  <h2 style="position:relative;">Stop guessing.<br><span style="background:linear-gradient(135deg,#6C63FF,#22C55E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;">Start knowing.</span></h2>
+  <p style="position:relative;">Join thousands of Indians who've taken control of their finances with SpendWise. Free forever. No credit card required.</p>
+  <div class="cta-features">
+    <div class="cta-feat"><span>✓</span> Free, no subscriptions</div>
+    <div class="cta-feat"><span>✓</span> Works with all Indian banks</div>
+    <div class="cta-feat"><span>✓</span> No bank login required</div>
+    <div class="cta-feat"><span>✓</span> Setup in 30 seconds</div>
+  </div>
+  <div style="position:relative;display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+    <button class="btn-primary" style="padding:16px 40px;font-size:16px;">Download for Android 🤖</button>
+  </div>
+</section>
+
+<footer>
+  <div style="font-size:20px;font-weight:900;letter-spacing:-0.5px;margin-bottom:8px;">Spend<span style="color:var(--accent);">Wise</span></div>
+  <div>Smart money tracking for everyday Indians · Free · Private · Automatic</div>
+  <div style="margin-top:8px;color:#374151;">© 2025 SpendWise</div>
+</footer>
+
+<script>
+// ── COUNTER ANIMATION ──────────────────────────────────
+function animateCounter(el){
+  const target=parseInt(el.dataset.target);
+  if(target===0){el.textContent='0';return;}
+  let current=0;
+  const step=Math.ceil(target/40);
+  const timer=setInterval(()=>{
+    current=Math.min(current+step,target);
+    el.textContent=current;
+    if(current>=target)clearInterval(timer);
+  },25);
+}
+
+// ── SCROLL REVEAL ─────────────────────────────────────
+const obs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      e.target.classList.add('visible');
+      // trigger counters inside revealed element
+      e.target.querySelectorAll('.counter').forEach(c=>animateCounter(c));
+    }
+  });
+},{threshold:0.15});
+document.querySelectorAll('.reveal').forEach(el=>obs.observe(el));
+
+// ── HERO BALANCE COUNT UP ──────────────────────────────
+let hb=0;
+const hbTarget=87888;
+const hbEl=document.getElementById('hero-balance');
+const hbTimer=setInterval(()=>{
+  hb=Math.min(hb+2500,hbTarget);
+  hbEl.textContent='₹'+hb.toLocaleString('en-IN');
+  if(hb>=hbTarget)clearInterval(hbTimer);
+},30);
+
+// ── SMS LINE STAGGER ──────────────────────────────────
+const smsLines=document.querySelectorAll('.sms-line');
+const smsObs=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      smsLines.forEach((l,i)=>{
+        setTimeout(()=>l.style.animation=`fadeIn 0.6s ease ${i*0.4}s both`,0);
+      });
+      smsObs.disconnect();
+    }
+  });
+},{threshold:0.3});
+if(smsLines.length)smsObs.observe(smsLines[0].parentElement);
+</script>
+</body>
+</html>
