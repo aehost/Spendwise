@@ -122,8 +122,12 @@ app.get('/health', (_req, res) => res.json({
   services: { auth: AUTH_URL, transactions: TRANSACTION_URL, user: USER_URL, analytics: ANALYTICS_URL }
 }));
 
-// Proxy routes — vite dev server strips /api before hitting gateway,
-// so mount directly at /auth, /transactions, /users, /analytics
+// Proxy routes
+// - auth/*        → auth-service   (service has /auth/login, /auth/register etc — full path matches)
+// - transactions/* → transaction-service (service has /transactions/* — full path matches)
+// - user/*        → user-service   (service has /profile, /bank-accounts etc — strip /user prefix)
+//                   app.use('/user', ...) auto-strips '/user' from req.path before forwarding
+// - analytics/*   → analytics-service (service has /analytics/* — full path matches)
 const authFwd        = makeForwarder(AUTH_URL);
 const transactionFwd = makeForwarder(TRANSACTION_URL);
 const userFwd        = makeForwarder(USER_URL);
@@ -133,8 +137,9 @@ app.all('/auth/*', authFwd);
 app.all('/auth', authFwd);
 app.all('/transactions/*', transactionFwd);
 app.all('/transactions', transactionFwd);
-app.all('/users/*', userFwd);
-app.all('/users', userFwd);
+// Use app.use (not app.all) so Express strips '/user' from req.path before we forward.
+// user-service listens at /profile, /bank-accounts etc (no /user prefix).
+app.use('/user', userFwd);
 app.all('/analytics/*', analyticsFwd);
 app.all('/analytics', analyticsFwd);
 

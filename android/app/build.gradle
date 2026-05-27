@@ -6,15 +6,16 @@ plugins {
 }
 
 // ── Local device override ─────────────────────────────────────────────────
-// To test on a real phone (not emulator), add this to android/local.properties:
-//   dev.baseUrl=http://192.168.X.X:3000/api/
-// Replace 192.168.X.X with your PC's local IP (run `ipconfig` on Windows).
+// To test against a LOCAL backend instead of Railway, add to android/local.properties:
+//   dev.baseUrl=http://10.0.2.2:3000/    (Android emulator → host machine)
+//   dev.baseUrl=http://192.168.X.X:3000/ (real phone on same WiFi as your PC)
+// Note: NO /api/ suffix — the gateway routes at /auth/*, /user/*, etc.
 // local.properties is gitignored so this never gets committed.
 def localProps = new Properties()
 def localPropsFile = rootProject.file('local.properties')
 if (localPropsFile.exists()) { localProps.load(new FileInputStream(localPropsFile)) }
-// Default: emulator (10.0.2.2) — overridden by local.properties for real-device debug
-def devBaseUrl = localProps.getProperty('dev.baseUrl', 'http://10.0.2.2:3000/api/')
+// Default: Railway production — works on any real device without any local server
+def devBaseUrl = localProps.getProperty('dev.baseUrl', 'https://api-gateway-production-16f7.up.railway.app/')
 
 android {
     namespace 'com.spendwise.app'
@@ -58,7 +59,7 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "BASE_URL", '"https://api-gateway-production-16f7.up.railway.app/api/"'
+            buildConfigField "String", "BASE_URL", '"https://api-gateway-production-16f7.up.railway.app/"'
             signingConfig signingConfigs.debug
         }
     }
