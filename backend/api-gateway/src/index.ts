@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
-import { createProxyMiddleware } from 'http-proxy-middleware';
+import axios from 'axios';
 import jwt from 'jsonwebtoken';
 import { Pool } from 'pg';
 
@@ -76,18 +76,32 @@ app.use((req, _res, next) => {
 });
 
 // ── PROXY HELPERS ─────────────────────────────────────────────
-function proxy(target: string, pathRewrite?: Record<string, string>) {
-  return createProxyMiddleware({
-    target,
-    changeOrigin: true,
-    pathRewrite,
-    on: {
-      error: (err, _req, res: any) => {
-        console.error('[proxy error]', err.message);
-        res.status(502).json({ success: false, error: 'Service unavailable', code: 'SERVICE_UNAVAILABLE' });
-      }
+// Use axios-based forwarding to avoid express.json() body-consumption issues
+// with http-proxy-middleware v3
+function makeForwarder(target: string) {
+  return async (req: express.Request, res: express.Response) => {
+    try {
+      const url = `${target}${req.path}`;
+      const resp = await axios({
+        method: req.method as any,
+        url,
+        headers: {
+          ...req.headers,
+          host: new URL(target).host,
+          'x-forwarded-for': req.ip,
+        },
+        params: req.query,
+        data: ['GET', 'DELETE', 'HEAD'].includes(req.method) ? undefined : req.body,
+        responseType: 'json',
+        validateStatus: () => true,
+        timeout: 30000,
+      });
+      res.status(resp.status).json(resp.data);
+    } catch (err: any) {
+      console.error('[proxy error]', err.message);
+      res.status(502).json({ success: false, error: 'Service unavailable', code: 'SERVICE_UNAVAILABLE' });
     }
-  });
+  };
 }
 
 // ── ROUTES ────────────────────────────────────────────────────
@@ -98,17 +112,21 @@ app.get('/health', (_req, res) => res.json({
   services: { auth: AUTH_URL, transactions: TRANSACTION_URL, user: USER_URL, analytics: ANALYTICS_URL }
 }));
 
-// Proxy: Auth service
-app.use('/api/auth', proxy(AUTH_URL, { '^/api/auth': '/auth' }));
+// Proxy routes — vite dev server strips /api before hitting gateway,
+// so mount directly at /auth, /transactions, /users, /analytics
+const authFwd        = makeForwarder(AUTH_URL);
+const transactionFwd = makeForwarder(TRANSACTION_URL);
+const userFwd        = makeForwarder(USER_URL);
+const analyticsFwd   = makeForwarder(ANALYTICS_URL);
 
-// Proxy: Transaction service
-app.use('/api/transactions', proxy(TRANSACTION_URL, { '^/api/transactions': '/transactions' }));
-
-// Proxy: User service
-app.use('/api/user', proxy(USER_URL, { '^/api/user': '' }));
-
-// Proxy: Analytics service
-app.use('/api/analytics', proxy(ANALYTICS_URL, { '^/api/analytics': '/analytics' }));
+app.all('/auth/*', authFwd);
+app.all('/auth', authFwd);
+app.all('/transactions/*', transactionFwd);
+app.all('/transactions', transactionFwd);
+app.all('/users/*', userFwd);
+app.all('/users', userFwd);
+app.all('/analytics/*', analyticsFwd);
+app.all('/analytics', analyticsFwd);
 
 // ── ADMIN ROUTES ──────────────────────────────────────────────
 const adminRouter = express.Router();
@@ -135,30 +153,35 @@ adminRouter.get('/stats', async (_req, res) => {
   } catch (e: any) { return fail(res, 'Server error', 500); }
 });
 
-// GET /api/admin/users
+// GET /admin/users
 adminRouter.get('/users', async (req, res) => {
   try {
-    const page  = parseInt(String(req.query.page  || 1));
-    const limit = parseInt(String(req.query.limit || 20));
-    const search = req.query.search as string;
-    const role   = req.query.role as string;
-    const active = req.query.is_active as string;
+    const page   = parseInt(String(req.query.page  || 1));
+    const limit  = Math.min(parseInt(String(req.query.limit || 20)), 100);
+    const search = req.query.search ? String(req.query.search) : null;
+    const role   = req.query.role   ? String(req.query.role)   : null;
+    const active = req.query.is_active !== undefined ? String(req.query.is_active) : null;
 
-    let sql = `SELECT u.id,u.email,u.name,u.role,u.is_active,u.is_verified,u.created_at,u.last_login_at,
-                      (SELECT COUNT(*) FROM transactions WHERE user_id=u.id) as tx_count
-               FROM users u WHERE 1=1`;
-    const params: unknown[] = [];
-    let i = 1;
-    if (search) { sql += ` AND (u.email ILIKE $${i++} OR u.name ILIKE $${i++})`; params.push(`%${search}%`, `%${search}%`); i++; }
-    if (role)   { sql += ` AND u.role=$${i++}`; params.push(role); }
-    if (active !== undefined) { sql += ` AND u.is_active=$${i++}`; params.push(active === 'true'); }
+    // Build WHERE clause separately so we can reuse it for the count
+    const whereParts: string[] = [];
+    const filterParams: unknown[] = [];
+    let pi = 1;
+    if (search) { whereParts.push(`(u.email ILIKE $${pi} OR u.name ILIKE $${pi+1})`); filterParams.push(`%${search}%`, `%${search}%`); pi += 2; }
+    if (role)   { whereParts.push(`u.role=$${pi++}`);      filterParams.push(role); }
+    if (active !== null) { whereParts.push(`u.is_active=$${pi++}`); filterParams.push(active === 'true'); }
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
-    const countResult = await db<{ count: string }>(sql.replace(/SELECT u\.id.*FROM users u/, 'SELECT COUNT(*) FROM users u'), params);
-    const total = parseInt(countResult[0]?.count || '0');
+    const [countRow] = await db<{count:string}>(`SELECT COUNT(*) as count FROM users u ${whereClause}`, filterParams);
+    const total = parseInt(countRow?.count || '0');
 
-    sql += ` ORDER BY u.created_at DESC LIMIT $${i++} OFFSET $${i++}`;
-    params.push(limit, (page-1)*limit);
-    const users = await db(sql, params);
+    const pageParams = [...filterParams, limit, (page-1)*limit];
+    const users = await db(
+      `SELECT u.id,u.email,u.name,u.role,u.is_active,u.created_at,u.last_login_at,
+              (SELECT COUNT(*) FROM transactions WHERE user_id=u.id)::int as tx_count
+       FROM users u ${whereClause}
+       ORDER BY u.created_at DESC LIMIT $${pi} OFFSET $${pi+1}`,
+      pageParams
+    );
 
     return ok(res, { users, total, page, limit, pages: Math.ceil(total/limit) });
   } catch (e: any) { console.error(e.message); return fail(res, 'Server error', 500); }
@@ -236,27 +259,111 @@ adminRouter.get('/transactions', async (req, res) => {
   } catch (e: any) { console.error(e.message); return fail(res, 'Server error', 500); }
 });
 
-// GET /api/admin/audit-log
-adminRouter.get('/audit-log', async (req, res) => {
+// GET /admin/audit-log  AND  /admin/audit  (alias)
+async function handleAuditLog(req: express.Request, res: express.Response) {
   try {
-    const page  = parseInt(String(req.query.page  || 1));
-    const limit = Math.min(parseInt(String(req.query.limit || 50)), 200);
+    const page    = parseInt(String(req.query.page   || 1));
+    const limit   = Math.min(parseInt(String(req.query.limit || 50)), 200);
+    const search  = req.query.search  ? String(req.query.search)  : null;
+    const action  = req.query.action  ? String(req.query.action)  : null;
+    const resource= req.query.resource_type ? String(req.query.resource_type) : null;
+    const where: string[] = [];
+    const params: unknown[] = [limit, (page-1)*limit];
+    let pi = 3;
+    if (search)   { where.push(`u.email ILIKE $${pi++}`); params.push(`%${search}%`); }
+    if (action)   { where.push(`al.action=$${pi++}`);     params.push(action); }
+    if (resource) { where.push(`al.resource_type=$${pi++}`); params.push(resource); }
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
     const rows = await db(
-      `SELECT al.*,u.email FROM audit_log al LEFT JOIN users u ON u.id=al.user_id
-       ORDER BY al.created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, (page-1)*limit]
+      `SELECT al.*,u.email as user_email FROM audit_log al LEFT JOIN users u ON u.id=al.user_id
+       ${whereClause} ORDER BY al.created_at DESC LIMIT $1 OFFSET $2`,
+      params
     );
-    const total = parseInt((await dbOne<any>('SELECT COUNT(*) as count FROM audit_log'))?.count || '0');
-    return ok(res, { log: rows, total, page, limit });
+    const countRows = await db<{count:string}>(
+      `SELECT COUNT(*) as count FROM audit_log al LEFT JOIN users u ON u.id=al.user_id ${whereClause}`,
+      params.slice(2)
+    );
+    const total = parseInt(countRows[0]?.count || '0');
+    return ok(res, { logs: rows, total, page, limit, pages: Math.ceil(total/limit) });
+  } catch (e) { console.error(e); return fail(res, 'Server error', 500); }
+}
+adminRouter.get('/audit-log', handleAuditLog);
+adminRouter.get('/audit', handleAuditLog);
+
+// GET /admin/tickets — admin can view all tickets (alias to support router logic)
+adminRouter.get('/tickets', async (req, res) => {
+  try {
+    const page   = parseInt(String(req.query.page   || 1));
+    const limit  = Math.min(parseInt(String(req.query.limit || 20)), 100);
+    const status = req.query.status ? String(req.query.status) : null;
+    const params: unknown[] = [limit, (page-1)*limit];
+    let pi = 3;
+    const where = status ? [`t.status=$${pi++}`] : [];
+    if (status) params.push(status);
+    const whereClause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const tickets = await db(
+      `SELECT t.*,u.email as user_email,u.name as user_name,
+              (SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id=t.id) as message_count
+       FROM support_tickets t LEFT JOIN users u ON u.id=t.user_id
+       ${whereClause} ORDER BY t.created_at DESC LIMIT $1 OFFSET $2`, params
+    );
+    const countRes = await db<{count:string}>(
+      `SELECT COUNT(*) as count FROM support_tickets t ${whereClause}`, params.slice(2)
+    );
+    const total = parseInt(countRes[0]?.count || '0');
+    return ok(res, { tickets, total, page, limit, pages: Math.ceil(total/limit) });
   } catch { return fail(res, 'Server error', 500); }
 });
 
-// POST /api/admin/agents — create support agent
-adminRouter.post('/agents', async (req, res) => {
+// GET /admin/tickets/:id/messages
+adminRouter.get('/tickets/:id/messages', async (req, res) => {
+  try {
+    const messages = await db(
+      `SELECT m.*,u.name as sender_name,u.role as sender_role FROM ticket_messages m
+       LEFT JOIN users u ON u.id=m.sender_id WHERE m.ticket_id=$1 ORDER BY m.created_at ASC`,
+      [req.params.id]
+    );
+    return ok(res, { messages });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// POST /admin/tickets/:id/messages
+adminRouter.post('/tickets/:id/messages', async (req, res) => {
+  try {
+    const { v4: uuidv4 } = await import('uuid');
+    const { message } = req.body;
+    const user = (req as any).user;
+    const [msg] = await db(
+      `INSERT INTO ticket_messages(id,ticket_id,sender_id,message) VALUES($1,$2,$3,$4) RETURNING *`,
+      [uuidv4(), req.params.id, user.userId, message]
+    );
+    await execute('UPDATE support_tickets SET updated_at=NOW() WHERE id=$1', [req.params.id]);
+    return ok(res, msg, 201);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// PUT /admin/tickets/:id
+adminRouter.put('/tickets/:id', async (req, res) => {
+  try {
+    const { status, priority, assigned_to } = req.body;
+    const updates: string[] = [];
+    const params: unknown[] = [req.params.id];
+    let pi = 2;
+    if (status)      { updates.push(`status=$${pi++}`);      params.push(status); }
+    if (priority)    { updates.push(`priority=$${pi++}`);    params.push(priority); }
+    if (assigned_to) { updates.push(`assigned_to=$${pi++}`); params.push(assigned_to); }
+    if (updates.length === 0) return fail(res, 'Nothing to update');
+    updates.push('updated_at=NOW()');
+    const [t] = await db(`UPDATE support_tickets SET ${updates.join(',')} WHERE id=$1 RETURNING *`, params);
+    return ok(res, t);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// POST /admin/agents  AND  /admin/support-agents  — create support agent
+async function handleCreateAgent(req: express.Request, res: express.Response) {
   try {
     const { email, name, password } = req.body;
     if (!email || !password || !name) return fail(res, 'email, name, password required');
-    // Forward to auth service to create account, then update role
     const bcrypt = await import('bcryptjs');
     const { v4: uuidv4 } = await import('uuid');
     const hash = await bcrypt.default.hash(password, 12);
@@ -268,56 +375,76 @@ adminRouter.post('/agents', async (req, res) => {
     if (e.code === '23505') return fail(res, 'Email already exists', 409);
     return fail(res, 'Server error', 500);
   }
-});
+}
+adminRouter.post('/agents', handleCreateAgent);
+adminRouter.post('/support-agents', handleCreateAgent);
 
-app.use('/api/admin', adminRouter);
+app.use('/admin', adminRouter);
 
 // ── SUPPORT ROUTES ────────────────────────────────────────────
 const supportRouter = express.Router();
 supportRouter.use(authMiddleware, requireRole('admin', 'support'));
 
-// GET /api/support/tickets
+// GET /support/tickets
 supportRouter.get('/tickets', async (req, res) => {
   try {
-    const page   = parseInt(String(req.query.page || 1));
-    const limit  = Math.min(parseInt(String(req.query.limit || 20)), 100);
-    const status = req.query.status as string;
-    const priority = req.query.priority as string;
+    const page     = parseInt(String(req.query.page    || 1));
+    const limit    = Math.min(parseInt(String(req.query.limit || 20)), 100);
+    const status   = req.query.status   ? String(req.query.status)   : null;
+    const priority = req.query.priority ? String(req.query.priority) : null;
 
-    let sql = `SELECT t.*,u.email as user_email,a.name as assigned_name
-               FROM support_tickets t
-               LEFT JOIN users u ON u.id=t.user_id
-               LEFT JOIN users a ON a.id=t.assigned_to WHERE 1=1`;
-    const params: unknown[] = [];
-    let i = 1;
-    if (status)   { sql += ` AND t.status=$${i++}`;   params.push(status); }
-    if (priority) { sql += ` AND t.priority=$${i++}`; params.push(priority); }
+    const whereParts: string[] = [];
+    const filterParams: unknown[] = [];
+    let pi = 1;
+    if (status)   { whereParts.push(`t.status=$${pi++}`);   filterParams.push(status); }
+    if (priority) { whereParts.push(`t.priority=$${pi++}`); filterParams.push(priority); }
+    const whereClause = whereParts.length ? `WHERE ${whereParts.join(' AND ')}` : '';
 
-    const total = parseInt((await db<{ count: string }>(sql.replace('SELECT t.*,u.email as user_email,a.name as assigned_name', 'SELECT COUNT(*)'), params))[0]?.count || '0');
-    sql += ` ORDER BY CASE t.priority WHEN 'critical' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, t.created_at DESC LIMIT $${i++} OFFSET $${i++}`;
-    params.push(limit, (page-1)*limit);
-    const tickets = await db(sql, params);
+    const [countRow] = await db<{count:string}>(
+      `SELECT COUNT(*) as count FROM support_tickets t ${whereClause}`, filterParams
+    );
+    const total = parseInt(countRow?.count || '0');
+
+    const pageParams = [...filterParams, limit, (page-1)*limit];
+    const tickets = await db(
+      `SELECT t.*,u.email as user_email,u.name as user_name,a.name as assigned_name,
+              (SELECT COUNT(*) FROM ticket_messages m WHERE m.ticket_id=t.id)::int as message_count
+       FROM support_tickets t
+       LEFT JOIN users u ON u.id=t.user_id
+       LEFT JOIN users a ON a.id=t.assigned_to
+       ${whereClause}
+       ORDER BY CASE t.priority WHEN 'urgent' THEN 1 WHEN 'high' THEN 2 WHEN 'medium' THEN 3 ELSE 4 END, t.created_at DESC
+       LIMIT $${pi} OFFSET $${pi+1}`,
+      pageParams
+    );
 
     return ok(res, { tickets, total, page, limit, pages: Math.ceil(total/limit) });
-  } catch { return fail(res, 'Server error', 500); }
+  } catch (e: any) { console.error(e); return fail(res, 'Server error', 500); }
 });
 
-// GET /api/support/tickets/:id
+// GET /support/tickets/:id
 supportRouter.get('/tickets/:id', async (req, res) => {
   try {
     const ticket = await dbOne<any>(
-      `SELECT t.*,u.email as user_email,u.name as user_name,a.name as assigned_name
+      `SELECT t.*,u.email as user_email,u.name as user_name,u.id as user_id,a.name as assigned_name,a.email as assigned_to_email
        FROM support_tickets t LEFT JOIN users u ON u.id=t.user_id LEFT JOIN users a ON a.id=t.assigned_to
        WHERE t.id=$1`,
       [req.params.id]
     );
     if (!ticket) return fail(res, 'Ticket not found', 404);
-    const messages = await db<any>(
-      `SELECT m.*,u.name as sender_name,u.role as sender_role FROM ticket_messages m LEFT JOIN users u ON u.id=m.sender_id
-       WHERE m.ticket_id=$1 ORDER BY m.created_at ASC`,
+    return ok(res, { ticket });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /support/tickets/:id/messages
+supportRouter.get('/tickets/:id/messages', async (req, res) => {
+  try {
+    const messages = await db(
+      `SELECT m.*,u.name as sender_name,u.role as sender_role FROM ticket_messages m
+       LEFT JOIN users u ON u.id=m.sender_id WHERE m.ticket_id=$1 ORDER BY m.created_at ASC`,
       [req.params.id]
     );
-    return ok(res, { ...ticket, messages });
+    return ok(res, { messages });
   } catch { return fail(res, 'Server error', 500); }
 });
 
@@ -368,35 +495,51 @@ supportRouter.post('/tickets/:id/messages', async (req, res) => {
   } catch { return fail(res, 'Server error', 500); }
 });
 
-// GET /api/support/users/:id — limited view
+// GET /support/users/:id/transactions — limited view for support
+supportRouter.get('/users/:id/transactions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || 10)), 50);
+    const transactions = await db(
+      `SELECT merchant,amount,is_credit,category_slug,transaction_date FROM transactions
+       WHERE user_id=$1 ORDER BY transaction_date DESC LIMIT $2`,
+      [req.params.id, limit]
+    );
+    return ok(res, { transactions });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /support/users/:id — limited view
 supportRouter.get('/users/:id', async (req, res) => {
   try {
     const user = await dbOne<any>(
-      `SELECT u.id,u.email,u.name,u.phone,u.created_at,u.last_login_at,
-              (SELECT COUNT(*) FROM transactions WHERE user_id=u.id) as tx_count,
-              (SELECT COUNT(*) FROM support_tickets WHERE user_id=u.id) as ticket_count
+      `SELECT u.id,u.email,u.name,u.is_active,u.role,u.created_at,u.last_login_at,
+              (SELECT COUNT(*)::int FROM transactions WHERE user_id=u.id) as tx_count,
+              (SELECT COUNT(*)::int FROM support_tickets WHERE user_id=u.id) as ticket_count
        FROM users u WHERE u.id=$1`,
       [req.params.id]
     );
     if (!user) return fail(res, 'User not found', 404);
-    return ok(res, user);
+    return ok(res, { user });
   } catch { return fail(res, 'Server error', 500); }
 });
 
-// GET /api/support/users — search
+// GET /support/users — search (returns { users: [] })
 supportRouter.get('/users', async (req, res) => {
   try {
-    const search = req.query.search as string;
-    if (!search) return ok(res, []);
+    const search = req.query.search ? String(req.query.search) : null;
+    const limit  = Math.min(parseInt(String(req.query.limit || 10)), 50);
+    if (!search || search.length < 2) return ok(res, { users: [], total: 0 });
     const users = await db(
-      `SELECT id,email,name,phone,created_at,last_login_at FROM users WHERE email ILIKE $1 OR name ILIKE $1 LIMIT 20`,
-      [`%${search}%`]
+      `SELECT id,email,name,is_active,role,created_at,last_login_at,
+              (SELECT COUNT(*)::int FROM transactions WHERE user_id=u.id) as tx_count
+       FROM users u WHERE email ILIKE $1 OR name ILIKE $1 ORDER BY created_at DESC LIMIT $2`,
+      [`%${search}%`, limit]
     );
-    return ok(res, users);
+    return ok(res, { users, total: users.length });
   } catch { return fail(res, 'Server error', 500); }
 });
 
-app.use('/api/support', supportRouter);
+app.use('/support', supportRouter);
 
 // ── CATCH-ALL ─────────────────────────────────────────────────
 app.use((_req, res) => fail(res, 'Route not found', 404, 'NOT_FOUND'));

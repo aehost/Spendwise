@@ -14,3 +14,24 @@ local.properties
 # IDE
 .idea/
 *.iml
+
+# Node.js
+node_modules/
+**/node_modules/
+package-lock.json
+**/package-lock.json
+npm-debug.log*
+
+# Environment files (contain secrets)
+.env
+**/.env
+!**/.env.example
+
+# Build output
+dist/
+**/dist/
+build/
+
+# OS
+.DS_Store
+Thumbs.db
