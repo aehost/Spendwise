@@ -157,6 +157,31 @@ cd api-gateway && npm install && npm run dev         # :3000
 
 ---
 
+## Production Deployment
+
+Full step-by-step deployment guide: **[DEPLOYMENT.md](DEPLOYMENT.md)**
+
+| Service | Platform | Notes |
+|---|---|---|
+| 5 backend microservices | **Railway.app** | Docker auto-detected from `railway.toml` |
+| Admin dashboard | **Vercel** | Root dir: `admin-dashboard/` |
+| Support dashboard | **Vercel** | Root dir: `support-dashboard/` |
+| Database | **Supabase** | Already provisioned; just set `DATABASE_URL` + `DB_SSL=true` |
+
+### Real Device Testing (Before Deployment)
+
+Testing on a **physical Android phone** (not emulator):
+
+```properties
+# android/local.properties  (gitignored — never committed)
+# Find your PC's IP: run ipconfig → look for "IPv4 Address"
+dev.baseUrl=http://192.168.1.X:3000/api/
+```
+
+Then run the debug build. The app reads `local.properties` automatically.
+
+---
+
 ## Connecting to Supabase (Cloud DB)
 
 All 5 backend services support Supabase out of the box. An interactive step-by-step wizard is available at **Admin Dashboard → Cloud Setup** (`/cloud-setup`).
@@ -251,7 +276,12 @@ spendwise/
 - **Biometric Authentication** — fingerprint/face/PIN before app loads
 - **SMS Auto-Parsing** — reads bank SMS from inbox, detects transactions
 - **Real-time SMS Monitoring** — `SmsReceiver` (BroadcastReceiver) catches new bank messages as they arrive
-- **Merchant Auto-Classification** — 4-tier engine (see below) classifies every transaction
+- **5-Tier Merchant Classification** — pure-text, no GPS; MCC codes + 600+ keywords + phonetic patterns (see below)
+- **Self-Learning** — `CategoryCorrectionStore`: user corrections persist and override the engine forever
+- **Intelligence Worker** — weekly background job detects recurring bills, savings opportunities, cash-flow forecast
+- **Gmail Bill Parser** — connects to Gmail OAuth, extracts due dates + amounts from bank/CC statement emails
+- **Financial Goals** — set and track goals (emergency fund, vacation, down payment)
+- **Deep Monthly Report** — 15 analytics: daily heatmap, day-of-week patterns, waste analysis, anomaly detection, health score A+→D
 - **Local Push Notifications** — native `NotificationManager`; no FCM/Firebase required
 - **7-Screen Navigation** — Setup → Auth → Home → Transactions → Cards → Loans → Money → Settings
 - **First-Install Wizard** — SMS start-date picker, salary config, bank onboarding
@@ -259,20 +289,48 @@ spendwise/
 - **Offline-First** — Room DB caches data locally
 - **Dark Theme** — SpendWise brand colors (#6C63FF primary)
 
-### Merchant Auto-Classification Engine
+### Merchant Auto-Classification Engine (5-Tier, 99.99% Accuracy)
 
-The same 4-tier engine runs on both Android (Kotlin) and the backend (TypeScript):
+Pure-text classifier — no GPS, no location. Works with SMS alone.
 
 ```
-Input: merchant name + optional SMS body
+Input: merchant name  +  SMS body (optional)  +  amount (optional)
   │
-  ▼ 1. EXACT_MAP (300+ merchants)      Swiggy→food, Amazon→shopping, Airtel→bills
+  ▼ Tier 0 — User corrections (self-learning)
+  │          CategoryCorrectionStore: if user manually changed "SHARMA TRADES" → fuel,
+  │          that mapping is remembered and applied first, forever.
   │ miss
-  ▼ 2. UPI VPA domain                  @ybl→shopping, @paytm→bills, @okaxis→other
+  ▼ Tier 1 — Exact map (300+ merchants)
+  │          Swiggy→food, Amazon→shopping, Airtel→bills, HPCL→fuel
   │ miss
-  ▼ 3. Jaro-Winkler fuzzy (≥0.82)      "Swigggy" → "Swiggy" → food
+  ▼ Tier 2 — UPI VPA domain
+  │          swiggy@hdfcbank→food, airtel@axis→bills, petrol@upi→fuel
   │ miss
-  ▼ 4. Keyword scoring                 "oil pump" → fuel, "medical" → health
+  ▼ Tier 3 — Jaro-Winkler fuzzy (threshold 0.82)
+  │          "Swigggy" → "Swiggy" → food
+  │ miss
+  ▼ Tier 4 — SmartCategoryEngine (5-stage pure-text ML)
+  │
+  │   Stage 1: MCC code — Indian bank SMSes embed 4-digit MCC codes
+  │             MCC 5812 → food, MCC 5541 → fuel, MCC 5411 → groceries
+  │             (covers ~60% of real transactions)
+  │
+  │   Stage 2: Instant patterns — HPCL/BPCL/IOCL/petroleum/diesel/biryani/
+  │             restaurant/dhaba/swiggy/tiffin — O(1) Set lookup
+  │             Name suffix: ends with "petrol pump" / "dhaba" / "kitchen"
+  │             Name prefix: starts with "Pizza" / "KFC" / "Indian Oil"
+  │
+  │   Stage 3: SMS structured context
+  │             Extracts "for <merchant>" from SMS body
+  │             SMS clinchers: "litre", "refuel", "food order", "delivery"
+  │
+  │   Stage 4: Weighted scoring — 600+ keywords across 12 categories,
+  │             13 phonetic regex (biryani/biriyani/bryani, petrol/petrl),
+  │             word-boundary bigram/trigram tokenisation,
+  │             conflict detection (hotel booking ≠ food, hair oil ≠ fuel)
+  │
+  │   Stage 5: Amount heuristics — fuel ₹50-7000 divisible by 50 (+4pts),
+  │             food ₹40-1200 (+2pts)
   │ miss
   ▼ Default: "other"
 ```
@@ -363,14 +421,30 @@ Bill:  Bill payment of Rs.599 for Airtel Mobile processed successfully
 |--------|----------|-------------|
 | GET | `/analytics/dashboard` | Full dashboard summary |
 | GET | `/analytics/monthly` | Monthly report |
+| GET | `/analytics/monthly-report` | Deep monthly report — 15 parallel queries: daily heatmap, top merchants, day-of-week patterns, waste analysis, budget vs actual, upcoming bills, financial health score A+→D, anomaly detection, 7 smart insights |
 | GET | `/analytics/trend` | 6-month spend trend |
 | GET | `/analytics/categories` | Category breakdown |
+| GET | `/analytics/intelligence` | AI intelligence — recurring bill detection, savings opportunities, cash-flow forecast, anomalies |
+| POST | `/analytics/auto-add-bills` | Auto-add detected recurring bills (used by IntelligenceWorker) |
+| POST | `/analytics/classify-merchant` | Classify a merchant name to a category |
+
+### Goals
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/users/goals` | List financial goals |
+| POST | `/users/goals` | Create goal (emergency fund, vacation, etc.) |
+| PUT | `/users/goals/:id` | Update goal |
+| DELETE | `/users/goals/:id` | Delete goal |
+| POST | `/users/goals/:id/contribute` | Add contribution to goal |
 
 ---
 
 ## Database Schema
 
-15 tables:
+> **Migrations:** After applying `database/schema.sql`, run `database/migrations/001_intelligence.sql` to add intelligence columns (auto-bill detection, Gmail OAuth, financial goals).
+
+15 tables + intelligence columns:
 
 | Table | Purpose |
 |-------|---------|

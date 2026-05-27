@@ -1,10 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Allow cleartext to local dev backend; HTTPS everywhere else -->
+<!--
+    Cleartext (HTTP) is allowed only for local dev IPs.
+    Everything else (production Railway URL) must be HTTPS.
+-->
 <network-security-config>
+    <!-- Android Emulator: 10.0.2.2 = host machine localhost -->
+    <!-- Real device on LAN: 192.168.x.x = your PC's local IP -->
     <domain-config cleartextTraffic="true">
         <domain includeSubdomains="true">10.0.2.2</domain>
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">127.0.0.1</domain>
+        <domain includeSubdomains="true">192.168.0.0</domain>
+        <domain includeSubdomains="true">192.168.1.0</domain>
+        <domain includeSubdomains="true">192.168.2.0</domain>
+        <domain includeSubdomains="true">192.168.3.0</domain>
+        <domain includeSubdomains="true">192.168.4.0</domain>
+        <domain includeSubdomains="true">192.168.10.0</domain>
+        <domain includeSubdomains="true">192.168.29.0</domain>
+        <domain includeSubdomains="true">192.168.43.0</domain>
+        <domain includeSubdomains="true">192.168.100.0</domain>
+        <domain includeSubdomains="true">172.16.0.0</domain>
+        <domain includeSubdomains="true">172.20.0.0</domain>
+        <domain includeSubdomains="true">10.0.0.0</domain>
     </domain-config>
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>

@@ -5,6 +5,17 @@ plugins {
     id 'com.google.dagger.hilt.android'
 }
 
+// ── Local device override ─────────────────────────────────────────────────
+// To test on a real phone (not emulator), add this to android/local.properties:
+//   dev.baseUrl=http://192.168.X.X:3000/api/
+// Replace 192.168.X.X with your PC's local IP (run `ipconfig` on Windows).
+// local.properties is gitignored so this never gets committed.
+def localProps = new Properties()
+def localPropsFile = rootProject.file('local.properties')
+if (localPropsFile.exists()) { localProps.load(new FileInputStream(localPropsFile)) }
+// Default: emulator (10.0.2.2) — overridden by local.properties for real-device debug
+def devBaseUrl = localProps.getProperty('dev.baseUrl', 'http://10.0.2.2:3000/api/')
+
 android {
     namespace 'com.spendwise.app'
     compileSdk 34
@@ -16,8 +27,8 @@ android {
         versionCode 2
         versionName "5.0.0"
 
-        // Backend API base URL (emulator: 10.0.2.2 = host machine localhost)
-        buildConfigField "String", "BASE_URL", '"http://10.0.2.2:3000/api/"'
+        // Base URL comes from local.properties (real device) or falls back to emulator IP
+        buildConfigField "String", "BASE_URL", "\"${devBaseUrl}\""
 
         kapt {
             arguments {
@@ -40,13 +51,14 @@ android {
             applicationIdSuffix ".debug"
             versionNameSuffix "-debug"
             debuggable true
-            buildConfigField "String", "BASE_URL", '"http://10.0.2.2:3000/api/"'
+            // Picks up devBaseUrl from local.properties (real device) or 10.0.2.2 (emulator)
+            buildConfigField "String", "BASE_URL", "\"${devBaseUrl}\""
         }
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            buildConfigField "String", "BASE_URL", '"https://api.spendwise.app/api/"'
+            buildConfigField "String", "BASE_URL", '"https://your-gateway.up.railway.app/api/"'
             signingConfig signingConfigs.debug
         }
     }
