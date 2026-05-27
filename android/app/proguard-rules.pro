@@ -25,14 +25,20 @@
 -dontwarn javax.annotation.**
 -dontwarn javax.annotation.concurrent.**
 
-# Keep Tink primitives used at runtime by EncryptedSharedPreferences / EncryptedFile
--keep class com.google.crypto.tink.** { *; }
--keep interface com.google.crypto.tink.** { *; }
-
-# Tink's KeysDownloader references the Google HTTP Client (google-api-client)
-# for remote key-set fetching — a server-side feature never used on Android.
-# The library is not on the compile/runtime classpath, so suppress the warning.
+# ── Tink (via androidx.security:security-crypto) ─────────────────────────────
+# Do NOT use a broad "-keep class com.google.crypto.tink.** { *; }" rule.
+# That would force R8 to retain KeysDownloader, which references server-side
+# libraries (google-api-client, joda-time) that are not on the Android
+# classpath, causing an endless chain of "missing class" R8 errors.
+#
+# security-crypto ships its own consumer ProGuard rules inside the AAR that
+# already protect every Tink class EncryptedSharedPreferences / EncryptedFile
+# actually calls at runtime — no extra keep rule is needed here.
+#
+# Suppress warnings for Tink's optional server-side dependencies that are
+# never exercised on Android:
 -dontwarn com.google.api.client.**
+-dontwarn org.joda.time.**
 
 # ── Standard Android rules ────────────────────────────────────────────────────
 -dontwarn android.webkit.**
