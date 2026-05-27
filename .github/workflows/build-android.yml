@@ -61,7 +61,13 @@ jobs:
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 
-      # Signed release AAB for Play Store
+      # Release APK — uses signingConfig signingConfigs.debug so no keystore
+      # secret is required. --info surfaces the exact R8 missing-class errors.
+      - name: Build Release APK (debug-signed)
+        working-directory: android
+        run: ./gradlew assembleRelease --no-daemon --stacktrace --info 2>&1 | tail -200
+
+      # Signed release AAB for Play Store (only when keystore secret is set)
       - name: Build Release AAB (Play Store)
         if: steps.keystore.outputs.available == 'true'
         working-directory: android
@@ -70,14 +76,15 @@ jobs:
           KEY_PASS: ${{ secrets.KEY_PASS }}
         run: ./gradlew bundleRelease --no-daemon --stacktrace
 
-      # Signed release APK for direct install
-      - name: Build Release APK
-        if: steps.keystore.outputs.available == 'true'
-        working-directory: android
-        env:
-          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
-          KEY_PASS: ${{ secrets.KEY_PASS }}
-        run: ./gradlew assembleRelease --no-daemon --stacktrace
+      # Upload R8 missing_rules.txt whenever it exists (pass or fail)
+      - name: Upload R8 missing_rules.txt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-missing-rules
+          path: android/app/build/outputs/mapping/release/missing_rules.txt
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload Debug APK
         uses: actions/upload-artifact@v4
@@ -86,18 +93,17 @@ jobs:
           path: android/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
 
+      - name: Upload Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpendWise-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 90
+
       - name: Upload Release AAB (Play Store)
         if: steps.keystore.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: SpendWise-release-aab
           path: android/app/build/outputs/bundle/release/app-release.aab
-          retention-days: 90
-
-      - name: Upload Release APK
-        if: steps.keystore.outputs.available == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpendWise-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 90
