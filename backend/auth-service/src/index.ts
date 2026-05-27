@@ -1,4 +1,6 @@
 import 'dotenv/config';
+import { setDefaultResultOrder } from 'node:dns';
+setDefaultResultOrder('ipv4first'); // Railway/Node 18+ prefers IPv6 by default; force IPv4 for Supabase
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -38,6 +40,7 @@ function verifyAccess(t: string)  { return jwt.verify(t, ACCESS_SECRET)  as { us
 function verifyRefresh(t: string) { return jwt.verify(t, REFRESH_SECRET) as { userId: string; email: string; role: string }; }
 
 // ── MIDDLEWARE ────────────────────────────────────────────────
+app.set('trust proxy', 1); // Trust Railway's reverse proxy (needed for express-rate-limit)
 app.use(helmet());
 app.use(cors({ origin: process.env.CORS_ORIGINS?.split(',') || '*' }));
 app.use(express.json());
