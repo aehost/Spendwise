@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react'
 import { get } from '../api/client'
-import { Search, User, CreditCard, Building2, TrendingDown, Mail, Calendar } from 'lucide-react'
+import { Search, User, TrendingDown, Mail, Calendar } from 'lucide-react'
 
 interface UserResult {
   id: string; email: string; name: string; role: string; is_active: boolean

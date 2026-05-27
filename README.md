@@ -1,6 +1,8 @@
-# SpendWise — Personal Finance Tracker
+# SpendWise 💸 — Intelligent Personal Finance Tracker
 
-A full-stack personal finance management platform with an Android app, microservices backend, admin dashboard, and support dashboard.
+> Full-stack personal finance platform for the Indian market. Bank SMS transactions are auto-detected, intelligently parsed, and classified by a 4-tier merchant engine — all in real time.
+
+Built with: **Kotlin / Jetpack Compose** Android · **Node.js microservices** · **React** admin & support dashboards · **PostgreSQL / Supabase**
 
 ---
 
@@ -155,35 +157,46 @@ cd api-gateway && npm install && npm run dev         # :3000
 
 ---
 
-## Production Setup (Supabase Free Tier)
+## Connecting to Supabase (Cloud DB)
 
-### 1. Create Supabase Project
+All 5 backend services support Supabase out of the box. An interactive step-by-step wizard is available at **Admin Dashboard → Cloud Setup** (`/cloud-setup`).
 
-1. Sign up at [supabase.com](https://supabase.com) (free, no credit card)
-2. Create a new project → choose region → set a database password
-3. Go to **Project Settings → Database → Connection String → URI**
-4. Copy the connection string (format: `postgresql://postgres:[password]@[host]:5432/postgres`)
+### Manual Setup
 
-### 2. Apply Schema
+```bash
+# 1. Apply schema to your Supabase project
+psql "postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres" \
+  -f database/schema.sql
 
-In Supabase Dashboard → **SQL Editor** → paste the contents of `database/schema.sql` → Run.
-
-### 3. Update Environment Variables
-
-In each service's `.env` or Docker environment, set:
-```env
-DATABASE_URL=postgresql://postgres:[password]@[host]:5432/postgres
-NODE_ENV=production
+# 2. Update every service's .env
+DATABASE_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
+DB_SSL=true          # enables SSL without NODE_ENV=production
+NODE_ENV=development
 ```
 
-### 4. Deploy Backend
+> **Why `DB_SSL=true`?** Supabase requires SSL. Setting `DB_SSL=true` activates `{ rejectUnauthorized: false }` in the pg Pool config without the side-effects of switching to production mode.
 
-Options:
-- **Railway.app** — connect GitHub repo, auto-deploys each service folder
-- **Render.com** — free tier available for Node.js services
-- **Fly.io** — good free tier with 256MB RAM per app
+### Production Deployment
 
-Set environment variables in the platform dashboard.
+| Platform | Notes |
+|---|---|
+| **Railway.app** | Connect GitHub repo; each `backend/*` folder auto-deploys as a separate service |
+| **Render.com** | Free tier Node.js services; set env vars in dashboard |
+| **Fly.io** | 256MB RAM free tier, good for microservices |
+| **AWS ECS** | Full production setup; pair with Aurora PostgreSQL Serverless v2 |
+
+### AWS Migration Path
+
+```bash
+# Dump from Supabase → restore to Aurora PostgreSQL
+pg_dump "postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres" \
+  --no-owner --no-acl -Fc -f spendwise.dump
+
+pg_restore -d "postgresql://admin:<pw>@<aurora>.cluster-xxx.us-east-1.rds.amazonaws.com/spendwise" \
+  spendwise.dump
+```
+
+Aurora PostgreSQL Serverless v2 scales from 0.5 ACU to 128 ACU per second, with zero code changes required.
 
 ---
 
@@ -237,25 +250,72 @@ spendwise/
 
 - **Biometric Authentication** — fingerprint/face/PIN before app loads
 - **SMS Auto-Parsing** — reads bank SMS from inbox, detects transactions
-- **Real-time SMS Monitoring** — BroadcastReceiver catches new bank SMS
+- **Real-time SMS Monitoring** — `SmsReceiver` (BroadcastReceiver) catches new bank messages as they arrive
+- **Merchant Auto-Classification** — 4-tier engine (see below) classifies every transaction
+- **Local Push Notifications** — native `NotificationManager`; no FCM/Firebase required
 - **7-Screen Navigation** — Setup → Auth → Home → Transactions → Cards → Loans → Money → Settings
-- **Dashboard** — balance, savings rate, EMI burden, budget alerts
+- **First-Install Wizard** — SMS start-date picker, salary config, bank onboarding
+- **Dashboard** — burn rate, projected spend, savings rate, EMI burden %, budget alerts
 - **Offline-First** — Room DB caches data locally
 - **Dark Theme** — SpendWise brand colors (#6C63FF primary)
 
-### SMS Parsing Patterns
+### Merchant Auto-Classification Engine
 
-The app automatically detects and categorizes these transaction types:
+The same 4-tier engine runs on both Android (Kotlin) and the backend (TypeScript):
 
-| Pattern | Example |
-|---------|---------|
-| Parentheses merchant | `debited to (Swiggy)` |
-| "at" merchant | `paid at Amazon` |
-| "towards" merchant | `paid towards Netflix` |
-| UPI merchant | `UPI/CR/SWIGGY INDIA` |
-| Transfer description | `IMPS transfer to HDFC` |
-| Salary detection | `salary credited` |
-| Generic "for" | `payment for Uber` |
+```
+Input: merchant name + optional SMS body
+  │
+  ▼ 1. EXACT_MAP (300+ merchants)      Swiggy→food, Amazon→shopping, Airtel→bills
+  │ miss
+  ▼ 2. UPI VPA domain                  @ybl→shopping, @paytm→bills, @okaxis→other
+  │ miss
+  ▼ 3. Jaro-Winkler fuzzy (≥0.82)      "Swigggy" → "Swiggy" → food
+  │ miss
+  ▼ 4. Keyword scoring                 "oil pump" → fuel, "medical" → health
+  │ miss
+  ▼ Default: "other"
+```
+
+| Merchant | Category |
+|---|---|
+| Swiggy, Zomato, Domino's | `food` |
+| Amazon, Flipkart, Myntra | `shopping` |
+| Airtel, Jio, BSNL | `bills` |
+| Indian Oil, HPCL, Shell | `fuel` |
+| Netflix, Hotstar, Spotify | `entertainment` |
+| Apollo Pharmacy, PharmEasy | `health` |
+| MakeMyTrip, IRCTC, OYO | `travel` |
+| Salary, Payroll keywords | `salary` |
+| BigBasket, Zepto, Blinkit | `groceries` |
+
+### Intelligent SMS Parser — Extracted Fields
+
+`ParseSmsUseCase.kt` extracts structured data from any Indian bank SMS format:
+
+| Field | Example extraction |
+|---|---|
+| `amount` | `Rs.1,499.00` → `1499.0` |
+| `isCredit` | "credited" / "received" / "refund" |
+| `merchant` | "at Swiggy", "to Airtel", UPI VPA |
+| `bankName` | "HDFC Bank", "SBI", "ICICI" |
+| `cardLast4` | "Card XX1234" |
+| `accountLast4` | "Acct XX5678" |
+| `upiVpa` | "9876543210@paytm" |
+| `billPayee` | "Airtel Mobile" (bill-payment SMS) |
+| `availableBalance` | "Avl Bal: Rs.12,345" |
+| `isPending` | inferred from "initiated"/"processing" |
+
+### Supported SMS Patterns
+
+```
+HDFC:  Acct XX1234 debited Rs.500 on 27-05-26 to VPA swiggy@hdfcbank
+SBI:   Your A/c XXXX5678 credited by Rs.75000 on 27/05/26 by IMPS
+ICICI: ICICI Bank: INR 1,200.00 debited from A/c XX9012 for Flipkart
+Axis:  Rs.450 spent on Axis Bank Card XX3456 at Zomato on 27-05-2026
+UPI:   You have sent Rs.299 to spotify@icici using UPI
+Bill:  Bill payment of Rs.599 for Airtel Mobile processed successfully
+```
 
 ---
 
@@ -332,6 +392,36 @@ The app automatically detects and categorizes these transaction types:
 
 ---
 
+## Admin Dashboard Highlights
+
+| Page | Features |
+|---|---|
+| **Dashboard** | Stat cards, user/txn/volume totals, top categories chart, daily activity |
+| **Users** | Paginated list, search by email/name, filter by role/status, activate/suspend |
+| **User Detail** | Accounts, cards, loans tabs; "View Analytics" button |
+| **User Analytics** | 6-month area chart, category pie + bar, AI-rule insights, **PDF export** |
+| **Transactions** | All-platform transactions, filter by user/category/date |
+| **Analytics** | Platform-wide recharts (monthly growth, top categories), **PDF export** |
+| **Tickets** | View all tickets, update status/priority, reply in thread |
+| **Audit Log** | Full audit trail, filterable by user/action/resource |
+| **Cloud Setup** | 6-step interactive wizard for Supabase connection |
+| **DB Status Banner** | Live health of all 5 services; detects Cloud vs Local DB |
+
+**PDF Export** — uses jsPDF + html2canvas to capture the charts as rendered in the browser and package them into a downloadable PDF.
+
+## Support Dashboard Highlights
+
+| Page | Features |
+|---|---|
+| **Ticket Queue** | Stats (open/in-progress/total), status filter tabs, priority indicators |
+| **Ticket Detail** | Message thread, auto-progress to `in_progress` on first reply, quick-reply templates, status/priority dropdowns |
+| **User Lookup** | Search by email or name, view recent 10 transactions, privacy notice |
+| **Profile** | Agent info, access permissions list, change password form |
+
+Only users with `role = 'support'` or `role = 'admin'` can log into the support dashboard.
+
+---
+
 ## Environment Variables
 
 ### Backend Services
@@ -340,8 +430,9 @@ The app automatically detects and categorizes these transaction types:
 DATABASE_URL=postgresql://user:password@host:5432/dbname
 JWT_ACCESS_SECRET=your-super-secret-access-key-min-32-chars
 JWT_REFRESH_SECRET=your-super-secret-refresh-key-min-32-chars
-PORT=3001              # (per service)
+PORT=3001              # (per service: 3001–3004, gateway = 3000)
 NODE_ENV=development
+DB_SSL=true            # set for Supabase / any cloud PostgreSQL (enables SSL)
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 

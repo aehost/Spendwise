@@ -49,9 +49,9 @@ export default function TicketQueue() {
   useEffect(() => { load() }, [page, status])
 
   const statCards = [
-    { label: 'Open', value: stats.open, color: 'text-yellow-400', bg: 'bg-yellow-900/20' },
-    { label: 'In Progress', value: stats.in_progress, color: 'text-blue-400', bg: 'bg-blue-900/20' },
-    { label: 'Total Tickets', value: stats.total, color: 'text-primary', bg: 'bg-primary/10' },
+    { label: 'Open', value: stats.open, color: 'text-yellow-400' },
+    { label: 'In Progress', value: stats.in_progress, color: 'text-blue-400' },
+    { label: 'Total Tickets', value: stats.total, color: 'text-primary' },
   ]
 
   return (
@@ -70,7 +70,7 @@ export default function TicketQueue() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        {statCards.map(({ label, value, color, bg }) => (
+        {statCards.map(({ label, value, color }) => (
           <div key={label} className="bg-card border border-border rounded-xl p-4">
             <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
             <div className={`text-2xl font-black ${color}`}>{value}</div>
