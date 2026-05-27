@@ -29,9 +29,6 @@ jobs:
             "build-tools;34.0.0" \
             "platform-tools" 2>&1 | grep -v "^[=\[]" | tail -5
 
-      - name: Copy index.html into Android assets
-        run: cp index.html android/app/src/main/assets/index.html
-
       - name: Make gradlew executable
         run: chmod +x android/gradlew
 
