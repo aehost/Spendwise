@@ -6,18 +6,16 @@
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <!-- Notifications: show alert when bank SMS arrives (required Android 13+) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Network for Firebase cloud sync -->
+    <!-- Network for backend API -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- File download for reports/backup (Android ≤ 9) -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
-        android:maxSdkVersion="28" />
 
     <!-- Biometric hardware is optional -->
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 
     <application
-        android:allowBackup="true"
+        android:name=".SpendWiseApp"
+        android:allowBackup="false"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
@@ -27,8 +25,6 @@
         android:hardwareAccelerated="true"
         android:networkSecurityConfig="@xml/network_security_config">
 
-        <!-- singleTop: onNewIntent fires instead of creating a second instance
-             when a bank-SMS notification brings the app back to the foreground -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -42,9 +38,9 @@
             </intent-filter>
         </activity>
 
-        <!-- Listens for incoming SMS and shows a notification for bank messages -->
+        <!-- BroadcastReceiver for real-time bank SMS -->
         <receiver
-            android:name=".SMSReceiver"
+            android:name=".sms.SmsReceiver"
             android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">
             <intent-filter android:priority="999">

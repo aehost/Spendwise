@@ -1,0 +1,15 @@
+{
+  "name": "@spendwise/shared",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "jsonwebtoken": "^9.0.2",
+    "pg": "^8.11.3"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.5",
+    "@types/pg": "^8.11.2",
+    "typescript": "^5.3.3"
+  }
+}
