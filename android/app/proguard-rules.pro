@@ -29,6 +29,11 @@
 -keep class com.google.crypto.tink.** { *; }
 -keep interface com.google.crypto.tink.** { *; }
 
+# Tink's KeysDownloader references the Google HTTP Client (google-api-client)
+# for remote key-set fetching — a server-side feature never used on Android.
+# The library is not on the compile/runtime classpath, so suppress the warning.
+-dontwarn com.google.api.client.**
+
 # ── Standard Android rules ────────────────────────────────────────────────────
 -dontwarn android.webkit.**
 
