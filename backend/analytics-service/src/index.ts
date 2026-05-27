@@ -11,7 +11,9 @@ const PORT = process.env.PORT || 3004;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 async function db<T>(sql: string, p?: unknown[]): Promise<T[]> {
@@ -39,6 +41,9 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   try { (req as any).user = jwt.verify(h.slice(7), ACCESS_SECRET); next(); }
   catch { return fail(res, 'Invalid token', 401); }
 }
+
+// Health check must be before auth middleware (public route)
+app.get('/health', (_req, res) => res.json({ service: 'analytics', status: 'ok' }));
 
 app.use(auth);
 const uid = (req: express.Request) => (req as any).user.userId as string;
@@ -216,8 +221,6 @@ app.get('/analytics/categories', async (req, res) => {
     return ok(res, { month, year, categories });
   } catch { return fail(res, 'Server error', 500); }
 });
-
-app.get('/health', (_req, res) => res.json({ service: 'analytics', status: 'ok' }));
 
 app.listen(PORT, () => console.log(`[analytics-service] running on :${PORT}`));
 export default app;

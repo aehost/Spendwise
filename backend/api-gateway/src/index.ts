@@ -18,7 +18,9 @@ const ACCESS_SECRET   = process.env.JWT_ACCESS_SECRET       || 'dev_access_secre
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 async function db<T>(sql: string, p?: unknown[]): Promise<T[]> {
@@ -78,27 +80,35 @@ app.use((req, _res, next) => {
 // ── PROXY HELPERS ─────────────────────────────────────────────
 // Use axios-based forwarding to avoid express.json() body-consumption issues
 // with http-proxy-middleware v3
-function makeForwarder(target: string) {
+function makeForwarder(target: string, timeoutMs = 45000) {
   return async (req: express.Request, res: express.Response) => {
     try {
       const url = `${target}${req.path}`;
+      // Copy headers but remove hop-by-hop and recalculate content-length
+      // (express.json() re-parses so the original content-length may not match)
+      const headers: Record<string, any> = {};
+      for (const [k, v] of Object.entries(req.headers)) {
+        const kl = k.toLowerCase();
+        if (['content-length', 'transfer-encoding', 'connection', 'keep-alive',
+             'upgrade', 'proxy-authorization', 'te', 'trailers'].includes(kl)) continue;
+        headers[k] = v;
+      }
+      headers['host']            = new URL(target).host;
+      headers['x-forwarded-for'] = req.ip;
+
       const resp = await axios({
         method: req.method as any,
         url,
-        headers: {
-          ...req.headers,
-          host: new URL(target).host,
-          'x-forwarded-for': req.ip,
-        },
+        headers,
         params: req.query,
         data: ['GET', 'DELETE', 'HEAD'].includes(req.method) ? undefined : req.body,
         responseType: 'json',
         validateStatus: () => true,
-        timeout: 30000,
+        timeout: timeoutMs,
       });
       res.status(resp.status).json(resp.data);
     } catch (err: any) {
-      console.error('[proxy error]', err.message);
+      console.error('[proxy error]', err.message, `→ ${req.method} ${req.path}`);
       res.status(502).json({ success: false, error: 'Service unavailable', code: 'SERVICE_UNAVAILABLE' });
     }
   };

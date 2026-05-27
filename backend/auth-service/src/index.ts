@@ -14,7 +14,9 @@ const PORT = process.env.PORT || 3001;
 // ── DB ────────────────────────────────────────────────────────
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 async function db<T>(sql: string, params?: unknown[]): Promise<T[]> {

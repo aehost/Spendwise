@@ -12,7 +12,9 @@ const PORT = process.env.PORT || 3003;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 async function db<T>(sql: string, params?: unknown[]): Promise<T[]> {
@@ -45,6 +47,9 @@ function auth(req: express.Request, res: express.Response, next: express.NextFun
   try { (req as any).user = jwt.verify(h.slice(7), ACCESS_SECRET); next(); }
   catch { return fail(res, 'Invalid token', 401, 'TOKEN_EXPIRED'); }
 }
+
+// Health check before auth middleware (public route)
+app.get('/health', (_req, res) => res.json({ service: 'user', status: 'ok', ts: new Date() }));
 
 app.use(auth);
 
@@ -323,8 +328,6 @@ app.put('/budgets', async (req, res) => {
     return ok(res, { month: m, year: y, saved: budgets.length });
   } catch { return fail(res, 'Server error', 500); }
 });
-
-app.get('/health', (_req, res) => res.json({ service: 'user', status: 'ok', ts: new Date() }));
 
 app.listen(PORT, () => console.log(`[user-service] running on :${PORT}`));
 export default app;

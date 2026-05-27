@@ -13,7 +13,9 @@ const PORT = process.env.PORT || 3002;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: process.env.DB_SSL === 'true' || process.env.NODE_ENV === 'production'
+    ? { rejectUnauthorized: false }
+    : false,
 });
 
 async function db<T>(sql: string, params?: unknown[]): Promise<T[]> {
@@ -52,6 +54,9 @@ function authMiddleware(req: express.Request, res: express.Response, next: expre
     next();
   } catch { return fail(res, 'Invalid or expired token', 401, 'TOKEN_EXPIRED'); }
 }
+
+// Health check must be before auth middleware (public route)
+app.get('/health', (_req, res) => res.json({ service: 'transactions', status: 'ok', ts: new Date() }));
 
 app.use(authMiddleware);
 
@@ -273,8 +278,6 @@ app.get('/transactions/summary', async (req, res) => {
     return fail(res, 'Server error', 500);
   }
 });
-
-app.get('/health', (_req, res) => res.json({ service: 'transactions', status: 'ok', ts: new Date() }));
 
 app.listen(PORT, () => console.log(`[transaction-service] running on :${PORT}`));
 export default app;
