@@ -4,6 +4,9 @@ import com.spendwise.app.BuildConfig
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.AuthApi
+import com.spendwise.app.data.remote.api.GmailApi
+import com.spendwise.app.data.remote.api.GoalsApi
+import com.spendwise.app.data.remote.api.IntelligenceApi
 import com.spendwise.app.data.remote.api.TransactionApi
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.interceptor.AuthInterceptor
@@ -52,4 +55,7 @@ object NetworkModule {
     @Provides @Singleton fun provideTransactionApi(r: Retrofit): TransactionApi = r.create(TransactionApi::class.java)
     @Provides @Singleton fun provideUserApi(r: Retrofit):        UserApi        = r.create(UserApi::class.java)
     @Provides @Singleton fun provideAnalyticsApi(r: Retrofit):   AnalyticsApi   = r.create(AnalyticsApi::class.java)
+    @Provides @Singleton fun provideIntelligenceApi(r: Retrofit): IntelligenceApi = r.create(IntelligenceApi::class.java)
+    @Provides @Singleton fun provideGoalsApi(r: Retrofit):        GoalsApi        = r.create(GoalsApi::class.java)
+    @Provides @Singleton fun provideGmailApi(r: Retrofit):        GmailApi        = r.create(GmailApi::class.java)
 }

@@ -132,3 +132,86 @@ data class AuthTokens(
     val refreshToken: String,
     val user: User
 )
+
+// ── Intelligence / AI models ──────────────────────────────────
+
+data class RecurringBillSuggestion(
+    val merchant: String,
+    val categorySlug: String,
+    val avgAmount: Double,
+    val occurrences: Int,
+    val cycle: String,            // monthly | weekly | biweekly | quarterly | annual
+    val avgIntervalDays: Double,
+    val lastSeen: String,
+    val dueDayEstimate: Int?,
+    val confidence: Int           // 0-95
+)
+
+data class FinancialInsight(
+    val type: String,             // warning | success | alert | tip | info
+    val message: String,
+    val action: String? = null    // review_spending | set_budget | view_bills …
+)
+
+data class CashFlowForecast(
+    val salary: Double,
+    val projectedSpend: Int,
+    val remainingBills: Int,
+    val emiTotal: Int,
+    val monthEndBalance: Int,
+    val isOverspending: Boolean,
+    val burnRate: Int
+)
+
+data class SavingsOpportunity(
+    val categorySlug: String,
+    val thisMonth: Double,
+    val historicalAvg: Int,
+    val overspend: Double
+)
+
+data class IntelligenceReport(
+    val recurringBills: List<RecurringBillSuggestion>,
+    val insights: List<FinancialInsight>,
+    val forecast: CashFlowForecast,
+    val savingsOpportunities: List<SavingsOpportunity>
+)
+
+// ── Financial Goals ───────────────────────────────────────────
+
+data class FinancialGoal(
+    val id: String,
+    val title: String,
+    val description: String = "",
+    val targetAmount: Double,
+    val currentAmount: Double = 0.0,
+    val deadline: String? = null,
+    val categorySlug: String = "savings",
+    val icon: String = "🎯",
+    val color: String = "#6C63FF",
+    val isCompleted: Boolean = false,
+    val autoContribute: Boolean = false,
+    val monthlyTarget: Double = 0.0,
+    val progressPct: Int = 0       // computed client-side
+)
+
+// ── Gmail integration ─────────────────────────────────────────
+
+data class GmailStatus(
+    val connected: Boolean,
+    val gmailEmail: String?,
+    val lastSyncedAt: String?
+)
+
+data class EmailBillDetection(
+    val billName: String,
+    val amount: Double?,
+    val dueDate: String?,         // YYYY-MM-DD
+    val dueDayOfMonth: Int?,
+    val statementDate: String?,
+    val cardOrAccount: String?,
+    val bankName: String?,
+    val emailSubject: String,
+    val emailDate: String,
+    val isMinimumDue: Boolean = false
+)

@@ -222,5 +222,208 @@ app.get('/analytics/categories', async (req, res) => {
   } catch { return fail(res, 'Server error', 500); }
 });
 
+// ── GET /analytics/intelligence ──────────────────────────────
+// Returns: recurring bill suggestions, smart insights, cash flow
+// forecast, savings opportunities.  Powers the AI layer on Android.
+app.get('/analytics/intelligence', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const now = new Date();
+    const month = now.getMonth() + 1;
+    const year  = now.getFullYear();
+    const day   = now.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+
+    // ── 1. Recurring transaction detection ──────────────────────
+    // Find merchants charged 2+ times in 90 days with <15% amount variance
+    // and a regular interval (weekly / biweekly / monthly / quarterly)
+    const recurringRaw = await db<any>(`
+      WITH intervals AS (
+        SELECT merchant, category_slug, amount, transaction_date,
+          LAG(transaction_date) OVER (PARTITION BY merchant ORDER BY transaction_date) AS prev_date
+        FROM transactions
+        WHERE user_id=$1 AND is_credit=FALSE
+          AND transaction_date >= NOW() - INTERVAL '90 days'
+          AND amount > 10
+      ),
+      stats AS (
+        SELECT merchant, category_slug,
+          COUNT(*)::int                                   AS occurrences,
+          ROUND(AVG(amount)::numeric, 2)                  AS avg_amount,
+          ROUND(COALESCE(STDDEV(amount),0)::numeric, 2)   AS stddev_amount,
+          ROUND(AVG(CASE WHEN prev_date IS NOT NULL
+            THEN (transaction_date - prev_date) END)::numeric,1) AS avg_interval_days,
+          MAX(transaction_date)                           AS last_seen
+        FROM intervals
+        GROUP BY merchant, category_slug
+        HAVING COUNT(*) >= 2
+      )
+      SELECT * FROM stats
+      WHERE avg_interval_days IS NOT NULL
+        AND COALESCE(stddev_amount,0) / NULLIF(avg_amount,0) < 0.15
+      ORDER BY occurrences DESC, avg_amount DESC
+    `, [userId]);
+
+    const recurring = recurringRaw.map((r: any) => {
+      const interval = parseFloat(r.avg_interval_days);
+      let cycle = 'unknown';
+      if      (interval >=  6 && interval <=  8)  cycle = 'weekly';
+      else if (interval >= 13 && interval <= 16)  cycle = 'biweekly';
+      else if (interval >= 25 && interval <= 35)  cycle = 'monthly';
+      else if (interval >= 85 && interval <= 95)  cycle = 'quarterly';
+      else if (interval >= 350 && interval <= 380) cycle = 'annual';
+
+      // Estimate next due day from last_seen + average interval
+      let dueDayEstimate: number | null = null;
+      if (cycle !== 'unknown' && r.last_seen) {
+        const addDays = cycle === 'weekly' ? 7 : cycle === 'biweekly' ? 14 :
+                        cycle === 'monthly' ? 30 : cycle === 'quarterly' ? 91 : 365;
+        const next = new Date(new Date(r.last_seen).getTime() + addDays * 86400000);
+        dueDayEstimate = next.getDate();
+      }
+      return {
+        merchant: r.merchant,
+        category_slug: r.category_slug,
+        avg_amount: parseFloat(r.avg_amount),
+        occurrences: r.occurrences,
+        cycle,
+        avg_interval_days: parseFloat(r.avg_interval_days),
+        last_seen: r.last_seen,
+        due_day_estimate: dueDayEstimate,
+        confidence: Math.min(95, 50 + r.occurrences * 10),
+      };
+    }).filter((r: any) => r.cycle !== 'unknown');
+
+    // ── 2. Smart insights ────────────────────────────────────────
+    const [thisMonthRow, lastMonthRow, salaryRow, topCatRow] = await Promise.all([
+      dbOne<any>(`SELECT
+        COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent,
+        COALESCE(SUM(CASE WHEN is_credit=TRUE  THEN amount ELSE 0 END),0) as income
+        FROM transactions WHERE user_id=$1
+        AND DATE_TRUNC('month',transaction_date)=DATE_TRUNC('month',CURRENT_DATE)`, [userId]),
+      dbOne<any>(`SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent
+        FROM transactions WHERE user_id=$1
+        AND DATE_TRUNC('month',transaction_date)=DATE_TRUNC('month',CURRENT_DATE-INTERVAL '1 month')`, [userId]),
+      dbOne<any>('SELECT amount FROM salary_config WHERE user_id=$1', [userId]),
+      dbOne<any>(`SELECT category_slug,SUM(amount) as total FROM transactions
+        WHERE user_id=$1 AND is_credit=FALSE
+          AND DATE_TRUNC('month',transaction_date)=DATE_TRUNC('month',CURRENT_DATE)
+        GROUP BY category_slug ORDER BY total DESC LIMIT 1`, [userId]),
+    ]);
+
+    const thisSpent  = parseFloat(thisMonthRow?.spent  || 0);
+    const lastSpent  = parseFloat(lastMonthRow?.spent  || 0);
+    const salaryAmt  = parseFloat(salaryRow?.amount    || 0);
+    const burnRate   = day > 0 ? thisSpent / day : 0;
+    const projected  = Math.round(burnRate * daysInMonth);
+
+    const insights: Array<{ type: string; message: string; action?: string }> = [];
+
+    if (lastSpent > 0) {
+      const pctChange = ((thisSpent - lastSpent) / lastSpent) * 100;
+      if (pctChange > 20)
+        insights.push({ type: 'warning', message: `Spending is up ${Math.round(pctChange)}% vs last month`, action: 'review_spending' });
+      else if (pctChange < -10)
+        insights.push({ type: 'success', message: `Great! Spending is down ${Math.round(Math.abs(pctChange))}% vs last month` });
+    }
+    if (salaryAmt > 0 && projected > salaryAmt)
+      insights.push({ type: 'alert', message: `At current pace you will overspend by ₹${(projected - salaryAmt).toLocaleString('en-IN')} this month`, action: 'set_budget' });
+    if (topCatRow && salaryAmt > 0) {
+      const pct = Math.round((parseFloat(topCatRow.total) / salaryAmt) * 100);
+      if (pct > 30)
+        insights.push({ type: 'tip', message: `${topCatRow.category_slug} is ${pct}% of your salary — consider a budget limit`, action: 'set_category_budget' });
+    }
+    if (recurring.length > 0)
+      insights.push({ type: 'info', message: `${recurring.length} recurring payment${recurring.length > 1 ? 's' : ''} detected and auto-added to bills`, action: 'view_bills' });
+
+    // ── 3. Cash-flow forecast ────────────────────────────────────
+    const [billsRow, loansRow] = await Promise.all([
+      dbOne<any>(`SELECT COALESCE(SUM(amount),0) as total FROM mandatory_bills
+        WHERE user_id=$1 AND is_active=TRUE AND is_paid_this_month=FALSE`, [userId]),
+      dbOne<any>(`SELECT COALESCE(SUM(emi_amount),0) as total FROM loans WHERE user_id=$1 AND is_active=TRUE`, [userId]),
+    ]);
+    const remainingBills = parseFloat(billsRow?.total || 0);
+    const emiTotal       = parseFloat(loansRow?.total || 0);
+
+    // ── 4. Savings opportunities ─────────────────────────────────
+    const opportunities = await db<any>(`
+      WITH monthly AS (
+        SELECT category_slug,
+          DATE_TRUNC('month',transaction_date) as mo,
+          SUM(amount) as total
+        FROM transactions
+        WHERE user_id=$1 AND is_credit=FALSE
+          AND transaction_date >= NOW() - INTERVAL '4 months'
+        GROUP BY category_slug, DATE_TRUNC('month',transaction_date)
+      ),
+      hist AS (
+        SELECT category_slug, AVG(total) as hist_avg
+        FROM monthly WHERE mo < DATE_TRUNC('month',CURRENT_DATE)
+        GROUP BY category_slug
+      ),
+      curr AS (
+        SELECT category_slug, total as this_month
+        FROM monthly WHERE mo = DATE_TRUNC('month',CURRENT_DATE)
+      )
+      SELECT c.category_slug, c.this_month, h.hist_avg,
+        ROUND((c.this_month - h.hist_avg)::numeric,2) as overspend
+      FROM curr c JOIN hist h USING(category_slug)
+      WHERE c.this_month > h.hist_avg * 1.2
+      ORDER BY overspend DESC LIMIT 5
+    `, [userId]);
+
+    return ok(res, {
+      recurring_bills: recurring,
+      insights,
+      forecast: {
+        salary: salaryAmt,
+        projected_spend: projected,
+        remaining_bills: Math.round(remainingBills),
+        emi_total: Math.round(emiTotal),
+        month_end_balance: Math.round(salaryAmt - projected - remainingBills - emiTotal),
+        is_overspending: projected > salaryAmt,
+        burn_rate: Math.round(burnRate),
+      },
+      savings_opportunities: opportunities.map((o: any) => ({
+        category_slug: o.category_slug,
+        this_month: parseFloat(o.this_month),
+        historical_avg: Math.round(parseFloat(o.hist_avg)),
+        overspend: parseFloat(o.overspend),
+      })),
+    });
+  } catch (e: any) {
+    console.error('[intelligence]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── POST /analytics/auto-add-bills ───────────────────────────
+// Called by Android after user approves recurring bill suggestions.
+// Idempotent — skips bills that already exist by name.
+app.post('/analytics/auto-add-bills', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const { bills } = req.body as { bills: Array<{ merchant: string; avg_amount: number; due_day_estimate?: number; category_slug?: string }> };
+    if (!Array.isArray(bills) || !bills.length) return fail(res, 'bills array required');
+
+    let created = 0;
+    for (const b of bills) {
+      const existing = await dbOne('SELECT id FROM mandatory_bills WHERE user_id=$1 AND LOWER(name)=LOWER($2)', [userId, b.merchant]);
+      if (!existing) {
+        await db(
+          `INSERT INTO mandatory_bills(id,user_id,name,amount,due_day,category,icon,is_auto_detected,is_active)
+           VALUES($1,$2,$3,$4,$5,$6,'💳',TRUE,TRUE)`,
+          [uuidv4(), userId, b.merchant, b.avg_amount, b.due_day_estimate || 1, b.category_slug || 'bills']
+        );
+        created++;
+      }
+    }
+    return ok(res, { created });
+  } catch (e: any) {
+    console.error('[auto-add-bills]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
 app.listen(PORT, () => console.log(`[analytics-service] running on :${PORT}`));
 export default app;

@@ -170,3 +170,114 @@ data class BudgetAlertDto(@SerializedName("category_slug") val categorySlug: Str
 data class TrendPoint(val month: String, val spent: Double, val income: Double)
 data class CategoryAnalysis(@SerializedName("category_slug") val categorySlug: String, val spent: Double, val budget: Double, val pct: Int?)
 data class CategoriesAnalyticsResponse(val month: Int, val year: Int, val categories: List<CategoryAnalysis>)
+
+// ── Intelligence / AI ─────────────────────────────────────────
+data class RecurringBillSuggestionDto(
+    val merchant: String,
+    @SerializedName("category_slug")    val categorySlug: String,
+    @SerializedName("avg_amount")       val avgAmount: Double,
+    val occurrences: Int,
+    val cycle: String,                  // monthly | weekly | biweekly | quarterly | annual
+    @SerializedName("avg_interval_days") val avgIntervalDays: Double,
+    @SerializedName("last_seen")        val lastSeen: String,
+    @SerializedName("due_day_estimate") val dueDayEstimate: Int?,
+    val confidence: Int                 // 0-95
+)
+
+data class FinancialInsightDto(
+    val type: String,                   // warning | success | alert | tip | info
+    val message: String,
+    val action: String? = null
+)
+
+data class CashFlowForecastDto(
+    val salary: Double,
+    @SerializedName("projected_spend")  val projectedSpend: Int,
+    @SerializedName("remaining_bills")  val remainingBills: Int,
+    @SerializedName("emi_total")        val emiTotal: Int,
+    @SerializedName("month_end_balance") val monthEndBalance: Int,
+    @SerializedName("is_overspending")  val isOverspending: Boolean,
+    @SerializedName("burn_rate")        val burnRate: Int
+)
+
+data class SavingsOpportunityDto(
+    @SerializedName("category_slug")    val categorySlug: String,
+    @SerializedName("this_month")       val thisMonth: Double,
+    @SerializedName("historical_avg")   val historicalAvg: Int,
+    val overspend: Double
+)
+
+data class IntelligenceReportDto(
+    @SerializedName("recurring_bills")       val recurringBills: List<RecurringBillSuggestionDto>,
+    val insights: List<FinancialInsightDto>,
+    val forecast: CashFlowForecastDto,
+    @SerializedName("savings_opportunities") val savingsOpportunities: List<SavingsOpportunityDto>
+)
+
+data class AutoAddBillEntry(
+    val name: String,
+    val icon: String,
+    val amount: Double,
+    @SerializedName("due_day") val dueDay: Int
+)
+
+data class AutoAddBillsRequest(val bills: List<AutoAddBillEntry>)
+data class AutoAddBillsResponse(val added: Int, val skipped: Int)
+
+// ── Financial Goals ───────────────────────────────────────────
+data class FinancialGoalDto(
+    val id: String,
+    val title: String,
+    val description: String = "",
+    @SerializedName("target_amount")    val targetAmount: Double,
+    @SerializedName("current_amount")   val currentAmount: Double = 0.0,
+    val deadline: String? = null,
+    @SerializedName("category_slug")    val categorySlug: String = "savings",
+    val icon: String = "🎯",
+    val color: String = "#6C63FF",
+    @SerializedName("is_completed")     val isCompleted: Boolean = false,
+    @SerializedName("auto_contribute")  val autoContribute: Boolean = false,
+    @SerializedName("monthly_target")   val monthlyTarget: Double = 0.0
+)
+
+data class CreateGoalRequest(
+    val title: String,
+    val description: String = "",
+    @SerializedName("target_amount")    val targetAmount: Double,
+    @SerializedName("current_amount")   val currentAmount: Double = 0.0,
+    val deadline: String? = null,
+    @SerializedName("category_slug")    val categorySlug: String = "savings",
+    val icon: String = "🎯",
+    val color: String = "#6C63FF",
+    @SerializedName("auto_contribute")  val autoContribute: Boolean = false,
+    @SerializedName("monthly_target")   val monthlyTarget: Double = 0.0
+)
+
+data class ContributeGoalRequest(val amount: Double, val note: String = "")
+
+// ── Gmail ─────────────────────────────────────────────────────
+data class GmailStatusDto(
+    val connected: Boolean,
+    @SerializedName("gmail_email")      val gmailEmail: String?,
+    @SerializedName("last_synced_at")   val lastSyncedAt: String?
+)
+
+data class GmailConnectRequest(
+    @SerializedName("gmail_email")      val gmailEmail: String,
+    @SerializedName("access_token")     val accessToken: String,
+    @SerializedName("refresh_token")    val refreshToken: String?,
+    @SerializedName("token_expiry")     val tokenExpiry: Long?
+)
+
+data class EmailBillDetectionDto(
+    @SerializedName("bill_name")        val billName: String,
+    val amount: Double?,
+    @SerializedName("due_date")         val dueDate: String?,
+    @SerializedName("due_day_of_month") val dueDayOfMonth: Int?,
+    @SerializedName("statement_date")   val statementDate: String?,
+    @SerializedName("card_or_account")  val cardOrAccount: String?,
+    @SerializedName("bank_name")        val bankName: String?,
+    @SerializedName("email_subject")    val emailSubject: String,
+    @SerializedName("email_date")       val emailDate: String,
+    @SerializedName("is_minimum_due")   val isMinimumDue: Boolean = false
+)

@@ -159,3 +159,48 @@ interface AnalyticsApi {
     @GET("analytics/categories")
     suspend fun getCategories(@Query("month") month: Int? = null, @Query("year") year: Int? = null): Response<ApiResponse<CategoriesAnalyticsResponse>>
 }
+
+interface IntelligenceApi {
+    @GET("analytics/intelligence")
+    suspend fun getIntelligenceReport(): Response<ApiResponse<IntelligenceReportDto>>
+
+    @POST("analytics/auto-add-bills")
+    suspend fun autoAddBills(@Body req: AutoAddBillsRequest): Response<ApiResponse<AutoAddBillsResponse>>
+}
+
+interface GoalsApi {
+    @GET("user/goals")
+    suspend fun getGoals(): Response<ApiResponse<List<FinancialGoalDto>>>
+
+    @POST("user/goals")
+    suspend fun createGoal(@Body req: CreateGoalRequest): Response<ApiResponse<FinancialGoalDto>>
+
+    @PUT("user/goals/{id}")
+    suspend fun updateGoal(
+        @Path("id") id: String,
+        @Body req: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<ApiResponse<FinancialGoalDto>>
+
+    @POST("user/goals/{id}/contribute")
+    suspend fun contributeToGoal(
+        @Path("id") id: String,
+        @Body req: ContributeGoalRequest
+    ): Response<ApiResponse<FinancialGoalDto>>
+
+    @DELETE("user/goals/{id}")
+    suspend fun deleteGoal(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
+}
+
+interface GmailApi {
+    @GET("user/gmail/status")
+    suspend fun getStatus(): Response<ApiResponse<GmailStatusDto>>
+
+    @POST("user/gmail/connect")
+    suspend fun connect(@Body req: GmailConnectRequest): Response<ApiResponse<GmailStatusDto>>
+
+    @POST("user/gmail/disconnect")
+    suspend fun disconnect(): Response<ApiResponse<Map<String, Boolean>>>
+
+    @PUT("user/gmail/sync-timestamp")
+    suspend fun updateSyncTimestamp(): Response<ApiResponse<Map<String, String>>>
+}

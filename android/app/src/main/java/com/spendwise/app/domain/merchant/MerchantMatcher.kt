@@ -6,7 +6,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Four-tier intelligent merchant classifier:
+ * Five-tier intelligent merchant classifier:
+ *  0. User corrections (self-learning)  — highest priority
  *  1. Exact match  → merchantDb.EXACT_MAP
  *  2. UPI domain   → merchantDb.UPI_DOMAIN_MAP  (e.g. "swiggy@upi" → food)
  *  3. Jaro-Winkler fuzzy matching (threshold 0.82)
@@ -16,12 +17,30 @@ import kotlin.math.min
 object MerchantMatcher {
 
     /**
-     * @param rawMerchant  Merchant name as received from the SMS / transaction
-     * @param smsBody      Optional full SMS body for additional context
+     * @param rawMerchant      Merchant name as received from the SMS / transaction
+     * @param smsBody          Optional full SMS body for additional context
+     * @param userCorrections  Optional map of merchant-key → categorySlug from [CategoryCorrectionStore].
+     *                         Pass [CategoryCorrectionStore.getSnapshot()] at call site.
      */
-    fun classify(rawMerchant: String, smsBody: String? = null): MerchantTag {
+    fun classify(
+        rawMerchant: String,
+        smsBody: String? = null,
+        userCorrections: Map<String, String>? = null
+    ): MerchantTag {
         val normalized = rawMerchant.trim().lowercase()
         if (normalized.isEmpty()) return MerchantDatabase.DEFAULT_TAG
+
+        // ── Tier 0: User corrections (self-learning) ──────────────
+        if (!userCorrections.isNullOrEmpty()) {
+            userCorrections[normalized]?.let { slug ->
+                return MerchantTag(slug, slug, null, 1.0f, MatchType.EXACT)
+            }
+            for ((key, slug) in userCorrections) {
+                if (normalized.contains(key) || key.contains(normalized)) {
+                    return MerchantTag(slug, slug, null, 0.95f, MatchType.EXACT)
+                }
+            }
+        }
 
         // ── Tier 1: Exact match ───────────────────────────────────
         MerchantDatabase.EXACT_MAP[normalized]?.let { return it }

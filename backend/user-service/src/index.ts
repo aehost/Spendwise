@@ -329,5 +329,120 @@ app.put('/budgets', async (req, res) => {
   } catch { return fail(res, 'Server error', 500); }
 });
 
+// ── FINANCIAL GOALS ──────────────────────────────────────────
+app.get('/goals', async (req, res) => {
+  try {
+    const rows = await db('SELECT * FROM financial_goals WHERE user_id=$1 ORDER BY created_at DESC', [uid(req)]);
+    return ok(res, rows);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.post('/goals', async (req, res) => {
+  try {
+    const { title, description = '', target_amount, deadline, category_slug = 'savings',
+            icon = '🎯', color = '#6C63FF', auto_contribute = false, monthly_target = 0 } = req.body;
+    if (!title || !target_amount) return fail(res, 'title and target_amount required');
+    const row = await dbOne<any>(
+      `INSERT INTO financial_goals(id,user_id,title,description,target_amount,deadline,
+         category_slug,icon,color,auto_contribute,monthly_target)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+      [uuidv4(), uid(req), title, description, target_amount, deadline || null,
+       category_slug, icon, color, auto_contribute, monthly_target]
+    );
+    return ok(res, row, 201);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.put('/goals/:id', async (req, res) => {
+  try {
+    const { title, description, target_amount, deadline, current_amount,
+            is_completed, auto_contribute, monthly_target, icon, color } = req.body;
+    const row = await dbOne<any>(
+      `UPDATE financial_goals SET
+        title=COALESCE($1,title), description=COALESCE($2,description),
+        target_amount=COALESCE($3,target_amount), deadline=COALESCE($4,deadline),
+        current_amount=COALESCE($5,current_amount), is_completed=COALESCE($6,is_completed),
+        auto_contribute=COALESCE($7,auto_contribute), monthly_target=COALESCE($8,monthly_target),
+        icon=COALESCE($9,icon), color=COALESCE($10,color), updated_at=NOW()
+       WHERE id=$11 AND user_id=$12 RETURNING *`,
+      [title, description, target_amount, deadline || null, current_amount,
+       is_completed, auto_contribute, monthly_target, icon, color, req.params.id, uid(req)]
+    );
+    return row ? ok(res, row) : fail(res, 'Goal not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.post('/goals/:id/contribute', async (req, res) => {
+  try {
+    const { amount } = req.body;
+    if (!amount || amount <= 0) return fail(res, 'amount required');
+    const row = await dbOne<any>(
+      `UPDATE financial_goals
+       SET current_amount = LEAST(current_amount + $1, target_amount),
+           is_completed = (current_amount + $1 >= target_amount),
+           updated_at = NOW()
+       WHERE id=$2 AND user_id=$3 RETURNING *`,
+      [amount, req.params.id, uid(req)]
+    );
+    return row ? ok(res, row) : fail(res, 'Goal not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.delete('/goals/:id', async (req, res) => {
+  try {
+    const n = await execute('DELETE FROM financial_goals WHERE id=$1 AND user_id=$2', [req.params.id, uid(req)]);
+    return n ? ok(res, { deleted: true }) : fail(res, 'Goal not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// ── GMAIL OAUTH TOKEN STORAGE ─────────────────────────────────
+// Tokens are stored server-side; the Android app exchanges an auth code
+// via this endpoint and the backend handles token refresh.
+app.post('/gmail/connect', async (req, res) => {
+  try {
+    const { gmail_email, access_token, refresh_token, token_expiry } = req.body;
+    if (!gmail_email || !access_token) return fail(res, 'gmail_email and access_token required');
+    await execute(
+      `UPDATE users SET gmail_connected=TRUE, gmail_email=$1, gmail_access_token=$2,
+         gmail_refresh_token=$3, gmail_token_expiry=$4, updated_at=NOW()
+       WHERE id=$5`,
+      [gmail_email, access_token, refresh_token || null,
+       token_expiry ? new Date(token_expiry) : null, uid(req)]
+    );
+    return ok(res, { connected: true, gmail_email });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.post('/gmail/disconnect', async (req, res) => {
+  try {
+    await execute(
+      `UPDATE users SET gmail_connected=FALSE, gmail_email=NULL,
+         gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL
+       WHERE id=$1`, [uid(req)]
+    );
+    return ok(res, { disconnected: true });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.get('/gmail/status', async (req, res) => {
+  try {
+    const row = await dbOne<any>(
+      'SELECT gmail_connected, gmail_email, gmail_last_synced_at FROM users WHERE id=$1', [uid(req)]
+    );
+    return ok(res, {
+      connected: row?.gmail_connected || false,
+      gmail_email: row?.gmail_email || null,
+      last_synced_at: row?.gmail_last_synced_at || null,
+    });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.put('/gmail/sync-timestamp', async (req, res) => {
+  try {
+    await execute('UPDATE users SET gmail_last_synced_at=NOW() WHERE id=$1', [uid(req)]);
+    return ok(res, { updated: true });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
 app.listen(PORT, () => console.log(`[user-service] running on :${PORT}`));
 export default app;
