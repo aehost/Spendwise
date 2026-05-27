@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Users, Receipt, BarChart3, Ticket, FileText, Settings, LogOut } from 'lucide-react'
+import { LayoutDashboard, Users, Receipt, BarChart3, Ticket, FileText, Settings, LogOut, Cloud } from 'lucide-react'
+import DbStatusBanner from './DbStatusBanner'
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -9,6 +10,7 @@ const NAV = [
   { to: '/tickets', label: 'Tickets', icon: Ticket },
   { to: '/audit', label: 'Audit Log', icon: FileText },
   { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/cloud-setup', label: 'Cloud Setup', icon: Cloud },
 ]
 
 export default function Layout() {
@@ -46,6 +48,8 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        {/* Service status banner */}
+        <DbStatusBanner />
         <div className="p-4 border-t border-border">
           <div className="text-xs text-gray-500 truncate mb-2">{user.email || 'admin'}</div>
           <button onClick={logout} className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300">

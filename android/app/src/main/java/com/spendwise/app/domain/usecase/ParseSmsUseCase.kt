@@ -1,15 +1,33 @@
 package com.spendwise.app.domain.usecase
 
 import com.spendwise.app.core.Constants
+import com.spendwise.app.domain.merchant.MerchantMatcher
 import javax.inject.Inject
 
+/**
+ * Extended parsed SMS result.
+ * Includes intelligent extraction of card last-4, loan account, UPI VPA,
+ * credit card vs bank account detection, auto-classified category, and bill payee.
+ */
 data class ParsedSms(
     val amount: Double,
     val merchant: String,
     val isCredit: Boolean,
     val categorySlug: String,
     val availableBalance: Double?,
-    val accountLast4: String?
+    // Account identifiers
+    val accountLast4: String?,       // Last 4 digits of bank account/card
+    val cardLast4: String?,          // Credit/debit card last 4 (distinct from bank a/c)
+    val loanAccountNo: String?,      // Partial loan account number
+    // Account type detection
+    val isCreditCard: Boolean,       // True if transaction is on a credit card
+    val bankName: String?,           // Detected bank name
+    // UPI details
+    val upiVpa: String?,             // UPI VPA (e.g. merchant@upi)
+    // Bill/payment payee
+    val billPayee: String?,          // e.g. BSNL, BESCOM
+    // Merchant confidence
+    val merchantConfidence: Float,
 )
 
 class ParseSmsUseCase @Inject constructor() {
@@ -18,109 +36,198 @@ class ParseSmsUseCase @Inject constructor() {
     fun parse(body: String): ParsedSms? {
         if (!isBankSms(body)) return null
         val amount = extractAmount(body) ?: return null
-        val isCredit = detectIsCredit(body)
-        val merchant = extractMerchant(body)
-        val category = guessCategory(merchant, body, isCredit)
-        val balance  = extractBalance(body)
-        val last4    = extractLast4(body)
-        return ParsedSms(amount, merchant, isCredit, category, balance, last4)
+        val isCredit   = detectIsCredit(body)
+        val isCcTx     = detectCreditCard(body)
+        val merchant   = extractMerchant(body)
+        val upiVpa     = extractUpiVpa(body)
+        val cardLast4  = extractCardLast4(body)
+        val acctLast4  = extractAccountLast4(body)
+        val loanAcct   = extractLoanAccount(body)
+        val balance    = extractBalance(body)
+        val bankName   = extractBankName(body)
+        val billPayee  = extractBillPayee(body)
+
+        // Use MerchantMatcher for intelligent classification
+        val matchedTag = MerchantMatcher.classify(
+            merchant.ifBlank { upiVpa?.substringBefore('@') ?: "" },
+            body
+        )
+        // For credit transactions, override category
+        val finalCategory = if (isCredit && matchedTag.categorySlug == "other") "income" else matchedTag.categorySlug
+
+        return ParsedSms(
+            amount            = amount,
+            merchant          = merchant,
+            isCredit          = isCredit,
+            categorySlug      = finalCategory,
+            availableBalance  = balance,
+            accountLast4      = acctLast4 ?: cardLast4,
+            cardLast4         = cardLast4,
+            loanAccountNo     = loanAcct,
+            isCreditCard      = isCcTx,
+            bankName          = bankName,
+            upiVpa            = upiVpa,
+            billPayee         = billPayee,
+            merchantConfidence = matchedTag.confidence,
+        )
     }
 
+    // ── Bank SMS detection ────────────────────────────────────────
     private fun isBankSms(body: String) = Constants.BANK_PATTERN.containsMatchIn(body)
 
+    // ── Amount extraction ─────────────────────────────────────────
     private fun extractAmount(body: String): Double? {
         val patterns = listOf(
             Regex("""(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
             Regex("""(?:Amt|Amount)[:\s]+([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
             Regex("""([\d,]+(?:\.\d{1,2})?)\s*(?:debited|credited|deducted)""", RegexOption.IGNORE_CASE),
-            Regex("""(?:debited|paid|spent|withdrawn|deposited)\s+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
+            Regex("""(?:debited|paid|spent|withdrawn|deposited|charged)\s+(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
+            Regex("""of\s+(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE),
         )
         for (p in patterns) {
-            val m = p.find(body)
-            if (m != null) {
-                val s = m.groupValues[1].replace(",", "")
-                val d = s.toDoubleOrNull()
-                if (d != null && d > 0) return d
-            }
+            val m = p.find(body) ?: continue
+            val d = m.groupValues[1].replace(",", "").toDoubleOrNull()
+            if (d != null && d > 0) return d
         }
         return null
     }
 
+    // ── Credit vs Debit ───────────────────────────────────────────
     private fun detectIsCredit(body: String): Boolean {
-        val creditPat = Regex("""\b(?:credited|credit|salary|received|refund|cashback|deposit|reversal)\b""", RegexOption.IGNORE_CASE)
-        val debitPat  = Regex("""\b(?:debited|debit|deducted|payment|spent|purchase|withdrawn|paid|charged)\b""", RegexOption.IGNORE_CASE)
+        val creditPat = Regex("""\b(?:credited|credit|salary|received|refund|cashback|deposit|reversal|added|inward)\b""", RegexOption.IGNORE_CASE)
+        val debitPat  = Regex("""\b(?:debited|debit|deducted|payment|spent|purchase|withdrawn|paid|charged|transferred from)\b""", RegexOption.IGNORE_CASE)
         val hasCredit = creditPat.containsMatchIn(body)
         val hasDebit  = debitPat.containsMatchIn(body)
         return hasCredit && !hasDebit
     }
 
+    // ── Credit card vs bank account ───────────────────────────────
+    private fun detectCreditCard(body: String): Boolean {
+        val ccPat = Regex("""\b(?:credit card|cc|credit a/c|card ending|card no|card\.?\s*[Xx*]{0,4}\d{4}|statement|min(?:imum)? due|due date|outstanding)\b""", RegexOption.IGNORE_CASE)
+        return ccPat.containsMatchIn(body)
+    }
+
+    // ── Merchant extraction ───────────────────────────────────────
     private fun extractMerchant(body: String): String {
         // 1. Parentheses: (Merchant Name)
-        Regex("""\(([A-Za-z][A-Za-z0-9\s&'._\-]{1,40})\)""").find(body)?.let { return it.groupValues[1].trim() }
+        Regex("""\(([A-Za-z][A-Za-z0-9\s&'._\-]{1,40})\)""").find(body)
+            ?.let { return it.groupValues[1].trim() }
 
         // 2. spent at / paid at / purchase at / at
-        Regex("""(?:spent at|paid at|payment at|purchase at|\bat)\s+([A-Za-z0-9][A-Za-z0-9\s&'._\-]{1,35}?)(?:\s+on\s|\s+for\s|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
+        Regex("""(?:spent at|paid at|payment at|purchase at|purchase of|at)\s+([A-Za-z0-9][A-Za-z0-9\s&'._\-]{1,35}?)(?:\s+on\s|\s+for\s|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 3. towards
+        // 3. towards / for
         Regex("""towards?\s+([A-Za-z0-9][A-Za-z0-9\s&'._\-]{1,35}?)(?:\s+on\s|\s+via\s|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 4. UPI ID description
+        // 4. UPI VPA description field
         Regex("""UPI[/\-][A-Z0-9]{5,}[/\-][A-Z0-9]{5,}[/\-]([^\n/]{3,40})(?:/|\.|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 5. transferred to
+        // 5. transferred to / trf to
         Regex("""(?:transferred?|trf)\s+to\s+([A-Za-z][A-Za-z0-9\s]{2,30}?)(?:\.|,|\s+on\s|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 6. Employer
-        Regex("""(?:Employer|employer)[:\s]+([A-Za-z][^\.\n]{3,40})""", RegexOption.IGNORE_CASE)
-            .find(body)?.let { return it.groupValues[1].trim() }
-
-        // 7. for … payment/transfer
+        // 6. for … payment/transfer
         Regex("""for\s+([A-Za-z][A-Za-z0-9\s&'._\-]{2,30}?)\s+(?:payment|transfer|txn)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
+
+        // 7. VPA domain as merchant name
+        extractUpiVpa(body)?.let { vpa ->
+            val domain = vpa.substringBefore('@').replace(Regex("""[0-9]"""), "").trim()
+            if (domain.length >= 3) return domain.replaceFirstChar { it.uppercase() }
+        }
 
         return "Bank Transaction"
     }
 
-    private fun guessCategory(merchant: String, body: String, isCredit: Boolean): String {
-        if (isCredit) return "income"
-        val text = "${merchant.lowercase()} ${body.lowercase()}"
-        return when {
-            text.containsAny("swiggy", "zomato", "food", "restaurant", "cafe", "pizza", "burger", "biryani", "dining") -> "food"
-            text.containsAny("petrol", "diesel", "fuel", "pump", "hp petro", "iocl", "bharat petro") -> "fuel"
-            text.containsAny("amazon", "flipkart", "myntra", "ajio", "nykaa", "mall", "shop", "meesho") -> "shopping"
-            text.containsAny("netflix", "hotstar", "spotify", "prime video", "youtube", "cinema", "movie", "pvr", "inox") -> "entertainment"
-            text.containsAny("apollo", "pharmacy", "hospital", "clinic", "medical", "health", "doctor", "medplus") -> "health"
-            text.containsAny("electricity", "airtel", "jio", "bsnl", "water", "gas", "bill", "bescom", "tneb", "tnedcl") -> "bills"
-            text.containsAny("emi", "loan", "rbl", "kotak", "cred", "hdfc", "sbi loan", "axis bank") -> "emi"
-            text.containsAny("irctc", "ola", "uber", "rapido", "train", "flight", "travel", "mmt", "makemytrip") -> "travel"
-            text.containsAny("salary", "sal", "employer", "payroll", "ctc") -> "income"
-            text.containsAny("transfer", "neft", "imps", "rtgs", "mom", "dad", "brother", "sister", "wife", "husband") -> "family"
-            text.containsAny("sip", "mutual", "invest", "zerodha", "groww", "angel", "demat", "ppf", "nps") -> "investment"
-            else -> "other"
-        }
+    // ── UPI VPA extraction ────────────────────────────────────────
+    fun extractUpiVpa(body: String): String? {
+        val pat = Regex("""([a-zA-Z0-9._\-]+@[a-zA-Z0-9._\-]+)""")
+        return pat.find(body)?.groupValues?.get(1)
     }
 
-    private fun String.containsAny(vararg tokens: String) = tokens.any { this.contains(it) }
-
-    private fun extractBalance(body: String): Double? {
-        val pat = Regex("""(?:Avail\.?\s*Bal|Avl\.?\s*Bal|Available\s*Balance|Balance)[:\s]*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""", RegexOption.IGNORE_CASE)
-        return pat.find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
-    }
-
-    private fun extractLast4(body: String): String? {
+    // ── Card last 4 digits ────────────────────────────────────────
+    fun extractCardLast4(body: String): String? {
         val patterns = listOf(
-            Regex("""A/C\s*(?:no\.?)?\s*[Xx*]{0,6}(\d{4})""", RegexOption.IGNORE_CASE),
-            Regex("""account\s+(?:ending|no\.?|number)?\s*[Xx*]{0,6}(\d{4})""", RegexOption.IGNORE_CASE),
-            Regex("""[Xx*]{4}(\d{4})""")
+            // "card ending 1234" / "card ending with 1234"
+            Regex("""card\s+(?:ending|no\.?|number|ending with)\s*[Xx*\s]{0,8}(\d{4})""", RegexOption.IGNORE_CASE),
+            // "HDFC CC XXXX1234"
+            Regex("""[A-Z]{2,}\s+(?:CC|CARD)\s+[Xx*]{4}(\d{4})""", RegexOption.IGNORE_CASE),
+            // "XXXX XXXX XXXX 1234"
+            Regex("""[Xx*]{4}\s*[Xx*]{4}\s*[Xx*]{4}\s*(\d{4})"""),
+            // "Credit Card XXXX1234"
+            Regex("""credit\s+card\s+(?:[Xx*]{0,8})(\d{4})""", RegexOption.IGNORE_CASE),
         )
         for (p in patterns) {
             val m = p.find(body)
             if (m != null) return m.groupValues[1]
         }
         return null
+    }
+
+    // ── Bank account last 4 ───────────────────────────────────────
+    fun extractAccountLast4(body: String): String? {
+        val patterns = listOf(
+            Regex("""A/C\s*(?:no\.?)?\s*[Xx*]{0,10}(\d{4})""", RegexOption.IGNORE_CASE),
+            Regex("""account\s+(?:ending|no\.?|number)?\s*[Xx*]{0,10}(\d{4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:Savings|Current|SB|CA)\s+(?:A/C|Acct?\.?)\s*(?:No\.?)?\s*[Xx*]{0,8}(\d{4})""", RegexOption.IGNORE_CASE),
+            Regex("""(?:ac|acct)\s+(?:no\.?)?\s*[Xx*]{0,8}(\d{4})""", RegexOption.IGNORE_CASE),
+            Regex("""[Xx*]{4}(\d{4})"""),
+        )
+        for (p in patterns) {
+            val m = p.find(body)
+            if (m != null) return m.groupValues[1]
+        }
+        return null
+    }
+
+    // ── Loan account number ───────────────────────────────────────
+    fun extractLoanAccount(body: String): String? {
+        val patterns = listOf(
+            // "Loan A/C 1234567890"
+            Regex("""loan\s+(?:a/c|account|acct)\.?\s*(?:no\.?)?\s*([A-Z0-9]{4,20})""", RegexOption.IGNORE_CASE),
+            // "Loan No. 123456789"
+            Regex("""loan\s+(?:no\.?|number)\s*:?\s*([A-Z0-9]{4,20})""", RegexOption.IGNORE_CASE),
+            // "EMI for loan 123456789"
+            Regex("""emi\s+(?:for|of)\s+(?:loan\s+)?([A-Z0-9]{4,20})""", RegexOption.IGNORE_CASE),
+        )
+        for (p in patterns) {
+            val m = p.find(body)
+            if (m != null) return m.groupValues[1]
+        }
+        return null
+    }
+
+    // ── Available balance ─────────────────────────────────────────
+    private fun extractBalance(body: String): Double? {
+        val pat = Regex(
+            """(?:Avail\.?\s*Bal|Avl\.?\s*Bal|Available\s*(?:Balance|Bal)|Balance|Bal)\s*:?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
+            RegexOption.IGNORE_CASE
+        )
+        return pat.find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+    }
+
+    // ── Bank name detection ───────────────────────────────────────
+    fun extractBankName(body: String): String? {
+        val banks = listOf(
+            "HDFC Bank", "ICICI Bank", "SBI", "State Bank", "Axis Bank",
+            "Kotak Bank", "Kotak Mahindra", "Yes Bank", "IndusInd Bank",
+            "Federal Bank", "IDFC FIRST", "IDBI Bank", "PNB", "Bank of Baroda",
+            "Canara Bank", "Union Bank", "RBL Bank", "HSBC", "Standard Chartered",
+            "DBS Bank", "Citi Bank", "Citibank", "AU Bank", "Ujjivan Bank",
+        )
+        val lower = body.lowercase()
+        return banks.firstOrNull { lower.contains(it.lowercase()) }
+    }
+
+    // ── Bill payee extraction ─────────────────────────────────────
+    private fun extractBillPayee(body: String): String? {
+        val billKeywords = Regex(
+            """(?:bill payment|bill pay|utility payment|paid to)\s+(?:for\s+)?([A-Za-z][A-Za-z0-9\s]{2,30}?)(?:\.|,|;|\n|$)""",
+            RegexOption.IGNORE_CASE
+        )
+        return billKeywords.find(body)?.groupValues?.get(1)?.trim()
     }
 }

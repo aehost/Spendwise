@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import { matchMerchant } from '../../shared/src/merchantDb';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
@@ -105,6 +106,13 @@ app.post('/transactions', async (req, res) => {
 
     if (!amount || !transaction_date) return fail(res, 'amount and transaction_date required');
 
+    // Auto-classify merchant if category is missing or generic
+    let effectiveCategory = category_slug;
+    if (!effectiveCategory || effectiveCategory === 'other') {
+      const classified = matchMerchant(merchant, sms_raw);
+      effectiveCategory = classified.categorySlug;
+    }
+
     const id = uuidv4();
     const rows = await db<any>(
       `INSERT INTO transactions
@@ -112,7 +120,7 @@ app.post('/transactions', async (req, res) => {
          loan_id,credit_card_id,bank_account_id,contact_name,sms_raw,sms_id)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
-      [id, userId, amount, merchant, category_slug, transaction_date, note, is_waste, is_pending, is_credit,
+      [id, userId, amount, merchant, effectiveCategory, transaction_date, note, is_waste, is_pending, is_credit,
        loan_id || null, credit_card_id || null, bank_account_id || null, contact_name || null, sms_raw || null, sms_id || null]
     );
 
@@ -205,12 +213,17 @@ app.post('/transactions/batch', async (req, res) => {
     let inserted = 0;
     for (const t of toInsert) {
       const id = uuidv4();
+      // Auto-classify if category is missing or generic
+      let cat = t.category_slug;
+      if (!cat || cat === 'other') {
+        cat = matchMerchant(t.merchant || 'Unknown', t.sms_raw).categorySlug;
+      }
       await db(
         `INSERT INTO transactions(id,user_id,amount,merchant,category_slug,transaction_date,note,is_waste,
           is_pending,is_credit,bank_account_id,sms_raw,sms_id)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
          ON CONFLICT DO NOTHING`,
-        [id, userId, t.amount, t.merchant || 'Unknown', t.category_slug || 'other',
+        [id, userId, t.amount, t.merchant || 'Unknown', cat,
          t.transaction_date, t.note || '', t.is_waste || false, t.is_pending ?? true,
          t.is_credit || false, t.bank_account_id || null,
          t.sms_raw ? t.sms_raw.substring(0, 500) : null, t.sms_id ? String(t.sms_id) : null]

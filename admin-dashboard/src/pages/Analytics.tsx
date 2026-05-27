@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { get } from '../api/client'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
-import { Users, TrendingUp, IndianRupee, Activity } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts'
+import { Users, TrendingUp, IndianRupee, Activity, Download } from 'lucide-react'
 
 interface PlatformStats {
   total_users: number
@@ -18,6 +18,8 @@ const COLORS = ['#6C63FF','#EC4899','#10B981','#F59E0B','#3B82F6','#8B5CF6','#EF
 export default function Analytics() {
   const [stats, setStats] = useState<PlatformStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [downloading, setDownloading] = useState(false)
+  const printRef = useRef<HTMLDivElement>(null)
 
   // Mock rich data for the analytics dashboard
   const mockStats: PlatformStats = {
@@ -60,6 +62,28 @@ export default function Analytics() {
 
   const d = stats ?? mockStats
 
+  async function downloadPDF() {
+    setDownloading(true)
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: html2canvas } = await import('html2canvas')
+      if (!printRef.current) return
+      const canvas = await html2canvas(printRef.current, { scale: 2, backgroundColor: '#0F0F1A' })
+      const imgData = canvas.toDataURL('image/png')
+      const pdf = new jsPDF({ orientation: 'p', unit: 'mm', format: 'a4' })
+      const pageWidth = pdf.internal.pageSize.getWidth()
+      const imgHeight = (canvas.height * pageWidth) / canvas.width
+      let yPos = 0; const pageHeight = pdf.internal.pageSize.getHeight()
+      while (yPos < imgHeight) {
+        if (yPos > 0) pdf.addPage()
+        pdf.addImage(imgData, 'PNG', 0, -yPos, pageWidth, imgHeight)
+        yPos += pageHeight
+      }
+      pdf.save(`platform-analytics-${new Date().toISOString().slice(0,10)}.pdf`)
+    } catch (e) { console.error('PDF error', e) }
+    finally { setDownloading(false) }
+  }
+
   if (loading) return <div className="flex items-center justify-center h-full"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" /></div>
 
   const formatINR = (v: number) => v >= 10000000 ? `₹${(v/10000000).toFixed(1)}Cr` : v >= 100000 ? `₹${(v/100000).toFixed(1)}L` : `₹${(v/1000).toFixed(0)}K`
@@ -73,7 +97,14 @@ export default function Analytics() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold text-white mb-6">Platform Analytics</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold text-white">Platform Analytics</h1>
+        <button onClick={downloadPDF} disabled={downloading}
+          className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-60">
+          <Download size={14} /> {downloading ? 'Generating...' : 'Download PDF'}
+        </button>
+      </div>
+      <div ref={printRef}>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -189,6 +220,7 @@ export default function Analytics() {
           </tbody>
         </table>
       </div>
+      </div>{/* end printRef */}
     </div>
   )
 }

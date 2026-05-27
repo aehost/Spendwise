@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { get, put } from '../api/client'
-import { ArrowLeft, CheckCircle, XCircle, Shield, Mail, Calendar, CreditCard, Building2, TrendingUp } from 'lucide-react'
+import { ArrowLeft, CheckCircle, XCircle, Shield, Mail, Calendar, TrendingUp, BarChart2 } from 'lucide-react'
 
 interface UserDetail {
   id: string; email: string; name: string; role: string; is_active: boolean
@@ -86,6 +86,10 @@ export default function UserDetail() {
             </div>
           </div>
           <div className="flex gap-2">
+            <button onClick={() => nav(`/users/${id}/analytics`)}
+              className="flex items-center gap-2 px-4 py-2 bg-primary/10 text-primary border border-primary/30 rounded-xl text-sm font-medium hover:bg-primary/20 transition-colors">
+              <BarChart2 size={14} /> View Analytics
+            </button>
             <button onClick={toggleStatus}
               className={`px-4 py-2 rounded-xl text-sm font-medium transition-colors ${user.is_active ? 'bg-red-900/30 text-red-400 hover:bg-red-900/50' : 'bg-green-900/30 text-green-400 hover:bg-green-900/50'}`}>
               {user.is_active ? 'Suspend' : 'Activate'}

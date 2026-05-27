@@ -192,20 +192,174 @@ adminRouter.get('/users/:id', async (req, res) => {
   try {
     const user = await dbOne<any>(
       `SELECT u.id,u.email,u.name,u.phone,u.role,u.is_active,u.is_verified,u.created_at,u.last_login_at,u.currency_code,u.locale,
-              (SELECT COUNT(*) FROM transactions WHERE user_id=u.id) as tx_count,
-              (SELECT COUNT(*) FROM bank_accounts WHERE user_id=u.id AND is_active=TRUE) as account_count,
-              (SELECT COUNT(*) FROM credit_cards WHERE user_id=u.id AND is_active=TRUE) as card_count,
-              (SELECT COUNT(*) FROM loans WHERE user_id=u.id AND is_active=TRUE) as loan_count
+              (SELECT COUNT(*)::int FROM transactions WHERE user_id=u.id) as tx_count,
+              (SELECT COUNT(*)::int FROM bank_accounts WHERE user_id=u.id AND is_active=TRUE) as account_count,
+              (SELECT COUNT(*)::int FROM credit_cards WHERE user_id=u.id AND is_active=TRUE) as card_count,
+              (SELECT COUNT(*)::int FROM loans WHERE user_id=u.id AND is_active=TRUE) as loan_count
        FROM users u WHERE u.id=$1`,
       [req.params.id]
     );
     if (!user) return fail(res, 'User not found', 404);
-
-    const recentTx = await db('SELECT * FROM transactions WHERE user_id=$1 ORDER BY transaction_date DESC LIMIT 10', [req.params.id]);
-    const accounts = await db('SELECT * FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [req.params.id]);
-
-    return ok(res, { ...user, recent_transactions: recentTx, bank_accounts: accounts });
+    return ok(res, { user });
   } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /admin/users/:id/transactions
+adminRouter.get('/users/:id/transactions', async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(String(req.query.limit || 20)), 100);
+    const transactions = await db(
+      `SELECT * FROM transactions WHERE user_id=$1 ORDER BY transaction_date DESC, created_at DESC LIMIT $2`,
+      [req.params.id, limit]
+    );
+    return ok(res, { transactions });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /admin/users/:id/accounts
+adminRouter.get('/users/:id/accounts', async (req, res) => {
+  try {
+    const accounts = await db(
+      `SELECT * FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    return ok(res, { accounts });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /admin/users/:id/cards
+adminRouter.get('/users/:id/cards', async (req, res) => {
+  try {
+    const cards = await db(
+      `SELECT * FROM credit_cards WHERE user_id=$1 AND is_active=TRUE ORDER BY created_at DESC`,
+      [req.params.id]
+    );
+    return ok(res, { cards });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// GET /admin/users/:id/analytics — per-user spending insights
+adminRouter.get('/users/:id/analytics', async (req, res) => {
+  try {
+    const uid = req.params.id;
+    const [monthlyRaw, categoryRaw, totals] = await Promise.all([
+      db<any>(
+        `SELECT TO_CHAR(DATE_TRUNC('month', transaction_date), 'Mon YY') as month,
+                DATE_TRUNC('month', transaction_date) as month_date,
+                COUNT(*)::int as count,
+                SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END) as debit,
+                SUM(CASE WHEN is_credit=TRUE  THEN amount ELSE 0 END) as credit
+         FROM transactions WHERE user_id=$1 AND transaction_date >= NOW()-INTERVAL '6 months'
+         GROUP BY DATE_TRUNC('month', transaction_date), TO_CHAR(DATE_TRUNC('month', transaction_date), 'Mon YY')
+         ORDER BY month_date ASC`,
+        [uid]
+      ),
+      db<any>(
+        `SELECT category_slug as category, COUNT(*)::int as count, SUM(amount)::bigint as volume
+         FROM transactions WHERE user_id=$1 AND is_credit=FALSE
+         AND transaction_date >= NOW()-INTERVAL '3 months'
+         GROUP BY category_slug ORDER BY volume DESC LIMIT 10`,
+        [uid]
+      ),
+      dbOne<any>(
+        `SELECT SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END) as total_debit,
+                SUM(CASE WHEN is_credit=TRUE THEN amount ELSE 0 END) as total_credit,
+                COUNT(*)::int as total_transactions,
+                AVG(CASE WHEN is_credit=FALSE THEN amount ELSE NULL END) as avg_transaction
+         FROM transactions WHERE user_id=$1`,
+        [uid]
+      ),
+    ]);
+
+    // Generate AI-style rule-based insights
+    const insights: string[] = [];
+    if (categoryRaw[0]) {
+      insights.push(`Your highest spending is in **${categoryRaw[0].category}** with ₹${Number(categoryRaw[0].volume).toLocaleString('en-IN')} this quarter.`);
+    }
+    if (monthlyRaw.length >= 2) {
+      const lastDebit = Number(monthlyRaw[monthlyRaw.length-1].debit);
+      const prevDebit = Number(monthlyRaw[monthlyRaw.length-2].debit);
+      const diff = lastDebit - prevDebit;
+      if (diff > 0) insights.push(`Spending increased by ₹${diff.toLocaleString('en-IN')} vs last month. Try setting a monthly budget.`);
+      else insights.push(`Great job! Spending decreased by ₹${Math.abs(diff).toLocaleString('en-IN')} vs last month.`);
+    }
+    const foodCat = categoryRaw.find((c: any) => ['food','groceries'].includes(c.category));
+    if (foodCat && totals?.total_debit) {
+      const pct = Math.round((Number(foodCat.volume) / Number(totals.total_debit)) * 100);
+      if (pct > 30) insights.push(`Food & groceries account for ${pct}% of your spending. Consider meal planning to reduce costs.`);
+    }
+    if (totals?.avg_transaction) {
+      insights.push(`Your average transaction size is ₹${Math.round(Number(totals.avg_transaction)).toLocaleString('en-IN')}.`);
+    }
+
+    return ok(res, {
+      monthly: monthlyRaw,
+      by_category: categoryRaw,
+      insights,
+      total_debit: totals?.total_debit ?? 0,
+      total_credit: totals?.total_credit ?? 0,
+      total_transactions: totals?.total_transactions ?? 0,
+    });
+  } catch (e: any) { console.error(e); return fail(res, 'Server error', 500); }
+});
+
+// GET /admin/analytics — platform-wide analytics
+adminRouter.get('/analytics', async (_req, res) => {
+  try {
+    const [userCount, txStats, topCategories, monthlyTx, dailyActivity, monthlyUsers] = await Promise.all([
+      dbOne<any>('SELECT COUNT(*)::int as total FROM users WHERE role=\'user\''),
+      dbOne<any>('SELECT COUNT(*)::int as count, COALESCE(SUM(amount),0)::bigint as volume FROM transactions'),
+      db<any>(
+        `SELECT category_slug as category, COUNT(*)::int as count, COALESCE(SUM(amount),0)::bigint as volume
+         FROM transactions WHERE is_credit=FALSE
+         GROUP BY category_slug ORDER BY count DESC LIMIT 10`
+      ),
+      db<any>(
+        `SELECT TO_CHAR(DATE_TRUNC('month', transaction_date), 'Mon YY') as month,
+                DATE_TRUNC('month', transaction_date) as month_date,
+                COUNT(*)::int as transactions,
+                COALESCE(SUM(amount),0)::bigint as volume
+         FROM transactions WHERE transaction_date >= NOW()-INTERVAL '6 months'
+         GROUP BY DATE_TRUNC('month', transaction_date), TO_CHAR(DATE_TRUNC('month', transaction_date), 'Mon YY')
+         ORDER BY month_date ASC`
+      ),
+      db<any>(
+        `SELECT TO_CHAR(created_at::date, 'Dy DD') as day, created_at::date as day_date,
+                COUNT(DISTINCT user_id)::int as active_users, COUNT(*)::int as transactions
+         FROM transactions WHERE created_at >= NOW()-INTERVAL '14 days'
+         GROUP BY created_at::date, TO_CHAR(created_at::date, 'Dy DD')
+         ORDER BY day_date ASC`
+      ),
+      db<any>(
+        `SELECT TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YY') as month,
+                DATE_TRUNC('month', created_at) as month_date,
+                COUNT(*)::int as users
+         FROM users WHERE created_at >= NOW()-INTERVAL '6 months'
+         GROUP BY DATE_TRUNC('month', created_at), TO_CHAR(DATE_TRUNC('month', created_at), 'Mon YY')
+         ORDER BY month_date ASC`
+      ),
+    ]);
+
+    // Merge monthly user + tx data by month label
+    const monthMap: Record<string, any> = {};
+    for (const r of monthlyUsers) { monthMap[r.month] = { month: r.month, users: r.users, transactions: 0, volume: 0 }; }
+    for (const r of monthlyTx)    { if (!monthMap[r.month]) monthMap[r.month] = { month: r.month, users: 0 }; monthMap[r.month].transactions = r.transactions; monthMap[r.month].volume = Number(r.volume); }
+    const monthly_growth = Object.values(monthMap).sort((a: any, b: any) => a.month > b.month ? 1 : -1);
+
+    const total_users = userCount?.total ?? 0;
+    const total_tx = txStats?.count ?? 0;
+    const total_vol = Number(txStats?.volume ?? 0);
+
+    return ok(res, {
+      total_users,
+      total_transactions: total_tx,
+      total_volume: total_vol,
+      avg_transactions_per_user: total_users > 0 ? parseFloat((total_tx / total_users).toFixed(1)) : 0,
+      top_categories: topCategories.map((c: any) => ({ ...c, volume: Number(c.volume) })),
+      monthly_growth,
+      daily_activity: dailyActivity,
+    });
+  } catch (e: any) { console.error('[analytics]', e.message); return fail(res, 'Server error', 500); }
 });
 
 // PUT /api/admin/users/:id/status
