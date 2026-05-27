@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
-import { matchMerchant } from '../../shared/src/merchantDb';
+import { matchMerchant } from './merchantDb';
 
 const app = express();
 const PORT = process.env.PORT || 3002;
