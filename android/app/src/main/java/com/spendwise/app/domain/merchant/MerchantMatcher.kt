@@ -6,25 +6,29 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Five-tier intelligent merchant classifier:
- *  0. User corrections (self-learning)  — highest priority
+ * Six-tier intelligent merchant classifier:
+ *  0. User corrections (self-learning)      — highest priority
  *  1. Exact match  → merchantDb.EXACT_MAP
  *  2. UPI domain   → merchantDb.UPI_DOMAIN_MAP  (e.g. "swiggy@upi" → food)
  *  3. Jaro-Winkler fuzzy matching (threshold 0.82)
- *  4. Keyword scoring                  (regex patterns)
- *  5. Default → "other"
+ *  4. SmartCategoryEngine — 600+ keywords, phonetic matching, n-gram, amount heuristics
+ *  5. Location-based classification (async — see [classifyWithLocation])
+ *  6. Default → "other"
  */
 object MerchantMatcher {
 
     /**
+     * Synchronous classification (Tiers 0-4 + fallback).
      * @param rawMerchant      Merchant name as received from the SMS / transaction
      * @param smsBody          Optional full SMS body for additional context
+     * @param amount           Optional transaction amount (used for fuel/food heuristics)
      * @param userCorrections  Optional map of merchant-key → categorySlug from [CategoryCorrectionStore].
      *                         Pass [CategoryCorrectionStore.getSnapshot()] at call site.
      */
     fun classify(
         rawMerchant: String,
         smsBody: String? = null,
+        amount: Double? = null,
         userCorrections: Map<String, String>? = null
     ): MerchantTag {
         val normalized = rawMerchant.trim().lowercase()
@@ -75,19 +79,9 @@ object MerchantMatcher {
             )
         }
 
-        // ── Tier 4: Keyword scoring ───────────────────────────────
-        val textToScan = "$normalized ${smsBody?.lowercase() ?: ""}"
-        val scoreMap = mutableMapOf<String, Int>()
-        for ((pattern, kw) in MerchantDatabase.KEYWORD_SCORES) {
-            if (pattern.containsMatchIn(textToScan)) {
-                scoreMap[kw.slug] = (scoreMap[kw.slug] ?: 0) + kw.score
-            }
-        }
-        if (scoreMap.isNotEmpty()) {
-            val topSlug = scoreMap.maxByOrNull { it.value }!!.key
-            val conf = min(0.75f, scoreMap[topSlug]!! * 0.1f)
-            return MerchantTag(topSlug, topSlug.capitalize(), null, conf, MatchType.KEYWORD)
-        }
+        // ── Tier 4: SmartCategoryEngine ──────────────────────────
+        // 600+ keywords, phonetic variants, n-gram similarity, amount heuristics
+        SmartCategoryEngine.classify(rawMerchant, smsBody, amount)?.let { return it }
 
         // ── Tier 5: Default ───────────────────────────────────────
         return MerchantDatabase.DEFAULT_TAG

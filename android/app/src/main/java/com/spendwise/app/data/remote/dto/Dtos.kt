@@ -224,6 +224,156 @@ data class AutoAddBillEntry(
 data class AutoAddBillsRequest(val bills: List<AutoAddBillEntry>)
 data class AutoAddBillsResponse(val added: Int, val skipped: Int)
 
+// ── Location-based merchant classification ────────────────────
+data class ClassifyMerchantRequest(
+    val merchant: String,
+    @SerializedName("sms_body")  val smsBody: String? = null,
+    val latitude: Double,
+    val longitude: Double,
+    val accuracy: Double = 50.0
+)
+
+data class ClassifyMerchantResult(
+    @SerializedName("category_slug") val categorySlug: String,
+    @SerializedName("display_name")  val displayName: String? = null,
+    @SerializedName("sub_category")  val subCategory: String? = null,
+    val confidence: Double,
+    val source: String = "places"   // "places" | "llm" | "keyword"
+)
+
+// ── Comprehensive monthly report ─────────────────────────────
+
+data class MonthlyReportDto(
+    val month: Int,
+    val year: Int,
+    // ── Core financials ──────────────────────────────────────
+    val summary: MonthSummaryDto,
+    // ── Category breakdown ───────────────────────────────────
+    @SerializedName("category_breakdown") val categoryBreakdown: List<CategoryBreakdownDto>,
+    // ── Daily spending heatmap ───────────────────────────────
+    @SerializedName("daily_spending")     val dailySpending: List<DailySpendDto>,
+    // ── Top merchants ────────────────────────────────────────
+    @SerializedName("top_merchants")      val topMerchants: List<TopMerchantDto>,
+    // ── Day-of-week pattern ──────────────────────────────────
+    @SerializedName("day_of_week")        val dayOfWeek: List<DayOfWeekDto>,
+    // ── Waste / impulse analysis ─────────────────────────────
+    @SerializedName("waste_analysis")     val wasteAnalysis: WasteAnalysisDto,
+    // ── Budget performance ───────────────────────────────────
+    @SerializedName("budget_performance") val budgetPerformance: List<BudgetPerformanceDto>,
+    // ── Upcoming & auto-detected bills ───────────────────────
+    @SerializedName("upcoming_bills")     val upcomingBills: List<UpcomingBillDto>,
+    // ── Financial health score ───────────────────────────────
+    @SerializedName("health_score")       val healthScore: FinancialHealthScoreDto,
+    // ── Anomalies ────────────────────────────────────────────
+    val anomalies: List<AnomalyDto>,
+    // ── Insights & tips ──────────────────────────────────────
+    val insights: List<FinancialInsightDto>,
+    // ── Trend vs last month ──────────────────────────────────
+    val trends: MonthTrendsDto
+)
+
+data class MonthSummaryDto(
+    val income: Double,
+    @SerializedName("total_spent")   val totalSpent: Double,
+    val savings: Double,
+    @SerializedName("savings_rate")  val savingsRate: Int,
+    @SerializedName("vs_last_month") val vsLastMonth: Int,     // % change in spending
+    @SerializedName("burn_rate")     val burnRate: Double,     // daily average spend
+    @SerializedName("peak_day")      val peakDay: String,      // date with highest spend
+    @SerializedName("peak_amount")   val peakAmount: Double,
+    @SerializedName("transaction_count") val transactionCount: Int,
+    @SerializedName("avg_transaction")   val avgTransaction: Double
+)
+
+data class CategoryBreakdownDto(
+    @SerializedName("category_slug")  val categorySlug: String,
+    val amount: Double,
+    val count: Int,
+    @SerializedName("pct_of_total")   val pctOfTotal: Int,
+    @SerializedName("vs_last_month")  val vsLastMonth: Int,    // % change
+    val budget: Double?,
+    @SerializedName("budget_pct")     val budgetPct: Int?,     // spent/budget * 100
+    @SerializedName("budget_status")  val budgetStatus: String // ok | warning | over
+)
+
+data class DailySpendDto(
+    val date: String,               // YYYY-MM-DD
+    val amount: Double,
+    val count: Int
+)
+
+data class TopMerchantDto(
+    val merchant: String,
+    @SerializedName("category_slug") val categorySlug: String,
+    @SerializedName("total_spent")   val totalSpent: Double,
+    @SerializedName("visit_count")   val visitCount: Int,
+    @SerializedName("avg_amount")    val avgAmount: Double,
+    @SerializedName("last_visit")    val lastVisit: String
+)
+
+data class DayOfWeekDto(
+    val day: String,                // Mon | Tue | Wed ...
+    @SerializedName("avg_spend")    val avgSpend: Double,
+    @SerializedName("transaction_count") val transactionCount: Int
+)
+
+data class WasteAnalysisDto(
+    @SerializedName("total_waste")         val totalWaste: Double,
+    @SerializedName("waste_pct")           val wastePct: Int,
+    @SerializedName("top_waste_category")  val topWasteCategory: String?,
+    @SerializedName("waste_transactions")  val wasteTransactions: Int
+)
+
+data class BudgetPerformanceDto(
+    @SerializedName("category_slug") val categorySlug: String,
+    val budget: Double,
+    val spent: Double,
+    val variance: Double,           // spent - budget (positive = overspent)
+    val status: String,             // ok | warning | over
+    @SerializedName("days_remaining") val daysRemaining: Int,
+    @SerializedName("projected_end") val projectedEnd: Double
+)
+
+data class UpcomingBillDto(
+    val name: String,
+    val amount: Double,
+    @SerializedName("due_date") val dueDate: String,
+    @SerializedName("days_until") val daysUntil: Int,
+    val paid: Boolean,
+    val icon: String
+)
+
+data class FinancialHealthScoreDto(
+    val score: Int,                 // 0-100
+    val grade: String,              // A+ | A | B | C | D
+    val factors: List<HealthFactorDto>
+)
+
+data class HealthFactorDto(
+    val name: String,
+    val score: Int,
+    val status: String,             // good | neutral | bad
+    val detail: String
+)
+
+data class AnomalyDto(
+    val merchant: String,
+    @SerializedName("category_slug") val categorySlug: String,
+    val amount: Double,
+    val date: String,
+    val reason: String,             // "3x above average" | "first time merchant" etc.
+    @SerializedName("anomaly_type") val anomalyType: String  // high_amount | unusual_merchant | frequency
+)
+
+data class MonthTrendsDto(
+    @SerializedName("spending_trend")         val spendingTrend: String, // up | down | stable
+    @SerializedName("spending_trend_pct")     val spendingTrendPct: Int,
+    @SerializedName("top_growing_category")   val topGrowingCategory: String?,
+    @SerializedName("top_shrinking_category") val topShrinkingCategory: String?,
+    @SerializedName("new_merchants")          val newMerchants: Int,
+    @SerializedName("recurring_merchants")    val recurringMerchants: Int
+)
+
 // ── Financial Goals ───────────────────────────────────────────
 data class FinancialGoalDto(
     val id: String,

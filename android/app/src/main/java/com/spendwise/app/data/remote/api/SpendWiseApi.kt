@@ -166,6 +166,17 @@ interface IntelligenceApi {
 
     @POST("analytics/auto-add-bills")
     suspend fun autoAddBills(@Body req: AutoAddBillsRequest): Response<ApiResponse<AutoAddBillsResponse>>
+
+    /** Location + Places API fallback classifier (Tier 5) */
+    @POST("analytics/classify-merchant")
+    suspend fun classifyMerchant(@Body req: ClassifyMerchantRequest): Response<ApiResponse<ClassifyMerchantResult>>
+
+    /** Comprehensive monthly analytics report */
+    @GET("analytics/monthly-report")
+    suspend fun getMonthlyReport(
+        @Query("month") month: Int? = null,
+        @Query("year") year: Int? = null
+    ): Response<ApiResponse<MonthlyReportDto>>
 }
 
 interface GoalsApi {

@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { randomUUID as uuidv4 } from 'crypto';
 import { Pool } from 'pg';
 import jwt from 'jsonwebtoken';
 
@@ -421,6 +422,437 @@ app.post('/analytics/auto-add-bills', async (req, res) => {
     return ok(res, { created });
   } catch (e: any) {
     console.error('[auto-add-bills]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── POST /analytics/classify-merchant ────────────────────────
+// Tier-5 fallback: uses Google Places Nearby Search to identify
+// an unknown merchant via GPS coordinates, then maps place types
+// to our category slugs.  Returns confidence 0-1.
+app.post('/analytics/classify-merchant', async (req, res) => {
+  try {
+    const { merchant, sms_body, latitude, longitude, accuracy } = req.body as {
+      merchant: string; sms_body?: string;
+      latitude: number; longitude: number; accuracy?: number;
+    };
+    if (!merchant || latitude == null || longitude == null)
+      return fail(res, 'merchant, latitude, longitude required');
+
+    const PLACES_KEY = process.env.GOOGLE_PLACES_API_KEY;
+    if (!PLACES_KEY) return ok(res, { category_slug: 'other', confidence: 0, source: 'places' });
+
+    // Radius = max(50m, accuracy) capped at 200m to keep results tight
+    const radius = Math.min(200, Math.max(50, accuracy || 100));
+    const keyword = encodeURIComponent(merchant.slice(0, 60));
+    const placesUrl =
+      `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
+      `?location=${latitude},${longitude}&radius=${radius}&keyword=${keyword}&key=${PLACES_KEY}`;
+
+    const placesResp = await fetch(placesUrl);
+    const placesData: any = await placesResp.json();
+
+    if (placesData.status !== 'OK' || !placesData.results?.length) {
+      return ok(res, { category_slug: 'other', confidence: 0.3, source: 'places' });
+    }
+
+    const topResult = placesData.results[0];
+    const types: string[] = topResult.types || [];
+
+    // Map Google Place types → app category slugs
+    const PLACE_TYPE_MAP: Record<string, string> = {
+      // FOOD
+      restaurant: 'food', food: 'food', cafe: 'food', bakery: 'food',
+      meal_delivery: 'food', meal_takeaway: 'food', bar: 'food',
+      ice_cream_shop: 'food', pizza: 'food', fast_food_restaurant: 'food',
+      // FUEL
+      gas_station: 'fuel', petroleum_fuel: 'fuel',
+      // GROCERIES
+      grocery_or_supermarket: 'groceries', supermarket: 'groceries',
+      convenience_store: 'groceries',
+      // SHOPPING
+      shopping_mall: 'shopping', clothing_store: 'shopping',
+      electronics_store: 'shopping', department_store: 'shopping',
+      furniture_store: 'shopping', shoe_store: 'shopping',
+      jewelry_store: 'shopping', book_store: 'shopping',
+      // TRAVEL
+      travel_agency: 'travel', bus_station: 'travel', train_station: 'travel',
+      airport: 'travel', lodging: 'travel', transit_station: 'travel',
+      // HEALTH
+      hospital: 'health', pharmacy: 'health', doctor: 'health',
+      gym: 'health', physiotherapist: 'health', dentist: 'health',
+      spa: 'health', beauty_salon: 'health',
+      // BILLS
+      bank: 'emi', atm: 'emi', finance: 'emi',
+      // EDUCATION
+      school: 'education', university: 'education', library: 'education',
+      // ENTERTAINMENT
+      movie_theater: 'entertainment', night_club: 'entertainment',
+      amusement_park: 'entertainment', bowling_alley: 'entertainment',
+    };
+
+    let bestSlug = 'other';
+    let matchedType = '';
+    for (const t of types) {
+      if (PLACE_TYPE_MAP[t]) { bestSlug = PLACE_TYPE_MAP[t]; matchedType = t; break; }
+    }
+
+    // Confidence: higher when merchant name overlaps with place name
+    const placeNameLower = (topResult.name || '').toLowerCase();
+    const merchantLower  = merchant.toLowerCase();
+    const nameOverlap = placeNameLower.includes(merchantLower.slice(0, 6)) ||
+                        merchantLower.includes(placeNameLower.slice(0, 6));
+    const confidence = bestSlug === 'other' ? 0.3 : nameOverlap ? 0.92 : 0.75;
+
+    return ok(res, {
+      category_slug: bestSlug,
+      display_name:  topResult.name,
+      sub_category:  matchedType,
+      confidence,
+      source: 'places',
+    });
+  } catch (e: any) {
+    console.error('[classify-merchant]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── GET /analytics/monthly-report ────────────────────────────
+// Comprehensive analytics: category breakdown, daily heatmap,
+// top merchants, day-of-week pattern, waste, anomalies, budget
+// performance, health score, upcoming bills, trends.
+app.get('/analytics/monthly-report', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const now    = new Date();
+    const month  = parseInt(String(req.query.month || now.getMonth() + 1));
+    const year   = parseInt(String(req.query.year  || now.getFullYear()));
+    const start  = `${year}-${String(month).padStart(2,'0')}-01`;
+    const end    = new Date(year, month, 0).toISOString().split('T')[0];
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const daysPassed  = month === now.getMonth()+1 && year === now.getFullYear()
+      ? now.getDate() : daysInMonth;
+
+    // Prev month dates for comparison
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prevYear  = month === 1 ? year - 1 : year;
+    const prevStart = `${prevYear}-${String(prevMonth).padStart(2,'0')}-01`;
+    const prevEnd   = new Date(prevYear, prevMonth, 0).toISOString().split('T')[0];
+
+    const [
+      totals, prevTotals, byCategory, prevByCategory,
+      dailySpending, topMerchants, dayOfWeek,
+      wasteRow, budgets, bills, salary, loanTotal,
+      allMerchants, prevMerchants, anomalyRows,
+    ] = await Promise.all([
+
+      // Current month totals
+      dbOne<any>(`
+        SELECT
+          COALESCE(SUM(CASE WHEN is_credit=FALSE AND category_slug!='income' THEN amount ELSE 0 END),0) as total_spent,
+          COALESCE(SUM(CASE WHEN is_credit=TRUE THEN amount ELSE 0 END),0) as total_income,
+          COALESCE(SUM(CASE WHEN is_waste=TRUE THEN amount ELSE 0 END),0) as total_waste,
+          COUNT(*)::int as tx_count,
+          COALESCE(AVG(CASE WHEN is_credit=FALSE THEN amount ELSE NULL END),0) as avg_tx,
+          MAX(CASE WHEN is_credit=FALSE THEN transaction_date ELSE NULL END) as peak_day_placeholder
+        FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`,
+        [userId, start, end]),
+
+      // Prev month totals
+      dbOne<any>(`
+        SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE AND category_slug!='income' THEN amount ELSE 0 END),0) as total_spent
+        FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`,
+        [userId, prevStart, prevEnd]),
+
+      // Category breakdown (current)
+      db<any>(`
+        SELECT category_slug, SUM(amount) as amount, COUNT(*)::int as count
+        FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY category_slug ORDER BY amount DESC`,
+        [userId, start, end]),
+
+      // Category breakdown (prev month) for comparison
+      db<any>(`
+        SELECT category_slug, SUM(amount) as amount
+        FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY category_slug`,
+        [userId, prevStart, prevEnd]),
+
+      // Daily spending heatmap
+      db<any>(`
+        SELECT transaction_date::text as date, SUM(amount) as amount, COUNT(*)::int as count
+        FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY transaction_date ORDER BY transaction_date`,
+        [userId, start, end]),
+
+      // Top merchants
+      db<any>(`
+        SELECT merchant, category_slug,
+          SUM(amount) as total_spent, COUNT(*)::int as visit_count,
+          ROUND(AVG(amount)::numeric,2) as avg_amount,
+          MAX(transaction_date)::text as last_visit
+        FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY merchant, category_slug ORDER BY total_spent DESC LIMIT 10`,
+        [userId, start, end]),
+
+      // Day-of-week analysis
+      db<any>(`
+        SELECT TO_CHAR(transaction_date,'Dy') as day,
+          ROUND(AVG(daily_total)::numeric,2) as avg_spend,
+          SUM(tx_count)::int as transaction_count
+        FROM (
+          SELECT transaction_date,
+            SUM(amount) as daily_total, COUNT(*)::int as tx_count
+          FROM transactions
+          WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+          GROUP BY transaction_date
+        ) d
+        GROUP BY TO_CHAR(transaction_date,'Dy')
+        ORDER BY MIN(EXTRACT(DOW FROM transaction_date))`,
+        [userId, start, end]),
+
+      // Waste totals
+      dbOne<any>(`
+        SELECT
+          COALESCE(SUM(amount),0) as waste_total,
+          COUNT(*)::int as waste_count,
+          (SELECT category_slug FROM transactions
+           WHERE user_id=$1 AND is_waste=TRUE AND transaction_date BETWEEN $2 AND $3
+           GROUP BY category_slug ORDER BY SUM(amount) DESC LIMIT 1) as top_waste_cat
+        FROM transactions WHERE user_id=$1 AND is_waste=TRUE
+          AND transaction_date BETWEEN $2 AND $3`,
+        [userId, start, end]),
+
+      // Budget data
+      db<any>('SELECT * FROM monthly_budgets WHERE user_id=$1 AND month=$2 AND year=$3', [userId, month, year]),
+
+      // Upcoming bills
+      db<any>(`
+        SELECT name, amount, due_day, icon, is_paid_this_month, category
+        FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE
+        ORDER BY due_day`,
+        [userId]),
+
+      // Salary config
+      dbOne<any>('SELECT amount FROM salary_config WHERE user_id=$1', [userId]),
+
+      // EMI total
+      dbOne<any>('SELECT COALESCE(SUM(emi_amount),0) as total FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
+
+      // All distinct merchants this month (for new merchant detection)
+      db<any>(`
+        SELECT DISTINCT merchant FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`,
+        [userId, start, end]),
+
+      // All distinct merchants last month
+      db<any>(`
+        SELECT DISTINCT merchant FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`,
+        [userId, prevStart, prevEnd]),
+
+      // Anomaly detection: amounts > 3x merchant average
+      db<any>(`
+        WITH merchant_avg AS (
+          SELECT merchant, AVG(amount) as avg_amt, STDDEV(amount) as std_amt
+          FROM transactions WHERE user_id=$1 AND is_credit=FALSE
+            AND transaction_date >= NOW() - INTERVAL '3 months'
+          GROUP BY merchant HAVING COUNT(*) >= 3
+        )
+        SELECT t.merchant, t.category_slug, t.amount, t.transaction_date::text as date
+        FROM transactions t JOIN merchant_avg m USING(merchant)
+        WHERE t.user_id=$1
+          AND t.transaction_date BETWEEN $2 AND $3
+          AND t.is_credit=FALSE
+          AND t.amount > m.avg_amt + 2.5 * COALESCE(m.std_amt, m.avg_amt*0.5)
+        ORDER BY t.amount DESC LIMIT 5`,
+        [userId, start, end]),
+    ]);
+
+    // ── Derived calculations ──────────────────────────────────────
+    const totalSpent   = parseFloat(totals?.total_spent   || 0);
+    const totalIncome  = parseFloat(totals?.total_income  || 0);
+    const totalWaste   = parseFloat(wasteRow?.waste_total || 0);
+    const prevSpent    = parseFloat(prevTotals?.total_spent || 0);
+    const salaryAmt    = parseFloat(salary?.amount || 0);
+    const emiAmt       = parseFloat(loanTotal?.total || 0);
+    const txCount      = totals?.tx_count || 0;
+    const avgTx        = parseFloat(totals?.avg_tx || 0);
+    const burnRate     = daysPassed > 0 ? totalSpent / daysPassed : 0;
+    const vsLastMonth  = prevSpent > 0 ? Math.round(((totalSpent - prevSpent) / prevSpent) * 100) : 0;
+    const savings      = (salaryAmt || totalIncome) - totalSpent;
+    const savingsRate  = (salaryAmt || totalIncome) > 0
+      ? Math.round((savings / (salaryAmt || totalIncome)) * 100) : 0;
+
+    // Peak spending day
+    const peakDay = dailySpending.reduce((best: any, d: any) =>
+      parseFloat(d.amount) > parseFloat(best?.amount || 0) ? d : best, dailySpending[0]);
+
+    // Category breakdown with comparison
+    const allCategories = ['food','fuel','groceries','shopping','travel','entertainment',
+      'bills','health','education','insurance','emi','investments','other'];
+    const categoryBreakdown = allCategories.map(slug => {
+      const curr = byCategory.find((c: any) => c.category_slug === slug);
+      const prev = prevByCategory.find((c: any) => c.category_slug === slug);
+      const amount  = parseFloat(curr?.amount || 0);
+      const prevAmt = parseFloat(prev?.amount || 0);
+      const budget  = budgets.find((b: any) => b.category_slug === slug);
+      const budgetAmt  = parseFloat(budget?.amount || 0);
+      const budgetPct  = budgetAmt > 0 ? Math.round((amount / budgetAmt) * 100) : null;
+      const status     = !budgetAmt ? 'ok' : budgetPct! >= 100 ? 'over' : budgetPct! >= 80 ? 'warning' : 'ok';
+      const vsLM = prevAmt > 0 ? Math.round(((amount - prevAmt) / prevAmt) * 100) : 0;
+      return {
+        category_slug: slug, amount,
+        count: curr?.count || 0,
+        pct_of_total: totalSpent > 0 ? Math.round((amount / totalSpent) * 100) : 0,
+        vs_last_month: vsLM,
+        budget: budgetAmt || null,
+        budget_pct: budgetPct,
+        budget_status: status,
+      };
+    }).filter(c => c.amount > 0);
+
+    // Budget performance (only tracked categories)
+    const budgetPerformance = budgets.map((b: any) => {
+      const spent    = parseFloat(byCategory.find((c: any) => c.category_slug === b.category_slug)?.amount || 0);
+      const budget   = parseFloat(b.amount);
+      const variance = spent - budget;
+      const status   = variance > 0 ? 'over' : variance > -budget * 0.2 ? 'warning' : 'ok';
+      const daysLeft = daysInMonth - daysPassed;
+      const projEnd  = daysPassed > 0 ? Math.round((spent / daysPassed) * daysInMonth) : 0;
+      return {
+        category_slug: b.category_slug, budget, spent,
+        variance: Math.round(variance),
+        status, days_remaining: daysLeft, projected_end: projEnd,
+      };
+    });
+
+    // Upcoming bills
+    const upcomingBills = bills.map((b: any) => {
+      const today = now.getDate();
+      let daysUntil = b.due_day - today;
+      if (daysUntil < 0) daysUntil += daysInMonth;
+      return {
+        name: b.name, amount: parseFloat(b.amount),
+        due_date: `${year}-${String(month).padStart(2,'0')}-${String(b.due_day).padStart(2,'0')}`,
+        days_until: daysUntil,
+        paid: b.is_paid_this_month,
+        icon: b.icon || '📄',
+      };
+    }).sort((a: any, b: any) => a.days_until - b.days_until);
+
+    // Financial health score (0-100)
+    const healthFactors = [];
+    let healthScore = 100;
+
+    // Savings rate factor (0-35 pts)
+    const srScore = savingsRate >= 30 ? 35 : savingsRate >= 20 ? 28 : savingsRate >= 10 ? 18 : savingsRate > 0 ? 8 : 0;
+    healthScore  -= (35 - srScore);
+    healthFactors.push({ name: 'Savings Rate', score: srScore, status: srScore >= 28 ? 'good' : srScore >= 18 ? 'neutral' : 'bad', detail: `${savingsRate}% of income saved` });
+
+    // EMI burden (0-25 pts)
+    const emiBurden = salaryAmt > 0 ? (emiAmt / salaryAmt) * 100 : 0;
+    const emiScore = emiBurden <= 20 ? 25 : emiBurden <= 35 ? 18 : emiBurden <= 50 ? 10 : 2;
+    healthScore  -= (25 - emiScore);
+    healthFactors.push({ name: 'EMI Burden', score: emiScore, status: emiScore >= 18 ? 'good' : emiScore >= 10 ? 'neutral' : 'bad', detail: `${Math.round(emiBurden)}% of income in EMIs` });
+
+    // Budget adherence (0-25 pts)
+    const overBudgetCats = budgetPerformance.filter((b: any) => b.status === 'over').length;
+    const budgetScore = overBudgetCats === 0 ? 25 : overBudgetCats === 1 ? 18 : overBudgetCats <= 3 ? 10 : 2;
+    healthScore -= (25 - budgetScore);
+    healthFactors.push({ name: 'Budget Control', score: budgetScore, status: budgetScore >= 18 ? 'good' : budgetScore >= 10 ? 'neutral' : 'bad', detail: `${overBudgetCats} categor${overBudgetCats === 1 ? 'y' : 'ies'} over budget` });
+
+    // Waste ratio (0-15 pts)
+    const wastePct = totalSpent > 0 ? Math.round((totalWaste / totalSpent) * 100) : 0;
+    const wasteScore = wastePct <= 5 ? 15 : wastePct <= 10 ? 10 : wastePct <= 20 ? 5 : 0;
+    healthScore -= (15 - wasteScore);
+    healthFactors.push({ name: 'Impulse Control', score: wasteScore, status: wasteScore >= 10 ? 'good' : wasteScore >= 5 ? 'neutral' : 'bad', detail: `${wastePct}% of spending marked as waste` });
+
+    healthScore = Math.max(0, Math.min(100, healthScore));
+    const grade = healthScore >= 90 ? 'A+' : healthScore >= 80 ? 'A' : healthScore >= 70 ? 'B' : healthScore >= 55 ? 'C' : 'D';
+
+    // New merchants this month
+    const prevMerchantSet = new Set(prevMerchants.map((m: any) => m.merchant));
+    const newMerchantCount = allMerchants.filter((m: any) => !prevMerchantSet.has(m.merchant)).length;
+    const recurringMerchantCount = allMerchants.filter((m: any) => prevMerchantSet.has(m.merchant)).length;
+
+    // Top growing / shrinking category
+    const sortedByGrowth = categoryBreakdown.filter(c => c.vs_last_month !== 0)
+      .sort((a, b) => b.vs_last_month - a.vs_last_month);
+    const topGrowing   = sortedByGrowth[0]?.category_slug || null;
+    const topShrinking = sortedByGrowth[sortedByGrowth.length - 1]?.category_slug || null;
+
+    // Spending trend
+    const spendingTrend = vsLastMonth > 5 ? 'up' : vsLastMonth < -5 ? 'down' : 'stable';
+
+    // Smart insights
+    const insights: Array<{ type: string; message: string; action?: string }> = [];
+    if (vsLastMonth > 20) insights.push({ type: 'warning', message: `Spending up ${vsLastMonth}% vs last month`, action: 'review_spending' });
+    if (vsLastMonth < -10) insights.push({ type: 'success', message: `Great job! Spending down ${Math.abs(vsLastMonth)}% vs last month` });
+    if (savingsRate < 10 && salaryAmt > 0) insights.push({ type: 'alert', message: 'Savings rate below 10% — consider reducing discretionary spend', action: 'set_budget' });
+    if (wastePct > 15) insights.push({ type: 'tip', message: `${wastePct}% of spending is impulse/waste — review marked transactions`, action: 'review_waste' });
+    if (emiBurden > 40) insights.push({ type: 'warning', message: `EMI burden is ${Math.round(emiBurden)}% of income (ideal <30%)`, action: 'view_loans' });
+    if (newMerchantCount > 5) insights.push({ type: 'info', message: `${newMerchantCount} new merchants this month — check for subscriptions`, action: 'view_transactions' });
+    const upcomingUnpaid = upcomingBills.filter((b: any) => !b.paid && b.days_until <= 5);
+    if (upcomingUnpaid.length) insights.push({ type: 'alert', message: `${upcomingUnpaid.length} bill${upcomingUnpaid.length > 1 ? 's' : ''} due in the next 5 days`, action: 'view_bills' });
+
+    return ok(res, {
+      month, year,
+      summary: {
+        income: salaryAmt || totalIncome,
+        total_spent: totalSpent,
+        savings: Math.round(savings),
+        savings_rate: savingsRate,
+        vs_last_month: vsLastMonth,
+        burn_rate: Math.round(burnRate),
+        peak_day: peakDay?.date || null,
+        peak_amount: parseFloat(peakDay?.amount || 0),
+        transaction_count: txCount,
+        avg_transaction: Math.round(avgTx),
+      },
+      category_breakdown: categoryBreakdown,
+      daily_spending: dailySpending.map((d: any) => ({
+        date: d.date, amount: parseFloat(d.amount), count: d.count,
+      })),
+      top_merchants: topMerchants.map((m: any) => ({
+        merchant: m.merchant, category_slug: m.category_slug,
+        total_spent: parseFloat(m.total_spent), visit_count: m.visit_count,
+        avg_amount: parseFloat(m.avg_amount), last_visit: m.last_visit,
+      })),
+      day_of_week: dayOfWeek.map((d: any) => ({
+        day: d.day, avg_spend: parseFloat(d.avg_spend), transaction_count: d.transaction_count,
+      })),
+      waste_analysis: {
+        total_waste: totalWaste,
+        waste_pct: wastePct,
+        top_waste_category: wasteRow?.top_waste_cat || null,
+        waste_transactions: wasteRow?.waste_count || 0,
+      },
+      budget_performance: budgetPerformance,
+      upcoming_bills: upcomingBills,
+      health_score: { score: healthScore, grade, factors: healthFactors },
+      anomalies: anomalyRows.map((a: any) => ({
+        merchant: a.merchant, category_slug: a.category_slug,
+        amount: parseFloat(a.amount), date: a.date,
+        reason: `Amount is significantly above your average for this merchant`,
+        anomaly_type: 'high_amount',
+      })),
+      insights,
+      trends: {
+        spending_trend: spendingTrend,
+        spending_trend_pct: vsLastMonth,
+        top_growing_category: topGrowing,
+        top_shrinking_category: topShrinking,
+        new_merchants: newMerchantCount,
+        recurring_merchants: recurringMerchantCount,
+      },
+    });
+  } catch (e: any) {
+    console.error('[monthly-report]', e.message);
     return fail(res, 'Server error', 500);
   }
 });
