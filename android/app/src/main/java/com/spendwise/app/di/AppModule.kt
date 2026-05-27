@@ -4,7 +4,6 @@ import android.content.Context
 import com.spendwise.app.data.gmail.GmailAuthManager
 import com.spendwise.app.data.local.preferences.CategoryCorrectionStore
 import com.spendwise.app.data.local.preferences.TokenManager
-import com.spendwise.app.data.location.LocationHelper
 import com.spendwise.app.domain.usecase.ParseSmsUseCase
 import com.spendwise.app.sms.SmsScanner
 import dagger.Module
@@ -22,5 +21,4 @@ object AppModule {
     @Provides @Singleton fun provideSmsScanner(@ApplicationContext ctx: Context) = SmsScanner(ctx)
     @Provides @Singleton fun provideCategoryCorrectionStore(@ApplicationContext ctx: Context) = CategoryCorrectionStore(ctx)
     @Provides @Singleton fun provideGmailAuthManager(@ApplicationContext ctx: Context) = GmailAuthManager(ctx)
-    @Provides @Singleton fun provideLocationHelper(@ApplicationContext ctx: Context) = LocationHelper(ctx)
 }

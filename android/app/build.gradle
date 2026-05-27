@@ -134,8 +134,6 @@ dependencies {
     // ── Google Sign-In (Gmail OAuth) ──────────────────────────────
     implementation 'com.google.android.gms:play-services-auth:21.0.0'
 
-    // ── Location (battery-efficient FusedLocationProvider) ────────
-    implementation 'com.google.android.gms:play-services-location:21.2.0'
 }
 
 kapt {

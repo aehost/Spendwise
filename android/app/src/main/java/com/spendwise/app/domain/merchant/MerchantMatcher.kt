@@ -6,14 +6,15 @@ import kotlin.math.max
 import kotlin.math.min
 
 /**
- * Six-tier intelligent merchant classifier:
+ * Five-tier pure-text merchant classifier — no location required.
+ *
  *  0. User corrections (self-learning)      — highest priority
  *  1. Exact match  → merchantDb.EXACT_MAP
  *  2. UPI domain   → merchantDb.UPI_DOMAIN_MAP  (e.g. "swiggy@upi" → food)
  *  3. Jaro-Winkler fuzzy matching (threshold 0.82)
- *  4. SmartCategoryEngine — 600+ keywords, phonetic matching, n-gram, amount heuristics
- *  5. Location-based classification (async — see [classifyWithLocation])
- *  6. Default → "other"
+ *  4. SmartCategoryEngine — MCC code detection, instant patterns, structured SMS
+ *     parsing, 600+ weighted keywords, phonetic regex, bigram n-gram, amount heuristics
+ *  5. Default → "other"
  */
 object MerchantMatcher {
 

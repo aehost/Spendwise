@@ -14,10 +14,6 @@
     <!-- Biometric hardware is optional -->
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
 
-    <!-- Location: coarse (cell/WiFi triangulation) for merchant category lookup -->
-    <!-- Fine location is optional — coarse is sufficient and far cheaper on battery -->
-    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <application
         android:name=".SpendWiseApp"
