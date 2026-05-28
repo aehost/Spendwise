@@ -7,6 +7,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -21,16 +22,36 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.core.formatCurrency
 import com.spendwise.app.data.remote.dto.CreditCardDto
 import com.spendwise.app.presentation.theme.*
+import kotlinx.coroutines.delay
 
 @Composable
 fun CardsScreen(vm: CardsViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
 
+    // Auto-refresh every 30s — picks up outstanding updates made by SmsSyncWorker
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            vm.refresh()
+        }
+    }
+
     Box(Modifier.fillMaxSize().background(Background)) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 80.dp)) {
             item {
-                Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 20.dp, bottom = 8.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text("Credit Cards", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    // Manual refresh — useful after a CC bill SMS arrives
+                    IconButton(onClick = vm::refresh) {
+                        if (state.isLoading)
+                            CircularProgressIndicator(Modifier.size(18.dp), color = Primary, strokeWidth = 2.dp)
+                        else
+                            Icon(Icons.Filled.Refresh, "Refresh", tint = TextSecondary, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
             if (state.cards.isNotEmpty()) {
@@ -70,8 +91,13 @@ fun CreditCardItem(card: CreditCardDto, onDelete: (String) -> Unit) {
 
     Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = CardBg), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                Text(card.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(card.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    if (card.lastFour != null) {
+                        Text("•••• ${card.lastFour}", fontSize = 11.sp, color = TextMuted)
+                    }
+                }
                 Text("Due: ${card.dueDay}", fontSize = 12.sp, color = TextMuted)
             }
             Spacer(Modifier.height(12.dp))

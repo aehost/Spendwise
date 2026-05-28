@@ -7,6 +7,7 @@ import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.TransactionApi
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.BatchTransactionRequest
+import com.spendwise.app.data.remote.dto.CreateCreditCardRequest
 import com.spendwise.app.data.remote.dto.CreateTransactionRequest
 import com.spendwise.app.data.remote.dto.SmsScanTsRequest
 import com.spendwise.app.domain.usecase.ParsedBillDue
@@ -17,6 +18,7 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.concurrent.TimeUnit
 
@@ -39,28 +41,71 @@ class SmsSyncWorker @AssistedInject constructor(
 ) : CoroutineWorker(appContext, workerParams) {
 
     /**
-     * When a credit-card bill-due SMS is detected, find the matching credit card
-     * by last-4 digits and update its outstanding balance and minimum due.
+     * When a credit-card bill-due SMS is detected:
+     *   1. Try to find an existing card by last-4 digits (exact)
+     *   2. Try to find an existing card by bank name (any meaningful word match)
+     *   3. If no match found → auto-create the card from SMS data so nothing is lost
+     *
+     * All paths update/create outstanding + min_due + last_four.
      */
     private suspend fun updateCreditCardOutstanding(due: ParsedBillDue) {
         try {
             val resp  = userApi.getCreditCards()
             val cards = resp.body()?.data ?: return
 
-            // 1st preference: match by last-4 digits (if the card DTO has lastFour)
-            val card = due.cardLast4?.let { last4 ->
+            // ── Step 1: match by last-4 digits ────────────────────
+            var matchedCard = due.cardLast4?.let { last4 ->
                 cards.firstOrNull { it.lastFour?.takeLast(4) == last4.takeLast(4) }
             }
-            // 2nd preference: match by bank name contained in the card name
-            ?: due.bankName?.let { bank ->
-                val bankToken = bank.lowercase().split(" ").firstOrNull() ?: return
-                cards.firstOrNull { it.name.lowercase().contains(bankToken) }
-            }
-            ?: return   // couldn't identify the card — skip silently
 
-            val updates = mutableMapOf<String, Any?>("outstanding" to due.outstandingAmount)
-            due.minDueAmount?.let { updates["min_due"] = it }
-            userApi.updateCreditCard(card.id, updates)
+            // ── Step 2: match by bank name tokens ─────────────────
+            // Use ALL meaningful words (≥3 chars, not generic like "bank", "card", "credit")
+            if (matchedCard == null && due.bankName != null) {
+                val stopWords = setOf("bank", "card", "credit", "the", "ltd", "pvt")
+                val tokens = due.bankName.lowercase()
+                    .split(Regex("\\s+"))
+                    .filter { it.length >= 3 && it !in stopWords }
+                matchedCard = cards.firstOrNull { c ->
+                    val nameLower = c.name.lowercase()
+                    tokens.any { token -> nameLower.contains(token) }
+                }
+            }
+
+            if (matchedCard != null) {
+                // ── Update existing card ───────────────────────────
+                val updates = mutableMapOf<String, Any?>("outstanding" to due.outstandingAmount)
+                due.minDueAmount?.let { updates["min_due"] = it }
+                // Backfill last_four if it was never stored
+                if (matchedCard.lastFour == null && due.cardLast4 != null) {
+                    updates["last_four"] = due.cardLast4
+                }
+                userApi.updateCreditCard(matchedCard.id, updates)
+
+            } else {
+                // ── Auto-create card — don't lose the data ─────────
+                // Build a sensible card name: "Axis Bank CC (XX9156)"
+                val bankLabel = due.bankName ?: "Credit"
+                val cardName  = buildString {
+                    append(bankLabel)
+                    append(" CC")
+                    due.cardLast4?.let { append(" (XX$it)") }
+                }
+                // Extract due day from the due date, e.g. "2026-06-01" → 1
+                val dueDay = due.dueDate?.let {
+                    runCatching { LocalDate.parse(it).dayOfMonth }.getOrElse { 1 }
+                } ?: 1
+
+                userApi.createCreditCard(
+                    CreateCreditCardRequest(
+                        name        = cardName,
+                        creditLimit = 0.0,
+                        outstanding = due.outstandingAmount,
+                        dueDay      = dueDay,
+                        minDue      = due.minDueAmount ?: 0.0,
+                        lastFour    = due.cardLast4
+                    )
+                )
+            }
         } catch (_: Exception) {}
     }
 
