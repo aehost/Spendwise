@@ -44,15 +44,21 @@ class SmsSyncWorker @AssistedInject constructor(
      */
     private suspend fun updateCreditCardOutstanding(due: ParsedBillDue) {
         try {
-            val last4 = due.cardLast4 ?: return
             val resp  = userApi.getCreditCards()
-            val card  = resp.body()?.data?.firstOrNull { card ->
-                card.lastFour?.takeLast(4) == last4.takeLast(4)
-            } ?: return
+            val cards = resp.body()?.data ?: return
 
-            val updates = mutableMapOf<String, Any?>(
-                "outstanding" to due.outstandingAmount
-            )
+            // 1st preference: match by last-4 digits (if the card DTO has lastFour)
+            val card = due.cardLast4?.let { last4 ->
+                cards.firstOrNull { it.lastFour?.takeLast(4) == last4.takeLast(4) }
+            }
+            // 2nd preference: match by bank name contained in the card name
+            ?: due.bankName?.let { bank ->
+                val bankToken = bank.lowercase().split(" ").firstOrNull() ?: return
+                cards.firstOrNull { it.name.lowercase().contains(bankToken) }
+            }
+            ?: return   // couldn't identify the card — skip silently
+
+            val updates = mutableMapOf<String, Any?>("outstanding" to due.outstandingAmount)
             due.minDueAmount?.let { updates["min_due"] = it }
             userApi.updateCreditCard(card.id, updates)
         } catch (_: Exception) {}

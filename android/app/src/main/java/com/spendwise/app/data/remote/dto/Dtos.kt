@@ -129,7 +129,8 @@ data class CreditCardDto(
     val outstanding: Double,
     @SerializedName("due_day") val dueDay: Int,
     @SerializedName("min_due") val minDue: Double,
-    val color: String = "#EC4899"
+    val color: String = "#EC4899",
+    @SerializedName("last_four") val lastFour: String? = null   // optional — for CC bill-due SMS matching
 )
 data class CreateCreditCardRequest(val name: String, @SerializedName("credit_limit") val creditLimit: Double, val outstanding: Double = 0.0, @SerializedName("due_day") val dueDay: Int = 1, @SerializedName("min_due") val minDue: Double = 0.0, val color: String = "#EC4899")
 
