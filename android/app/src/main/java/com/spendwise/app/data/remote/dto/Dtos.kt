@@ -1,6 +1,7 @@
 package com.spendwise.app.data.remote.dto
 
 import com.google.gson.annotations.SerializedName
+import com.spendwise.app.domain.model.User
 
 // ── Generic wrapper ────────────────────────────────────────────
 data class ApiResponse<T>(
@@ -33,9 +34,19 @@ data class UserDto(
     @SerializedName("id")            val id: String,
     @SerializedName("email")         val email: String,
     @SerializedName("name")          val name: String,
-    @SerializedName("role")          val role: String = "user",
-    @SerializedName("currency_code") val currencyCode: String = "INR"
-)
+    @SerializedName("role")          val role: String? = null,        // nullable: Gson bypasses constructor defaults
+    @SerializedName("currency_code") val currencyCode: String? = null  // nullable: server may omit this field
+) {
+    /** Safe mapping to domain model — Gson bypasses constructors so defaults
+     *  like "INR" are never set; always guard with ?: here. */
+    fun toDomain() = User(
+        id           = id,
+        email        = email,
+        name         = name        ?: "",
+        role         = role        ?: "user",
+        currencyCode = currencyCode ?: "INR"
+    )
+}
 
 // ── Transaction ────────────────────────────────────────────────
 data class TransactionDto(

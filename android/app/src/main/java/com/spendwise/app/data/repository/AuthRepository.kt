@@ -8,7 +8,6 @@ import com.spendwise.app.data.remote.dto.LogoutRequest
 import com.spendwise.app.data.remote.dto.RefreshRequest
 import com.spendwise.app.data.remote.dto.RegisterRequest
 import com.spendwise.app.domain.model.AuthTokens
-import com.spendwise.app.domain.model.User
 import org.json.JSONObject
 import retrofit2.Response
 import javax.inject.Inject
@@ -28,7 +27,7 @@ class AuthRepository @Inject constructor(
                 Result.Success(AuthTokens(
                     accessToken  = data.accessToken,
                     refreshToken = data.refreshToken,
-                    user = User(data.user.id, data.user.email, data.user.name, data.user.role, data.user.currencyCode)
+                    user = data.user.toDomain()
                 ))
             } else {
                 val err = response.body()?.error ?: parseErrorBody(response) ?: "Login failed"
@@ -48,7 +47,7 @@ class AuthRepository @Inject constructor(
                 Result.Success(AuthTokens(
                     accessToken  = data.accessToken,
                     refreshToken = data.refreshToken,
-                    user = User(data.user.id, data.user.email, data.user.name, data.user.role, data.user.currencyCode)
+                    user = data.user.toDomain()
                 ))
             } else {
                 val err = response.body()?.error ?: parseErrorBody(response) ?: "Registration failed"
