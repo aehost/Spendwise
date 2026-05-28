@@ -8,6 +8,7 @@ import com.spendwise.app.data.remote.dto.LogoutRequest
 import com.spendwise.app.data.remote.dto.RefreshRequest
 import com.spendwise.app.data.remote.dto.RegisterRequest
 import com.spendwise.app.domain.model.AuthTokens
+import com.spendwise.app.domain.model.User
 import org.json.JSONObject
 import retrofit2.Response
 import javax.inject.Inject
