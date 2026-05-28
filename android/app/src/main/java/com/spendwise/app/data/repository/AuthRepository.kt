@@ -101,8 +101,11 @@ class AuthRepository @Inject constructor(
     }
 
     /** Parse the error message from a non-2xx response body (e.g. 400 / 409 / 500). */
-    private fun parseErrorBody(response: Response<*>): String? = try {
-        val body = response.errorBody()?.string() ?: return null
-        JSONObject(body).optString("error").takeIf { it.isNotBlank() }
-    } catch (_: Exception) { null }
+    private fun parseErrorBody(response: Response<*>): String? {
+        return try {
+            val raw = response.errorBody()?.string()
+            if (raw.isNullOrBlank()) null
+            else JSONObject(raw).optString("error").ifBlank { null }
+        } catch (_: Exception) { null }
+    }
 }
