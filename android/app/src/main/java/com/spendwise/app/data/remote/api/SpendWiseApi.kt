@@ -22,6 +22,15 @@ interface AuthApi {
 
     @DELETE("auth/account")
     suspend fun deleteAccount(): Response<ApiResponse<Map<String, String>>>
+
+    @POST("auth/forgot-password")
+    suspend fun forgotPassword(@Body request: ForgotPasswordRequest): Response<ApiResponse<ForgotPasswordResponse>>
+
+    @POST("auth/reset-password")
+    suspend fun resetPassword(@Body request: ResetPasswordRequest): Response<ApiResponse<Map<String, String>>>
+
+    @PUT("auth/change-password")
+    suspend fun changePassword(@Body request: ChangePasswordRequest): Response<ApiResponse<Map<String, String>>>
 }
 
 interface TransactionApi {
@@ -144,6 +153,12 @@ interface UserApi {
 
     @PUT("user/budgets")
     suspend fun updateBudgets(@Body req: UpdateBudgetsRequest): Response<ApiResponse<Map<String, Any>>>
+
+    @POST("user/support-ticket")
+    suspend fun createSupportTicket(@Body req: CreateSupportTicketRequest): Response<ApiResponse<SupportTicketDto>>
+
+    @GET("user/support-tickets")
+    suspend fun getSupportTickets(): Response<ApiResponse<Map<String, List<SupportTicketDto>>>>
 }
 
 interface AnalyticsApi {

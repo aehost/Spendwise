@@ -17,6 +17,7 @@ import com.spendwise.app.presentation.screens.cards.CardsScreen
 import com.spendwise.app.presentation.screens.home.HomeScreen
 import com.spendwise.app.presentation.screens.loans.LoansScreen
 import com.spendwise.app.presentation.screens.money.MoneyScreen
+import com.spendwise.app.presentation.screens.report.MonthlyReportScreen
 import com.spendwise.app.presentation.screens.settings.SettingsScreen
 import com.spendwise.app.presentation.screens.setup.SetupScreen
 import com.spendwise.app.presentation.screens.transactions.TransactionListScreen
@@ -25,14 +26,15 @@ import com.spendwise.app.presentation.theme.TextMuted
 import com.spendwise.app.presentation.theme.CardBg
 
 sealed class Screen(val route: String) {
-    object Setup        : Screen("setup")
-    object Auth         : Screen("auth")
-    object Home         : Screen("home")
-    object Transactions : Screen("transactions")
-    object Cards        : Screen("cards")
-    object Loans        : Screen("loans")
-    object Money        : Screen("money")
-    object Settings     : Screen("settings")
+    object Setup         : Screen("setup")
+    object Auth          : Screen("auth")
+    object Home          : Screen("home")
+    object Transactions  : Screen("transactions")
+    object Cards         : Screen("cards")
+    object Loans         : Screen("loans")
+    object Money         : Screen("money")
+    object Settings      : Screen("settings")
+    object MonthlyReport : Screen("monthly_report")
 }
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
@@ -84,14 +86,28 @@ fun SpendWiseNavGraph(startRoute: String) {
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
             NavHost(navController = navController, startDestination = startRoute) {
-                composable(Screen.Setup.route)        { SetupScreen(onDone = { navController.navigate(Screen.Auth.route) { popUpTo(Screen.Setup.route) { inclusive = true } } }) }
-                composable(Screen.Auth.route)         { AuthScreen(onAuthSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Auth.route) { inclusive = true } } }) }
-                composable(Screen.Home.route)         { HomeScreen(onSettings = { navController.navigate(Screen.Settings.route) }) }
+                composable(Screen.Setup.route) {
+                    SetupScreen(onDone = { navController.navigate(Screen.Auth.route) { popUpTo(Screen.Setup.route) { inclusive = true } } })
+                }
+                composable(Screen.Auth.route) {
+                    AuthScreen(onAuthSuccess = { navController.navigate(Screen.Home.route) { popUpTo(Screen.Auth.route) { inclusive = true } } })
+                }
+                composable(Screen.Home.route) {
+                    HomeScreen(onSettings = { navController.navigate(Screen.Settings.route) })
+                }
                 composable(Screen.Transactions.route) { TransactionListScreen() }
                 composable(Screen.Cards.route)        { CardsScreen() }
                 composable(Screen.Loans.route)        { LoansScreen() }
                 composable(Screen.Money.route)        { MoneyScreen() }
-                composable(Screen.Settings.route)     { SettingsScreen(onLogout = { navController.navigate(Screen.Auth.route) { popUpTo(0) { inclusive = true } } }) }
+                composable(Screen.Settings.route) {
+                    SettingsScreen(
+                        onLogout        = { navController.navigate(Screen.Auth.route) { popUpTo(0) { inclusive = true } } },
+                        onMonthlyReport = { navController.navigate(Screen.MonthlyReport.route) }
+                    )
+                }
+                composable(Screen.MonthlyReport.route) {
+                    MonthlyReportScreen(onBack = { navController.popBackStack() })
+                }
             }
         }
     }

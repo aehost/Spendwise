@@ -140,6 +140,44 @@ app.all('/auth/*', authFwd);
 app.all('/auth', authFwd);
 app.all('/transactions/*', transactionFwd);
 app.all('/transactions', transactionFwd);
+// ── USER-FACING SUPPORT TICKET ─────────────────────────────────
+// This must be registered BEFORE app.use('/user', userFwd) so Express
+// matches it first for POST /user/support-ticket.
+app.post('/user/support-ticket', authMiddleware, async (req, res) => {
+  try {
+    const { subject, description, category } = req.body;
+    if (!subject || !description) return fail(res, 'subject and description required');
+
+    const { v4: uuidv4 } = await import('uuid');
+    const userId = (req as any).user.userId;
+
+    const row = await dbOne<any>(
+      `INSERT INTO support_tickets(id,user_id,subject,description,priority,category)
+       VALUES($1,$2,$3,$4,'medium',$5) RETURNING id,subject,status,created_at`,
+      [uuidv4(), userId, subject, description, category || null]
+    );
+    return ok(res, row, 201);
+  } catch (e: any) {
+    console.error('[support-ticket]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// GET /user/support-tickets — user can view their own tickets
+app.get('/user/support-tickets', authMiddleware, async (req, res) => {
+  try {
+    const userId  = (req as any).user.userId;
+    const tickets = await db(
+      `SELECT id,subject,status,priority,category,created_at,updated_at
+       FROM support_tickets WHERE user_id=$1 ORDER BY created_at DESC LIMIT 20`,
+      [userId]
+    );
+    return ok(res, { tickets });
+  } catch (e: any) {
+    return fail(res, 'Server error', 500);
+  }
+});
+
 // Use app.use (not app.all) so Express strips '/user' from req.path before we forward.
 // user-service listens at /profile, /bank-accounts etc (no /user prefix).
 app.use('/user', userFwd);

@@ -230,6 +230,94 @@ app.delete('/auth/account', authMiddleware, async (req, res) => {
   }
 });
 
+// ── Auto-migrate: add reset OTP columns if they don't exist ───
+pool.query(`
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_otp            VARCHAR(6);
+  ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_otp_expires_at TIMESTAMPTZ;
+`).catch(() => {/* columns already exist — ignore */});
+
+// POST /auth/forgot-password
+// Generates a 6-digit OTP valid for 15 min and stores it on the user row.
+// The OTP is returned in the response (demo mode — no SMTP configured).
+app.post('/auth/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) return fail(res, 'email required');
+
+    const user = await dbOne<any>('SELECT id FROM users WHERE email=$1 AND is_active=TRUE', [email.toLowerCase()]);
+    if (!user) {
+      // Don't reveal whether the email exists — always return success
+      return ok(res, { message: 'If that email is registered you will receive a reset code.' });
+    }
+
+    const otp     = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digits
+    const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 min
+    await db('UPDATE users SET reset_otp=$1, reset_otp_expires_at=$2 WHERE id=$3', [otp, expires, user.id]);
+
+    // In a production app, email the OTP here.
+    // For this personal-use app the OTP is returned in the response body.
+    return ok(res, { message: 'Reset code generated.', otp });
+  } catch (e: any) {
+    console.error('[forgot-password]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// POST /auth/reset-password
+// Verifies the OTP and sets a new password.
+app.post('/auth/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    if (!email || !otp || !newPassword) return fail(res, 'email, otp, and newPassword required');
+    if (newPassword.length < 8) return fail(res, 'Password must be at least 8 characters');
+
+    const user = await dbOne<any>(
+      `SELECT * FROM users WHERE email=$1 AND is_active=TRUE
+         AND reset_otp=$2 AND reset_otp_expires_at > NOW()`,
+      [email.toLowerCase(), otp]
+    );
+    if (!user) return fail(res, 'Invalid or expired reset code', 400, 'INVALID_OTP');
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db(
+      'UPDATE users SET password_hash=$1, reset_otp=NULL, reset_otp_expires_at=NULL WHERE id=$2',
+      [hash, user.id]
+    );
+
+    // Revoke all existing sessions so old tokens stop working
+    await db('UPDATE user_sessions SET is_revoked=TRUE WHERE user_id=$1', [user.id]);
+
+    return ok(res, { message: 'Password reset successfully. Please log in.' });
+  } catch (e: any) {
+    console.error('[reset-password]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// PUT /auth/change-password  (requires active session)
+app.put('/auth/change-password', authMiddleware, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) return fail(res, 'currentPassword and newPassword required');
+    if (newPassword.length < 8) return fail(res, 'Password must be at least 8 characters');
+
+    const userId = (req as any).user.userId;
+    const user   = await dbOne<any>('SELECT * FROM users WHERE id=$1', [userId]);
+    if (!user) return fail(res, 'User not found', 404);
+
+    const match = await bcrypt.compare(currentPassword, user.password_hash);
+    if (!match) return fail(res, 'Current password is incorrect', 401, 'WRONG_PASSWORD');
+
+    const hash = await bcrypt.hash(newPassword, 12);
+    await db('UPDATE users SET password_hash=$1 WHERE id=$2', [hash, userId]);
+
+    return ok(res, { message: 'Password changed successfully.' });
+  } catch (e: any) {
+    console.error('[change-password]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
 // Health check
 app.get('/health', (_req, res) => res.json({ service: 'auth', status: 'ok', ts: new Date() }));
 

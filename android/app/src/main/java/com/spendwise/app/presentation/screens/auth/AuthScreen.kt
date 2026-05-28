@@ -24,16 +24,20 @@ fun AuthScreen(
     onAuthSuccess: () -> Unit,
     vm: AuthViewModel = hiltViewModel()
 ) {
-    val state by vm.state.collectAsState()
-    var isLogin by remember { mutableStateOf(true) }
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var name by remember { mutableStateOf("") }
-    var showPassword by remember { mutableStateOf(false) }
+    val state       by vm.state.collectAsState()
+    val forgotState by vm.forgotState.collectAsState()
 
-    LaunchedEffect(state.success) {
-        if (state.success) onAuthSuccess()
-    }
+    var isLogin     by remember { mutableStateOf(true) }
+    var email       by remember { mutableStateOf("") }
+    var password    by remember { mutableStateOf("") }
+    var name        by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var showForgot  by remember { mutableStateOf(false) }
+
+    LaunchedEffect(state.success) { if (state.success) onAuthSuccess() }
+
+    // Reset forgot flow when dialog is dismissed
+    LaunchedEffect(showForgot) { if (!showForgot) vm.resetForgotState() }
 
     Column(
         modifier = Modifier
@@ -50,7 +54,7 @@ fun AuthScreen(
 
         Spacer(Modifier.height(40.dp))
 
-        // Tabs
+        // Login / Sign Up tabs
         Row(Modifier.fillMaxWidth()) {
             listOf("Login", "Sign Up").forEachIndexed { i, label ->
                 val sel = (i == 0) == isLogin
@@ -61,7 +65,7 @@ fun AuthScreen(
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(label, fontWeight = if (sel) FontWeight.Bold else FontWeight.Normal, fontSize = 16.sp)
-                        if (sel) Divider(color = Primary, thickness = 2.dp, modifier = Modifier.padding(top = 4.dp))
+                        if (sel) HorizontalDivider(color = Primary, thickness = 2.dp, modifier = Modifier.padding(top = 4.dp))
                     }
                 }
             }
@@ -73,8 +77,7 @@ fun AuthScreen(
             OutlinedTextField(
                 value = name, onValueChange = { name = it },
                 label = { Text("Full Name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                singleLine = true, modifier = Modifier.fillMaxWidth(),
                 colors = outlinedColors()
             )
             Spacer(Modifier.height(12.dp))
@@ -105,13 +108,20 @@ fun AuthScreen(
             colors = outlinedColors()
         )
 
-        Spacer(Modifier.height(8.dp))
+        // Forgot password link (Login tab only)
+        if (isLogin) {
+            Spacer(Modifier.height(4.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                TextButton(onClick = { showForgot = true }) {
+                    Text("Forgot Password?", fontSize = 13.sp, color = Primary)
+                }
+            }
+        } else {
+            Spacer(Modifier.height(8.dp))
+        }
 
         state.error?.let {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = ErrorColor.copy(alpha = 0.12f)),
-                modifier = Modifier.fillMaxWidth()
-            ) {
+            Card(colors = CardDefaults.cardColors(containerColor = ErrorColor.copy(alpha = 0.12f)), modifier = Modifier.fillMaxWidth()) {
                 Text(it, color = ErrorColor, modifier = Modifier.padding(12.dp), fontSize = 13.sp)
             }
             Spacer(Modifier.height(8.dp))
@@ -137,6 +147,104 @@ fun AuthScreen(
         Spacer(Modifier.height(24.dp))
         Text("Your data is end-to-end encrypted.", fontSize = 12.sp, color = TextMuted)
     }
+
+    // ── Forgot Password dialog ────────────────────────────────
+    if (showForgot) {
+        ForgotPasswordDialog(
+            forgotState = forgotState,
+            onDismiss   = { showForgot = false },
+            onSendOtp   = { em -> vm.sendForgotOtp(em) },
+            onReset     = { em, otp, pw -> vm.resetPassword(em, otp, pw) },
+            onDone      = { showForgot = false }
+        )
+    }
+}
+
+@Composable
+fun ForgotPasswordDialog(
+    forgotState: ForgotPwState,
+    onDismiss: () -> Unit,
+    onSendOtp: (String) -> Unit,
+    onReset: (String, String, String) -> Unit,
+    onDone: () -> Unit
+) {
+    var email    by remember { mutableStateOf("") }
+    var otp      by remember { mutableStateOf("") }
+    var newPw    by remember { mutableStateOf("") }
+    var confirmPw by remember { mutableStateOf("") }
+    var showPw   by remember { mutableStateOf(false) }
+    var localErr by remember { mutableStateOf<String?>(null) }
+
+    // Pre-fill OTP if returned by server
+    LaunchedEffect(forgotState.otp) {
+        forgotState.otp?.let { otp = it }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss, containerColor = CardBg,
+        title = { Text(when (forgotState.step) { 0 -> "Forgot Password"; 1 -> "Enter Reset Code"; else -> "Password Reset" }, color = TextPrimary) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when (forgotState.step) {
+                    0 -> {
+                        Text("Enter your email address to receive a reset code.", fontSize = 13.sp, color = TextSecondary)
+                        OutlinedTextField(value = email, onValueChange = { email = it }, label = { Text("Email", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email))
+                    }
+                    1 -> {
+                        forgotState.otp?.let {
+                            Card(colors = CardDefaults.cardColors(containerColor = Primary.copy(0.1f)), modifier = Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp)) {
+                                    Text("Your reset code:", fontSize = 12.sp, color = Primary)
+                                    Text(it, fontSize = 22.sp, fontWeight = FontWeight.Black, color = Primary)
+                                    Text("(Code is pre-filled below)", fontSize = 11.sp, color = TextMuted)
+                                }
+                            }
+                        }
+                        OutlinedTextField(value = otp, onValueChange = { otp = it }, label = { Text("Reset Code (6 digits)", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        OutlinedTextField(
+                            value = newPw, onValueChange = { newPw = it },
+                            label = { Text("New Password", color = TextSecondary) },
+                            singleLine = true, modifier = Modifier.fillMaxWidth(),
+                            visualTransformation = if (showPw) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = { TextButton(onClick = { showPw = !showPw }) { Text(if (showPw) "Hide" else "Show", fontSize = 11.sp, color = Primary) } }
+                        )
+                        OutlinedTextField(value = confirmPw, onValueChange = { confirmPw = it }, label = { Text("Confirm Password", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth(), visualTransformation = PasswordVisualTransformation())
+                    }
+                    2 -> {
+                        Text(forgotState.successMessage ?: "Password reset successfully!", color = SuccessColor, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                    }
+                }
+                (localErr ?: forgotState.error)?.let { Text(it, color = ErrorColor, fontSize = 12.sp) }
+            }
+        },
+        confirmButton = {
+            when (forgotState.step) {
+                0 -> Button(
+                    onClick = { localErr = null; if (email.isBlank()) localErr = "Enter your email" else onSendOtp(email) },
+                    enabled = !forgotState.isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) { if (forgotState.isLoading) CircularProgressIndicator(Modifier.size(16.dp), color = androidx.compose.ui.graphics.Color.White, strokeWidth = 2.dp) else Text("Send Code") }
+                1 -> Button(
+                    onClick = {
+                        localErr = null
+                        when {
+                            otp.length != 6  -> localErr = "Enter the 6-digit code"
+                            newPw.length < 8 -> localErr = "Password must be at least 8 characters"
+                            newPw != confirmPw -> localErr = "Passwords do not match"
+                            else             -> onReset(email, otp, newPw)
+                        }
+                    },
+                    enabled = !forgotState.isLoading,
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
+                ) { if (forgotState.isLoading) CircularProgressIndicator(Modifier.size(16.dp), color = androidx.compose.ui.graphics.Color.White, strokeWidth = 2.dp) else Text("Reset Password") }
+                else -> Button(onClick = onDone, colors = ButtonDefaults.buttonColors(containerColor = SuccessColor)) { Text("Done") }
+            }
+        },
+        dismissButton = {
+            if (forgotState.step < 2) TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) }
+        }
+    )
 }
 
 @Composable

@@ -447,6 +447,40 @@ data class CreateGoalRequest(
 
 data class ContributeGoalRequest(val amount: Double, val note: String = "")
 
+// ── Password reset / change ───────────────────────────────────
+data class ForgotPasswordRequest(@SerializedName("email") val email: String)
+data class ForgotPasswordResponse(
+    @SerializedName("message") val message: String,
+    @SerializedName("otp")     val otp: String?   // returned for demo — no SMTP
+)
+
+data class ResetPasswordRequest(
+    @SerializedName("email")       val email: String,
+    @SerializedName("otp")         val otp: String,
+    @SerializedName("newPassword") val newPassword: String
+)
+
+data class ChangePasswordRequest(
+    @SerializedName("currentPassword") val currentPassword: String,
+    @SerializedName("newPassword")     val newPassword: String
+)
+
+// ── Support tickets ───────────────────────────────────────────
+data class CreateSupportTicketRequest(
+    @SerializedName("subject")     val subject: String,
+    @SerializedName("description") val description: String,
+    @SerializedName("category")    val category: String? = null
+)
+
+data class SupportTicketDto(
+    @SerializedName("id")         val id: String,
+    @SerializedName("subject")    val subject: String,
+    @SerializedName("status")     val status: String,
+    @SerializedName("priority")   val priority: String? = null,
+    @SerializedName("category")   val category: String? = null,
+    @SerializedName("created_at") val createdAt: String? = null
+)
+
 // ── Gmail ─────────────────────────────────────────────────────
 data class GmailStatusDto(
     val connected: Boolean,

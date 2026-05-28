@@ -4,6 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.UserApi
+import com.spendwise.app.data.remote.dto.BillDto
+import com.spendwise.app.data.remote.dto.CreateBillRequest
 import com.spendwise.app.data.remote.dto.CreateInvestmentRequest
 import com.spendwise.app.data.remote.dto.InvestmentDto
 import com.spendwise.app.data.remote.dto.SalaryReceivedRequest
@@ -19,7 +21,9 @@ data class MoneyState(
     val salaryDay: Int = 1,
     val totalSpent: Double = 0.0,
     val investments: List<InvestmentDto> = emptyList(),
-    val isLoading: Boolean = true
+    val bills: List<BillDto> = emptyList(),
+    val isLoading: Boolean = true,
+    val billError: String? = null
 )
 
 @HiltViewModel
@@ -36,15 +40,17 @@ class MoneyViewModel @Inject constructor(
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
             try {
-                val salary = userApi.getSalary()
+                val salary      = userApi.getSalary()
                 val investments = userApi.getInvestments()
-                val dashboard = analyticsApi.getDashboard()
+                val bills       = userApi.getBills()
+                val dashboard   = analyticsApi.getDashboard()
 
                 _state.value = MoneyState(
                     salaryAmount  = salary.body()?.data?.amount ?: 0.0,
                     salaryDay     = salary.body()?.data?.expectedDay ?: 1,
                     totalSpent    = dashboard.body()?.data?.totalSpent ?: 0.0,
                     investments   = investments.body()?.data ?: emptyList(),
+                    bills         = bills.body()?.data ?: emptyList(),
                     isLoading     = false
                 )
             } catch (_: Exception) { _state.value = _state.value.copy(isLoading = false) }
@@ -63,6 +69,33 @@ class MoneyViewModel @Inject constructor(
     fun addInvestment(name: String, monthly: Double, current: Double) {
         viewModelScope.launch {
             try { userApi.createInvestment(CreateInvestmentRequest(name, monthly, current)); load() }
+            catch (_: Exception) {}
+        }
+    }
+
+    fun addBill(name: String, icon: String, amount: Double, dueDay: Int) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(billError = null)
+            try {
+                val resp = userApi.createBill(CreateBillRequest(name, icon, amount, dueDay))
+                if (resp.isSuccessful) load()
+                else _state.value = _state.value.copy(billError = resp.body()?.error ?: "Failed to add bill")
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(billError = e.message ?: "Network error")
+            }
+        }
+    }
+
+    fun payBill(id: String) {
+        viewModelScope.launch {
+            try { userApi.payBill(id); load() }
+            catch (_: Exception) {}
+        }
+    }
+
+    fun deleteBill(id: String) {
+        viewModelScope.launch {
+            try { userApi.deleteBill(id); load() }
             catch (_: Exception) {}
         }
     }
