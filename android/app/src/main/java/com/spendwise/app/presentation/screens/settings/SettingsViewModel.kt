@@ -1,7 +1,6 @@
 package com.spendwise.app.presentation.screens.settings
 
 import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
@@ -19,9 +18,11 @@ import com.spendwise.app.data.remote.dto.UpdateSalaryRequest
 import com.spendwise.app.data.worker.GmailSyncWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
@@ -33,6 +34,7 @@ data class SettingsState(
     val smsScanFromMs: Long = 0L,
     // Gmail — multi-account
     val gmailAccounts: List<GmailAccountDto> = emptyList(),
+    val deviceGoogleAccounts: List<String> = emptyList(),
     val gmailLoading: Boolean = false,
     val gmailError: String? = null,
     val gmailSyncing: Boolean = false,
@@ -57,6 +59,7 @@ class SettingsViewModel @Inject constructor(
     private val gmailApi: GmailApi,
     private val gmailAuthManager: GmailAuthManager
 ) : ViewModel() {
+
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state
 
@@ -69,30 +72,104 @@ class SettingsViewModel @Inject constructor(
                 name          = tokenManager.userName,
                 smsScanFromMs = tokenManager.smsScanFromMs
             )
-            try {
-                val salary = userApi.getSalary()
-                if (salary.isSuccessful) {
-                    _state.value = _state.value.copy(
+            launch {
+                try {
+                    val salary = userApi.getSalary()
+                    if (salary.isSuccessful) _state.value = _state.value.copy(
                         salaryAmount = salary.body()?.data?.amount,
                         salaryDay    = salary.body()?.data?.expectedDay
                     )
-                }
-            } catch (_: Exception) {}
-            refreshGmailAccounts()
+                } catch (_: Exception) {}
+            }
+            launch { refreshGmailAccounts() }
+            launch { loadDeviceAccounts() }
         }
     }
 
-    private fun refreshGmailAccounts() {
+    private suspend fun refreshGmailAccounts() {
+        try {
+            val resp = gmailApi.getAccounts()
+            if (resp.isSuccessful) {
+                _state.value = _state.value.copy(
+                    gmailAccounts = resp.body()?.data?.accounts?.filter { it.isActive } ?: emptyList()
+                )
+            }
+        } catch (_: Exception) {}
+    }
+
+    private suspend fun loadDeviceAccounts() {
+        val accounts = withContext(Dispatchers.IO) {
+            gmailAuthManager.getDeviceGoogleAccounts()
+        }
+        _state.value = _state.value.copy(deviceGoogleAccounts = accounts)
+    }
+
+    /** Called when user picks / types a Gmail address to connect. */
+    fun connectGmail(gmailEmail: String) {
+        if (gmailEmail.isBlank() || !gmailEmail.contains("@")) {
+            _state.value = _state.value.copy(gmailError = "Enter a valid Gmail address")
+            return
+        }
         viewModelScope.launch {
+            _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
             try {
-                val resp = gmailApi.getAccounts()
-                if (resp.isSuccessful) {
-                    val accounts = resp.body()?.data?.accounts ?: emptyList()
-                    _state.value = _state.value.copy(gmailAccounts = accounts.filter { it.isActive })
+                val resp = gmailApi.addAccount(
+                    GmailConnectRequest(
+                        gmailEmail   = gmailEmail.trim().lowercase(),
+                        accessToken  = "",   // token obtained by GmailSyncWorker at runtime
+                        refreshToken = null,
+                        tokenExpiry  = null
+                    )
+                )
+                if (resp.isSuccessful && resp.body()?.success == true) {
+                    refreshGmailAccounts()
+                    _state.value = _state.value.copy(gmailLoading = false)
+                    // Trigger an immediate sync so the user sees results
+                    triggerImmediateSync()
+                } else {
+                    val err = resp.body()?.error ?: "Failed to add Gmail account"
+                    _state.value = _state.value.copy(gmailLoading = false, gmailError = err)
                 }
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message ?: "Network error")
+            }
         }
     }
+
+    fun removeGmailAccount(accountId: String) {
+        viewModelScope.launch {
+            _state.value = _state.value.copy(gmailLoading = true)
+            try {
+                gmailApi.removeAccount(accountId)
+                _state.value = _state.value.copy(
+                    gmailAccounts = _state.value.gmailAccounts.filter { it.id != accountId },
+                    gmailLoading  = false
+                )
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message)
+            }
+        }
+    }
+
+    fun syncGmailNow() {
+        _state.value = _state.value.copy(gmailSyncing = true)
+        triggerImmediateSync()
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(3_000)
+            refreshGmailAccounts()
+            _state.value = _state.value.copy(gmailSyncing = false)
+        }
+    }
+
+    private fun triggerImmediateSync() {
+        val req = OneTimeWorkRequestBuilder<GmailSyncWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .build()
+        WorkManager.getInstance(appContext)
+            .enqueueUniqueWork("gmail_sync_now", ExistingWorkPolicy.REPLACE, req)
+    }
+
+    fun clearGmailError() { _state.value = _state.value.copy(gmailError = null) }
 
     fun updateSalary(amount: Double, day: Int) {
         viewModelScope.launch {
@@ -106,123 +183,44 @@ class SettingsViewModel @Inject constructor(
     fun logout() {
         viewModelScope.launch {
             try {
-                val refresh = tokenManager.refreshToken
-                if (refresh != null) authApi.logout(LogoutRequest(refresh))
+                val r = tokenManager.refreshToken
+                if (r != null) authApi.logout(LogoutRequest(r))
             } catch (_: Exception) {}
             tokenManager.clearAuth()
         }
     }
 
-    // ── Gmail multi-account ───────────────────────────────────
-    fun getGmailSignInIntent(): Intent = gmailAuthManager.getSignInIntent()
-
-    fun onGmailSignInResult(data: Intent?) {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
-            val account = gmailAuthManager.handleSignInResult(data)
-            if (account == null) {
-                _state.value = _state.value.copy(gmailLoading = false, gmailError = "Google sign-in cancelled or failed")
-                return@launch
-            }
-            try {
-                val req = GmailConnectRequest(
-                    gmailEmail   = account.email ?: "",
-                    accessToken  = "",   // token obtained at sync time via GoogleAuthUtil.getToken
-                    refreshToken = null,
-                    tokenExpiry  = null
-                )
-                val resp = gmailApi.addAccount(req)
-                if (resp.isSuccessful && resp.body()?.success == true) {
-                    _state.value = _state.value.copy(gmailLoading = false, gmailError = null)
-                    refreshGmailAccounts()
-                } else {
-                    _state.value = _state.value.copy(gmailLoading = false, gmailError = "Failed to link Gmail account")
-                }
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message ?: "Network error")
-            }
-        }
-    }
-
-    fun removeGmailAccount(accountId: String) {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
-            try {
-                val resp = gmailApi.removeAccount(accountId)
-                if (resp.isSuccessful) {
-                    _state.value = _state.value.copy(
-                        gmailAccounts = _state.value.gmailAccounts.filter { it.id != accountId },
-                        gmailLoading  = false
-                    )
-                } else {
-                    _state.value = _state.value.copy(gmailLoading = false, gmailError = "Failed to remove account")
-                }
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message ?: "Error")
-            }
-        }
-    }
-
-    fun syncGmailNow() {
-        _state.value = _state.value.copy(gmailSyncing = true)
-        val req = OneTimeWorkRequestBuilder<GmailSyncWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(appContext)
-            .enqueueUniqueWork("gmail_sync_now", ExistingWorkPolicy.REPLACE, req)
-        viewModelScope.launch {
-            // Optimistically clear syncing flag after 3s; actual result is background
-            kotlinx.coroutines.delay(3_000)
-            _state.value = _state.value.copy(gmailSyncing = false)
-            refreshGmailAccounts()
-        }
-    }
-
-    fun clearGmailError() {
-        _state.value = _state.value.copy(gmailError = null)
-    }
-
-    // ── Change password ───────────────────────────────────────
     fun changePassword(currentPw: String, newPw: String) {
         viewModelScope.launch {
             _state.value = _state.value.copy(passwordChanging = true, passwordChangeError = null, passwordChangeSuccess = false)
             try {
                 val resp = authApi.changePassword(ChangePasswordRequest(currentPw, newPw))
-                if (resp.isSuccessful && resp.body()?.success == true) {
+                if (resp.isSuccessful && resp.body()?.success == true)
                     _state.value = _state.value.copy(passwordChanging = false, passwordChangeSuccess = true)
-                } else {
-                    val err = resp.body()?.error ?: "Failed to change password"
-                    _state.value = _state.value.copy(passwordChanging = false, passwordChangeError = err)
-                }
+                else
+                    _state.value = _state.value.copy(passwordChanging = false, passwordChangeError = resp.body()?.error ?: "Failed")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(passwordChanging = false, passwordChangeError = e.message ?: "Network error")
             }
         }
     }
 
-    fun clearPasswordState() {
-        _state.value = _state.value.copy(passwordChangeSuccess = false, passwordChangeError = null)
-    }
+    fun clearPasswordState() { _state.value = _state.value.copy(passwordChangeSuccess = false, passwordChangeError = null) }
 
-    // ── Support ticket ────────────────────────────────────────
     fun createSupportTicket(subject: String, description: String, category: String?) {
         viewModelScope.launch {
             _state.value = _state.value.copy(ticketSending = true, ticketError = null, ticketSuccess = false)
             try {
                 val resp = userApi.createSupportTicket(CreateSupportTicketRequest(subject, description, category))
-                if (resp.isSuccessful && resp.body()?.success == true) {
+                if (resp.isSuccessful && resp.body()?.success == true)
                     _state.value = _state.value.copy(ticketSending = false, ticketSuccess = true)
-                } else {
-                    val err = resp.body()?.error ?: "Failed to create ticket"
-                    _state.value = _state.value.copy(ticketSending = false, ticketError = err)
-                }
+                else
+                    _state.value = _state.value.copy(ticketSending = false, ticketError = resp.body()?.error ?: "Failed")
             } catch (e: Exception) {
                 _state.value = _state.value.copy(ticketSending = false, ticketError = e.message ?: "Network error")
             }
         }
     }
 
-    fun clearTicketState() {
-        _state.value = _state.value.copy(ticketSuccess = false, ticketError = null)
-    }
+    fun clearTicketState() { _state.value = _state.value.copy(ticketSuccess = false, ticketError = null) }
 }

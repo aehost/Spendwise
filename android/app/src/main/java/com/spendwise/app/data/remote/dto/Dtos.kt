@@ -181,6 +181,7 @@ data class DashboardDto(
     @SerializedName("savings_rate")     val savingsRate: Int,
     @SerializedName("burn_rate")        val burnRate: Double,
     @SerializedName("projected_spend")  val projectedSpend: Double,
+    @SerializedName("days_left")         val daysLeft: Int = 0,
     @SerializedName("budget_alerts")    val budgetAlerts: List<BudgetAlertDto>,
     @SerializedName("by_category")      val byCategory: List<CategoryTotalDto>
 )

@@ -10,6 +10,11 @@
     <!-- Network for backend API -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Gmail sync: list Google accounts on device for GoogleAuthUtil.getToken() -->
+    <uses-permission android:name="android.permission.GET_ACCOUNTS" />
+    <!-- WorkManager: keep sync workers alive when device is idle -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <!-- Biometric hardware is optional -->
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
@@ -40,12 +45,14 @@
             </intent-filter>
         </activity>
 
-        <!-- BroadcastReceiver for real-time bank SMS -->
+        <!-- BroadcastReceiver for real-time bank SMS.
+             exported=true is required for system SMS_RECEIVED broadcasts.
+             BROADCAST_SMS permission restricts senders to the system only. -->
         <receiver
             android:name=".sms.SmsReceiver"
             android:exported="true"
             android:permission="android.permission.BROADCAST_SMS">
-            <intent-filter android:priority="999">
+            <intent-filter android:priority="100">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>

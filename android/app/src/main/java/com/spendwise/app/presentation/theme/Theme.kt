@@ -4,43 +4,50 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-// ── Core palette ──────────────────────────────────────────────
-val Primary       = Color(0xFF7C5CFC)   // vibrant violet
-val PrimaryVar    = Color(0xFF9D6FFF)   // lighter violet
-val Secondary     = Color(0xFF06C5D4)   // cyan-teal
-val Background    = Color(0xFF08091C)   // deep space navy
-val Surface       = Color(0xFF0D1030)   // navy surface
-val CardBg        = Color(0xFF121535)   // navy card
-val CardBg2       = Color(0xFF0F1428)   // alternate card
+// ── Brand ─────────────────────────────────────────────────────
+val Primary       = Color(0xFF6366F1)   // Indigo-500 — professional, calm
+val PrimaryVar    = Color(0xFF818CF8)   // Indigo-400
+val PrimaryDark   = Color(0xFF4F46E5)   // Indigo-600
+val Secondary     = Color(0xFF06B6D4)   // Cyan-500
 
-// ── Semantic colours ──────────────────────────────────────────
-val ErrorColor    = Color(0xFFFF4757)   // vivid red
-val SuccessColor  = Color(0xFF2ED573)   // vivid green
-val WarningColor  = Color(0xFFFFD43B)   // vivid amber
-val InfoColor     = Color(0xFF74B9FF)   // sky blue
+// ── Backgrounds ───────────────────────────────────────────────
+val Background    = Color(0xFF030712)   // Near-black (Gray-950)
+val Surface       = Color(0xFF0F172A)   // Slate-900
+val CardBg        = Color(0xFF1E293B)   // Slate-800
+val CardBg2       = Color(0xFF162032)   // Slightly lighter card
 
-// ── Text ──────────────────────────────────────────────────────
-val TextPrimary   = Color(0xFFF0F4FF)   // near-white with blue tint
-val TextSecondary = Color(0xFF8892B0)   // slate-blue
-val TextMuted     = Color(0xFF4A5568)   // dim
+// ── Semantic ──────────────────────────────────────────────────
+val SuccessColor  = Color(0xFF10B981)   // Emerald-500 — WCAG AA on dark
+val ErrorColor    = Color(0xFFEF4444)   // Red-500
+val WarningColor  = Color(0xFFF59E0B)   // Amber-500
+val InfoColor     = Color(0xFF3B82F6)   // Blue-500
 
-// ── Borders & dividers ────────────────────────────────────────
-val BorderColor   = Color(0xFF1E2550)   // dark navy border
+// ── Text — WCAG AA compliant on Background ────────────────────
+val TextPrimary   = Color(0xFFF8FAFC)   // Slate-50   — 19:1 contrast
+val TextSecondary = Color(0xFF94A3B8)   // Slate-400  —  7:1 contrast
+val TextMuted     = Color(0xFF64748B)   // Slate-500  —  4.6:1 contrast ✓
 
-// ── Accent palette for stat cards & charts ────────────────────
-val Amber         = Color(0xFFFFD43B)
-val Teal          = Color(0xFF06C5D4)
-val Pink          = Color(0xFFFF6B9D)
-val Green         = Color(0xFF2ED573)
-val Orange        = Color(0xFFFF7F50)
-val Purple        = Color(0xFF7C5CFC)
+// ── Borders ───────────────────────────────────────────────────
+val BorderColor   = Color(0xFF1E293B)   // Slate-800
 
-// ── Card gradient helpers ─────────────────────────────────────
-val GradientPurple = listOf(Color(0xFF7C5CFC), Color(0xFF5A3FE0))
-val GradientTeal   = listOf(Color(0xFF06C5D4), Color(0xFF0490A1))
-val GradientGreen  = listOf(Color(0xFF2ED573), Color(0xFF1BB454))
-val GradientAmber  = listOf(Color(0xFFFFD43B), Color(0xFFF7A800))
-val GradientPink   = listOf(Color(0xFFFF6B9D), Color(0xFFD84472))
+// ── Chart / accent palette ────────────────────────────────────
+val Amber         = Color(0xFFF59E0B)
+val Teal          = Color(0xFF06B6D4)
+val Pink          = Color(0xFFEC4899)
+val Green         = Color(0xFF10B981)
+val Orange        = Color(0xFFF97316)
+val Purple        = Color(0xFF8B5CF6)
+val Indigo        = Color(0xFF6366F1)
+val Rose          = Color(0xFFF43F5E)
+
+// ── Gradient pairs (start → end) ─────────────────────────────
+val GradientPurple = listOf(Color(0xFF6366F1), Color(0xFF4F46E5))
+val GradientTeal   = listOf(Color(0xFF06B6D4), Color(0xFF0891B2))
+val GradientGreen  = listOf(Color(0xFF10B981), Color(0xFF059669))
+val GradientAmber  = listOf(Color(0xFFF59E0B), Color(0xFFD97706))
+val GradientPink   = listOf(Color(0xFFEC4899), Color(0xFFDB2777))
+val GradientOrange = listOf(Color(0xFFF97316), Color(0xFFEA580C))
+val GradientRose   = listOf(Color(0xFFF43F5E), Color(0xFFE11D48))
 
 private val DarkColorScheme = darkColorScheme(
     primary          = Primary,

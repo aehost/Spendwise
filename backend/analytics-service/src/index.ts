@@ -53,86 +53,118 @@ app.use(auth);
 const uid = (req: express.Request) => (req as any).user.userId as string;
 
 // ── GET /analytics/dashboard ──────────────────────────────────
+// Optimised: 8 sequential queries → 2 parallel queries via CTEs
 app.get('/analytics/dashboard', async (req, res) => {
   try {
     const userId = uid(req);
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const year  = now.getFullYear();
-    const startDate = `${year}-${String(month).padStart(2,'0')}-01`;
-    const endDate   = new Date(year, month, 0).toISOString().split('T')[0];
-
-    // Salary
-    const salary = await dbOne<any>('SELECT amount,expected_day FROM salary_config WHERE user_id=$1', [userId]);
-
-    // Monthly spending totals
-    const spending = await dbOne<any>(
-      `SELECT
-        COALESCE(SUM(CASE WHEN is_credit=FALSE AND category_slug != 'income' THEN amount ELSE 0 END),0) as total_spent,
-        COALESCE(SUM(CASE WHEN is_credit=TRUE THEN amount ELSE 0 END),0) as total_credit,
-        COUNT(*) FILTER (WHERE is_pending=TRUE) as pending_count
-       FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`,
-      [userId, startDate, endDate]
-    );
-
-    // EMI total
-    const emiTotal = await dbOne<any>('SELECT COALESCE(SUM(emi_amount),0) as emi_total FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]);
-
-    // Bank balance total
-    const bankBal = await dbOne<any>('SELECT COALESCE(SUM(balance),0) as total FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [userId]);
-
-    // CC outstanding total
-    const ccTotal = await dbOne<any>('SELECT COALESCE(SUM(outstanding),0) as total FROM credit_cards WHERE user_id=$1 AND is_active=TRUE', [userId]);
-
-    // Category breakdown
-    const byCategory = await db<any>(
-      `SELECT category_slug, SUM(amount) as total FROM transactions
-       WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
-       GROUP BY category_slug ORDER BY total DESC`,
-      [userId, startDate, endDate]
-    );
-
-    // Budgets for alert calculation
-    const budgets = await db<any>('SELECT * FROM monthly_budgets WHERE user_id=$1 AND month=$2 AND year=$3', [userId, month, year]);
-
-    // Budget alerts
-    const budgetAlerts = budgets
-      .map((b: any) => {
-        const spent = byCategory.find((c: any) => c.category_slug === b.category_slug);
-        const pct = b.amount > 0 ? (parseFloat(spent?.total || 0) / parseFloat(b.amount)) * 100 : 0;
-        return { category_slug: b.category_slug, budget: b.amount, spent: parseFloat(spent?.total || 0), pct: Math.round(pct) };
-      })
-      .filter((a: any) => a.pct >= 80);
-
-    // Burn rate
+    const now        = new Date();
+    const month      = now.getMonth() + 1;
+    const year       = now.getFullYear();
+    const start      = `${year}-${String(month).padStart(2,'0')}-01`;
+    const end        = new Date(year, month, 0).toISOString().split('T')[0];
     const daysInMonth = new Date(year, month, 0).getDate();
     const daysPassed  = now.getDate();
-    const burnRate    = daysPassed > 0 ? parseFloat(spending?.total_spent || 0) / daysPassed : 0;
-    const projected   = burnRate * daysInMonth;
 
-    const salaryAmt   = parseFloat(salary?.amount || 0);
-    const totalSpent  = parseFloat(spending?.total_spent || 0);
-    const emiTotalAmt = parseFloat(emiTotal?.emi_total || 0);
-    const emiBurdenPct = salaryAmt > 0 ? Math.round((emiTotalAmt / salaryAmt) * 100) : 0;
-    const savingsAmt  = salaryAmt - totalSpent;
-    const savingsRate = salaryAmt > 0 ? Math.round((savingsAmt / salaryAmt) * 100) : 0;
+    // ── Two parallel queries replace 8 sequential ─────────────
+    const [agg, catBudget] = await Promise.all([
+      // Query 1: all financial aggregates in one round-trip
+      dbOne<any>(`
+        SELECT
+          sc.amount                                                         AS salary,
+          sc.expected_day,
+          COALESCE(ba.bank_total, 0)                                        AS bank_balance,
+          COALESCE(cc.cc_total,   0)                                        AS cc_outstanding,
+          COALESCE(l.emi_total,   0)                                        AS emi_total,
+          COALESCE(t.total_spent, 0)                                        AS total_spent,
+          COALESCE(t.total_credit,0)                                        AS total_credit,
+          COALESCE(t.pending_count,0)::int                                  AS pending_count
+        FROM salary_config sc
+        LEFT JOIN (
+          SELECT user_id, SUM(balance) AS bank_total
+          FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE GROUP BY user_id
+        ) ba ON ba.user_id = sc.user_id
+        LEFT JOIN (
+          SELECT user_id, SUM(outstanding) AS cc_total
+          FROM credit_cards WHERE user_id=$1 AND is_active=TRUE GROUP BY user_id
+        ) cc ON cc.user_id = sc.user_id
+        LEFT JOIN (
+          SELECT user_id, SUM(emi_amount) AS emi_total
+          FROM loans WHERE user_id=$1 AND is_active=TRUE GROUP BY user_id
+        ) l ON l.user_id = sc.user_id
+        LEFT JOIN (
+          SELECT user_id,
+            SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END) AS total_spent,
+            SUM(CASE WHEN is_credit=TRUE  THEN amount ELSE 0 END) AS total_credit,
+            COUNT(*) FILTER (WHERE is_pending=TRUE)               AS pending_count
+          FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3
+          GROUP BY user_id
+        ) t ON t.user_id = sc.user_id
+        WHERE sc.user_id = $1
+      `, [userId, start, end]),
+
+      // Query 2: category breakdown + budget pct in one JOIN
+      db<any>(`
+        WITH spending AS (
+          SELECT category_slug, SUM(amount) AS spent
+          FROM transactions
+          WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+          GROUP BY category_slug
+        )
+        SELECT
+          COALESCE(b.category_slug, s.category_slug)        AS category_slug,
+          COALESCE(s.spent,  0)                             AS total,
+          COALESCE(b.amount, 0)                             AS budget,
+          CASE WHEN COALESCE(b.amount,0) > 0
+            THEN ROUND((COALESCE(s.spent,0) / b.amount) * 100)
+            ELSE 0
+          END                                               AS pct
+        FROM spending s
+        FULL OUTER JOIN monthly_budgets b
+          ON b.category_slug = s.category_slug
+         AND b.user_id = $1 AND b.month = $4 AND b.year = $5
+        ORDER BY COALESCE(s.spent,0) DESC
+      `, [userId, start, end, month, year]),
+    ]);
+
+    const salaryAmt    = parseFloat(agg?.salary || 0);
+    const totalSpent   = parseFloat(agg?.total_spent || 0);
+    const totalCredit  = parseFloat(agg?.total_credit || 0);
+    const emiTotal     = parseFloat(agg?.emi_total || 0);
+    const emiBurdenPct = salaryAmt > 0 ? Math.round((emiTotal / salaryAmt) * 100) : 0;
+    // Savings = salary + other credits - spending (correct formula)
+    const savingsAmt   = (salaryAmt + totalCredit) - totalSpent;
+    const savingsRate  = salaryAmt > 0 ? Math.round((savingsAmt / salaryAmt) * 100) : 0;
+    const burnRate     = daysPassed > 0 ? totalSpent / daysPassed : 0;
+    const projected    = Math.round(burnRate * daysInMonth);
+    const daysLeft     = daysInMonth - daysPassed;
+
+    const byCategory   = catBudget.map((r: any) => ({ category_slug: r.category_slug, total: parseFloat(r.total) }));
+    const budgetAlerts = catBudget
+      .filter((r: any) => parseFloat(r.budget) > 0 && parseFloat(r.pct) >= 80)
+      .map((r: any) => ({
+        category_slug: r.category_slug,
+        budget: parseFloat(r.budget),
+        spent:  parseFloat(r.total),
+        pct:    parseInt(r.pct),
+      }));
 
     return ok(res, {
       month, year,
-      salary: salary || { amount: 0, expected_day: 1 },
-      bank_balance: parseFloat(bankBal?.total || 0),
-      cc_outstanding: parseFloat(ccTotal?.total || 0),
-      total_spent: totalSpent,
-      total_credit: parseFloat(spending?.total_credit || 0),
-      pending_count: parseInt(spending?.pending_count || 0),
-      emi_total: emiTotalAmt,
+      salary:        { amount: salaryAmt, expected_day: agg?.expected_day || 1 },
+      bank_balance:  parseFloat(agg?.bank_balance  || 0),
+      cc_outstanding:parseFloat(agg?.cc_outstanding || 0),
+      total_spent:   totalSpent,
+      total_credit:  totalCredit,
+      pending_count: agg?.pending_count || 0,
+      emi_total:     emiTotal,
       emi_burden_pct: emiBurdenPct,
-      savings: savingsAmt,
-      savings_rate: savingsRate,
-      burn_rate: Math.round(burnRate),
-      projected_spend: Math.round(projected),
+      savings:       Math.round(savingsAmt),
+      savings_rate:  Math.max(0, savingsRate),
+      burn_rate:     Math.round(burnRate),
+      projected_spend: projected,
+      days_left:     daysLeft,
       budget_alerts: budgetAlerts,
-      by_category: byCategory,
+      by_category:   byCategory,
     });
   } catch (e: any) {
     console.error('[dashboard]', e.message);
