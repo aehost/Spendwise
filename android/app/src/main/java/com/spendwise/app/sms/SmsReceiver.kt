@@ -12,14 +12,13 @@ import androidx.core.app.NotificationCompat
 import com.spendwise.app.MainActivity
 import com.spendwise.app.R
 import com.spendwise.app.core.Constants
+import com.spendwise.app.data.worker.SmsSyncWorker
 import com.spendwise.app.domain.usecase.ParseSmsUseCase
-import java.util.concurrent.ConcurrentLinkedQueue
 
 class SmsReceiver : BroadcastReceiver() {
 
     companion object {
         const val CHANNEL_ID = "spendwise_sms"
-        val pendingQueue: ConcurrentLinkedQueue<Map<String, String>> = ConcurrentLinkedQueue()
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -35,22 +34,13 @@ class SmsReceiver : BroadcastReceiver() {
             if (!Constants.BANK_PATTERN.containsMatchIn(body)) return@forEach
 
             val parsed = parser.parse(body)
-
-            // Queue for the app to consume
-            pendingQueue.add(mapOf(
-                "id"     to System.currentTimeMillis().toString(),
-                "body"   to body,
-                "sender" to sender,
-                "date"   to System.currentTimeMillis().toString(),
-                "amount" to (parsed?.amount?.toString() ?: ""),
-                "isCredit" to (parsed?.isCredit?.toString() ?: "false")
-            ))
-
-            // Show notification
             if (parsed != null) {
                 showNotification(context, parsed.amount, parsed.isCredit, sender)
             }
         }
+
+        // Kick off background sync to upload all new SMS transactions to backend
+        SmsSyncWorker.triggerNow(context)
     }
 
     private fun showNotification(ctx: Context, amount: Double, isCredit: Boolean, sender: String) {

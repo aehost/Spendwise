@@ -17,6 +17,7 @@ import com.spendwise.app.presentation.screens.cards.CardsScreen
 import com.spendwise.app.presentation.screens.cashflow.CashFlowScreen
 import com.spendwise.app.presentation.screens.coach.AiCoachScreen
 import com.spendwise.app.presentation.screens.debt.DebtPayoffScreen
+import com.spendwise.app.presentation.screens.goals.GoalsScreen
 import com.spendwise.app.presentation.screens.home.HomeScreen
 import com.spendwise.app.presentation.screens.iou.IouScreen
 import com.spendwise.app.presentation.screens.loans.LoansScreen
@@ -49,6 +50,7 @@ sealed class Screen(val route: String) {
     object DebtPayoff    : Screen("debt_payoff")
     object TaxPlanning   : Screen("tax_planning")
     object Iou           : Screen("iou")
+    object Goals         : Screen("goals")
 }
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
@@ -123,8 +125,12 @@ fun SpendWiseNavGraph(startRoute: String) {
                         onIou        = { navController.navigate(Screen.Iou.route) },
                         onLoans      = { navController.navigate(Screen.Loans.route) },
                         onReport     = { navController.navigate(Screen.MonthlyReport.route) },
+                        onGoals      = { navController.navigate(Screen.Goals.route) },
                         onSettings   = { navController.navigate(Screen.Settings.route) }
                     )
+                }
+                composable(Screen.Goals.route) {
+                    GoalsScreen(onBack = { navController.popBackStack() })
                 }
                 composable(Screen.Settings.route) {
                     SettingsScreen(

@@ -147,6 +147,9 @@ fun MonthlyReportScreen(
                     }
                 }
             }
+
+            // ── Cost Reduction Plan ───────────────────────────────
+            item { CostReductionCard(report) }
         }
     }
 }
@@ -298,4 +301,82 @@ private fun WasteCard(report: MonthlyReportDto) {
 @Composable
 private fun SectionHeader(title: String) {
     Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 4.dp))
+}
+
+@Composable
+private fun CostReductionCard(report: MonthlyReportDto) {
+    // Non-essential categories sorted by spend, only where budget is over or no budget set
+    val nonEssential = setOf("food", "shopping", "entertainment", "transport", "travel", "streaming", "dining")
+    val candidates = report.categoryBreakdown
+        .filter { it.categorySlug.lowercase() in nonEssential && it.amount > 1000 }
+        .sortedByDescending { it.amount }
+        .take(4)
+
+    if (candidates.isEmpty()) return
+
+    val totalPotential = candidates.sumOf { it.amount * 0.20 }
+    val savings = report.summary.savings
+    val savingsRate = report.summary.savingsRate
+
+    Card(
+        Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = Primary.copy(0.08f))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("💡", fontSize = 20.sp)
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text("Cost Reduction Opportunities", fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("Save more to achieve your goals faster", fontSize = 11.sp, color = TextSecondary)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+
+            candidates.forEach { cat ->
+                val saving20 = cat.amount * 0.20
+                val emoji = categoryEmoji(cat.categorySlug)
+                val name  = cat.categorySlug.replaceFirstChar { it.uppercase() }
+                Row(
+                    Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(emoji, fontSize = 16.sp, modifier = Modifier.width(28.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(name, fontSize = 13.sp, color = TextPrimary)
+                        Text("Spending: ${cat.amount.formatCurrency()}/mo", fontSize = 11.sp, color = TextMuted)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("Cut 20%", fontSize = 10.sp, color = WarningColor)
+                        Text("Save ${saving20.formatCurrency()}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = SuccessColor)
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            HorizontalDivider(color = BorderColor.copy(0.5f))
+            Spacer(Modifier.height(8.dp))
+
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Total potential savings", fontSize = 12.sp, color = TextSecondary)
+                    Text(totalPotential.formatCurrency() + "/mo", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = SuccessColor)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    val newRate = if (report.summary.income > 0)
+                        ((savings + totalPotential) / report.summary.income * 100).toInt()
+                    else savingsRate
+                    Text("New savings rate", fontSize = 11.sp, color = TextMuted)
+                    Text("~$newRate%", fontSize = 14.sp, fontWeight = FontWeight.Bold,
+                        color = if (newRate >= 20) SuccessColor else WarningColor)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Go to Tools → Goals Planner to set targets and see exactly how fast you can reach them.",
+                fontSize = 11.sp, color = Primary, lineHeight = 16.sp
+            )
+        }
+    }
 }

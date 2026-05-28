@@ -37,16 +37,17 @@ class AiCoachViewModel @Inject constructor(
                 if (r.isSuccessful && r.body()?.success == true) {
                     val data = r.body()?.data
                     _state.value = AdvisorState(
+                        isLoading     = false,
                         insights      = data?.insights ?: emptyList(),
                         context       = data?.context,
                         engineVersion = data?.engineVersion ?: "",
                         generatedAt   = data?.generatedAt ?: ""
                     )
                 } else {
-                    _state.value = AdvisorState(error = r.body()?.error ?: "Failed to load")
+                    _state.value = AdvisorState(isLoading = false, error = r.body()?.error ?: "Failed to load")
                 }
             } catch (e: Exception) {
-                _state.value = AdvisorState(error = e.message ?: "Network error")
+                _state.value = AdvisorState(isLoading = false, error = e.message ?: "Network error")
             }
         }
     }

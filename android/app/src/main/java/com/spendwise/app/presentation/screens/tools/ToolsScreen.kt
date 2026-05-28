@@ -40,10 +40,12 @@ fun ToolsScreen(
     onIou: () -> Unit,
     onLoans: () -> Unit,
     onReport: () -> Unit,
+    onGoals: () -> Unit,
     onSettings: () -> Unit
 ) {
     val tools = listOf(
         ToolCard("Financial Advisor", "Personalised algorithm-powered insights", Icons.Filled.AutoAwesome, GradientPurple, "SMART", onAiCoach),
+        ToolCard("Goals Planner", "Track & achieve short + long-term goals", Icons.Filled.Star, GradientGold, "NEW", onGoals),
         ToolCard("Health Score", "Your financial fitness score", Icons.Filled.Favorite, GradientGreen, null, onHealthScore),
         ToolCard("Cash Flow Forecast", "See your next 90 days cash flow", Icons.Filled.DateRange, GradientTeal, null, onCashFlow),
         ToolCard("Debt Payoff Planner", "Snowball vs Avalanche strategy", Icons.Filled.AccountBalance, GradientPink, null, onDebtPayoff),

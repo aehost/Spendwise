@@ -37,10 +37,11 @@ class IouViewModel @Inject constructor(private val api: IouApi) : ViewModel() {
                 val entries  = entriesDeferred.await()
                 val summaries = summaryDeferred.await()
                 _state.value = IouState(
+                    isLoading = false,
                     entries   = if (entries.isSuccessful) entries.body()?.data ?: emptyList() else emptyList(),
                     summaries = if (summaries.isSuccessful) summaries.body()?.data ?: emptyList() else emptyList()
                 )
-            } catch (e: Exception) { _state.value = IouState(error = e.message) }
+            } catch (e: Exception) { _state.value = IouState(isLoading = false, error = e.message) }
         }
     }
 

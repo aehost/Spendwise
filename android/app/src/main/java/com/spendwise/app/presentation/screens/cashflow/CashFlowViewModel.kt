@@ -22,9 +22,9 @@ class CashFlowViewModel @Inject constructor(private val api: CashFlowApi) : View
             _state.value = CashFlowState(isLoading = true)
             try {
                 val r = api.getCashFlow()
-                if (r.isSuccessful) _state.value = CashFlowState(cashFlow = r.body()?.data)
-                else _state.value = CashFlowState(error = r.body()?.error ?: "Failed")
-            } catch (e: Exception) { _state.value = CashFlowState(error = e.message) }
+                if (r.isSuccessful) _state.value = CashFlowState(isLoading = false, cashFlow = r.body()?.data)
+                else _state.value = CashFlowState(isLoading = false, error = r.body()?.error ?: "Failed")
+            } catch (e: Exception) { _state.value = CashFlowState(isLoading = false, error = e.message) }
         }
     }
 }

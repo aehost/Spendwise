@@ -22,9 +22,9 @@ class DebtPayoffViewModel @Inject constructor(private val api: DebtPayoffApi) : 
             _state.value = DebtPayoffState(isLoading = true)
             try {
                 val r = api.getDebtPayoff()
-                if (r.isSuccessful) _state.value = DebtPayoffState(data = r.body()?.data)
-                else _state.value = DebtPayoffState(error = r.body()?.error ?: "Failed")
-            } catch (e: Exception) { _state.value = DebtPayoffState(error = e.message) }
+                if (r.isSuccessful) _state.value = DebtPayoffState(isLoading = false, data = r.body()?.data)
+                else _state.value = DebtPayoffState(isLoading = false, error = r.body()?.error ?: "Failed")
+            } catch (e: Exception) { _state.value = DebtPayoffState(isLoading = false, error = e.message) }
         }
     }
 }
