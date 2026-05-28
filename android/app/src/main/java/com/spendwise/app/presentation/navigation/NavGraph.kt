@@ -14,12 +14,19 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.spendwise.app.presentation.screens.auth.AuthScreen
 import com.spendwise.app.presentation.screens.cards.CardsScreen
+import com.spendwise.app.presentation.screens.cashflow.CashFlowScreen
+import com.spendwise.app.presentation.screens.coach.AiCoachScreen
+import com.spendwise.app.presentation.screens.debt.DebtPayoffScreen
 import com.spendwise.app.presentation.screens.home.HomeScreen
+import com.spendwise.app.presentation.screens.iou.IouScreen
 import com.spendwise.app.presentation.screens.loans.LoansScreen
 import com.spendwise.app.presentation.screens.money.MoneyScreen
 import com.spendwise.app.presentation.screens.report.MonthlyReportScreen
+import com.spendwise.app.presentation.screens.score.HealthScoreScreen
 import com.spendwise.app.presentation.screens.settings.SettingsScreen
 import com.spendwise.app.presentation.screens.setup.SetupScreen
+import com.spendwise.app.presentation.screens.tax.TaxPlanningScreen
+import com.spendwise.app.presentation.screens.tools.ToolsScreen
 import com.spendwise.app.presentation.screens.transactions.TransactionListScreen
 import com.spendwise.app.presentation.theme.Primary
 import com.spendwise.app.presentation.theme.TextMuted
@@ -33,8 +40,15 @@ sealed class Screen(val route: String) {
     object Cards         : Screen("cards")
     object Loans         : Screen("loans")
     object Money         : Screen("money")
+    object Tools         : Screen("tools")
     object Settings      : Screen("settings")
     object MonthlyReport : Screen("monthly_report")
+    object AiCoach       : Screen("ai_coach")
+    object HealthScore   : Screen("health_score")
+    object CashFlow      : Screen("cash_flow")
+    object DebtPayoff    : Screen("debt_payoff")
+    object TaxPlanning   : Screen("tax_planning")
+    object Iou           : Screen("iou")
 }
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
@@ -43,8 +57,8 @@ val BOTTOM_NAV_ITEMS = listOf(
     NavItem(Screen.Home.route,         "Home",    Icons.Filled.Home),
     NavItem(Screen.Transactions.route, "Spends",  Icons.Filled.Receipt),
     NavItem(Screen.Cards.route,        "Cards",   Icons.Filled.CreditCard),
-    NavItem(Screen.Loans.route,        "Loans",   Icons.Filled.AccountBalance),
     NavItem(Screen.Money.route,        "Money",   Icons.Filled.TrendingUp),
+    NavItem(Screen.Tools.route,        "Tools",   Icons.Filled.Apps),
 )
 
 @Composable
@@ -99,6 +113,19 @@ fun SpendWiseNavGraph(startRoute: String) {
                 composable(Screen.Cards.route)        { CardsScreen() }
                 composable(Screen.Loans.route)        { LoansScreen() }
                 composable(Screen.Money.route)        { MoneyScreen() }
+                composable(Screen.Tools.route) {
+                    ToolsScreen(
+                        onAiCoach    = { navController.navigate(Screen.AiCoach.route) },
+                        onHealthScore = { navController.navigate(Screen.HealthScore.route) },
+                        onCashFlow   = { navController.navigate(Screen.CashFlow.route) },
+                        onDebtPayoff = { navController.navigate(Screen.DebtPayoff.route) },
+                        onTax        = { navController.navigate(Screen.TaxPlanning.route) },
+                        onIou        = { navController.navigate(Screen.Iou.route) },
+                        onLoans      = { navController.navigate(Screen.Loans.route) },
+                        onReport     = { navController.navigate(Screen.MonthlyReport.route) },
+                        onSettings   = { navController.navigate(Screen.Settings.route) }
+                    )
+                }
                 composable(Screen.Settings.route) {
                     SettingsScreen(
                         onLogout        = { navController.navigate(Screen.Auth.route) { popUpTo(0) { inclusive = true } } },
@@ -107,6 +134,24 @@ fun SpendWiseNavGraph(startRoute: String) {
                 }
                 composable(Screen.MonthlyReport.route) {
                     MonthlyReportScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.AiCoach.route) {
+                    AiCoachScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.HealthScore.route) {
+                    HealthScoreScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.CashFlow.route) {
+                    CashFlowScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.DebtPayoff.route) {
+                    DebtPayoffScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.TaxPlanning.route) {
+                    TaxPlanningScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.Iou.route) {
+                    IouScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

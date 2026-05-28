@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import Anthropic from '@anthropic-ai/sdk';
 import { setDefaultResultOrder } from 'node:dns';
 setDefaultResultOrder('ipv4first'); // Railway/Node 18+ prefers IPv6; force IPv4 for Supabase
 import express from 'express';
@@ -856,6 +857,451 @@ app.get('/analytics/monthly-report', async (req, res) => {
     });
   } catch (e: any) {
     console.error('[monthly-report]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── POST /analytics/ai-coach ──────────────────────────────────
+// Claude-powered financial coach with user's full financial context
+app.post('/analytics/ai-coach', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const { message, history = [] } = req.body as {
+      message: string;
+      history: Array<{ role: 'user' | 'assistant'; content: string }>;
+    };
+    if (!message?.trim()) return fail(res, 'message required');
+
+    const apiKey = process.env.ANTHROPIC_API_KEY;
+    if (!apiKey) return fail(res, 'AI coach not configured', 503);
+
+    const now   = new Date();
+    const month = now.getMonth() + 1;
+    const year  = now.getFullYear();
+    const start = `${year}-${String(month).padStart(2,'0')}-01`;
+    const end   = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const [salary, spending, bankBal, loans, bills, goals, topCats, ccTotal] = await Promise.all([
+      dbOne<any>('SELECT amount,expected_day FROM salary_config WHERE user_id=$1', [userId]),
+      dbOne<any>(`SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent,
+        COALESCE(SUM(CASE WHEN is_credit=TRUE THEN amount ELSE 0 END),0) as income
+        FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`, [userId,start,end]),
+      dbOne<any>('SELECT COALESCE(SUM(balance),0) as total FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT name,emi_amount,interest_rate,outstanding,months_remaining FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT name,amount,due_day,is_paid_this_month FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT title,target_amount,current_amount,deadline FROM financial_goals WHERE user_id=$1 AND is_completed=FALSE', [userId]),
+      db<any>(`SELECT category_slug,SUM(amount) as total FROM transactions WHERE user_id=$1
+        AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY category_slug ORDER BY total DESC LIMIT 5`, [userId,start,end]),
+      dbOne<any>('SELECT COALESCE(SUM(outstanding),0) as total FROM credit_cards WHERE user_id=$1 AND is_active=TRUE', [userId]),
+    ]);
+
+    const salaryAmt = parseFloat(salary?.amount || 0);
+    const spent     = parseFloat(spending?.spent || 0);
+    const savingsRate = salaryAmt > 0 ? Math.round(((salaryAmt - spent) / salaryAmt) * 100) : 0;
+    const emiTotal  = loans.reduce((s: number, l: any) => s + parseFloat(l.emi_amount || 0), 0);
+
+    const systemPrompt = `You are SpendWise AI Coach, a friendly and knowledgeable personal finance advisor for Indian users.
+You have access to the user's real financial data for ${now.toLocaleString('default',{month:'long'})} ${year}:
+
+FINANCIAL SNAPSHOT:
+- Monthly Salary: ₹${salaryAmt.toLocaleString('en-IN')}
+- Spent this month: ₹${spent.toLocaleString('en-IN')} (${savingsRate}% savings rate)
+- Bank Balance: ₹${parseFloat(bankBal?.total||0).toLocaleString('en-IN')}
+- CC Outstanding: ₹${parseFloat(ccTotal?.total||0).toLocaleString('en-IN')}
+- Total EMI/month: ₹${emiTotal.toLocaleString('en-IN')} (${salaryAmt>0?Math.round((emiTotal/salaryAmt)*100):0}% of income)
+
+TOP SPENDING CATEGORIES:
+${topCats.map((c:any) => `- ${c.category_slug}: ₹${parseFloat(c.total).toLocaleString('en-IN')}`).join('\n')}
+
+LOANS: ${loans.length === 0 ? 'None' : loans.map((l:any) =>
+  `${l.name} (₹${parseFloat(l.emi_amount).toLocaleString('en-IN')}/mo, ${l.interest_rate}% rate, ₹${parseFloat(l.outstanding).toLocaleString('en-IN')} outstanding, ${l.months_remaining} months left)`
+).join('; ')}
+
+BILLS: ${bills.length === 0 ? 'None' : bills.map((b:any) =>
+  `${b.name} ₹${parseFloat(b.amount).toLocaleString('en-IN')} due ${b.due_day}th ${b.is_paid_this_month ? '(✓ paid)' : '(unpaid)'}`
+).join('; ')}
+
+ACTIVE GOALS: ${goals.length === 0 ? 'None' : goals.map((g:any) =>
+  `${g.title}: ₹${parseFloat(g.current_amount).toLocaleString('en-IN')} / ₹${parseFloat(g.target_amount).toLocaleString('en-IN')}`
+).join('; ')}
+
+Guidelines:
+- Give specific, actionable advice using the user's real numbers
+- Use ₹ currency and Indian financial context (UPI, NEFT, Section 80C, etc.)
+- Be concise: 2-4 sentences per response unless detail is requested
+- Use emojis sparingly to make responses feel friendly
+- If you suggest saving a specific amount, make it realistic based on their data`;
+
+    const anthropic = new Anthropic({ apiKey });
+    const msgs: Array<{role:'user'|'assistant';content:string}> = [
+      ...history.slice(-8), // keep last 8 turns for context
+      { role: 'user', content: message }
+    ];
+
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 500,
+      system: systemPrompt,
+      messages: msgs,
+    });
+
+    const reply = (response.content[0] as any).text || '';
+    return ok(res, { reply, input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens });
+  } catch (e: any) {
+    console.error('[ai-coach]', e.message);
+    return fail(res, 'AI coach error', 500);
+  }
+});
+
+// ── GET /analytics/health-score ───────────────────────────────
+app.get('/analytics/health-score', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const now    = new Date();
+    const month  = now.getMonth() + 1;
+    const year   = now.getFullYear();
+    const start  = `${year}-${String(month).padStart(2,'0')}-01`;
+    const end    = new Date(year, month, 0).toISOString().split('T')[0];
+
+    const [salary, spending, loans, budgets, byCategory, bankBal, goals, bills] = await Promise.all([
+      dbOne<any>('SELECT amount FROM salary_config WHERE user_id=$1', [userId]),
+      dbOne<any>(`SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent
+        FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`, [userId,start,end]),
+      db<any>('SELECT emi_amount,interest_rate FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT category_slug,amount FROM monthly_budgets WHERE user_id=$1 AND month=$2 AND year=$3', [userId,month,year]),
+      db<any>(`SELECT category_slug,SUM(amount) as total FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
+        GROUP BY category_slug`, [userId,start,end]),
+      dbOne<any>('SELECT COALESCE(SUM(balance),0) as total FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT target_amount,current_amount FROM financial_goals WHERE user_id=$1 AND is_completed=FALSE', [userId]),
+      db<any>('SELECT amount,is_paid_this_month FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE', [userId]),
+    ]);
+
+    const salaryAmt   = parseFloat(salary?.amount || 0);
+    const spent       = parseFloat(spending?.spent || 0);
+    const bankBalance = parseFloat(bankBal?.total || 0);
+    const emiTotal    = loans.reduce((s: number, l: any) => s + parseFloat(l.emi_amount || 0), 0);
+    const savingsRate = salaryAmt > 0 ? Math.round(((salaryAmt - spent) / salaryAmt) * 100) : 0;
+    const emiBurden   = salaryAmt > 0 ? Math.round((emiTotal / salaryAmt) * 100) : 0;
+    const monthlyExpenses = spent + emiTotal;
+    const emergencyMonths = monthlyExpenses > 0 ? bankBalance / monthlyExpenses : 0;
+
+    const overBudgetCats = budgets.filter((b: any) => {
+      const cat = byCategory.find((c: any) => c.category_slug === b.category_slug);
+      return cat && parseFloat(cat.total) > parseFloat(b.amount);
+    }).length;
+
+    const billsPaidPct = bills.length > 0
+      ? Math.round((bills.filter((b: any) => b.is_paid_this_month).length / bills.length) * 100)
+      : 100;
+
+    const goalProgress = goals.length > 0
+      ? Math.round(goals.reduce((s: number, g: any) =>
+          s + (parseFloat(g.target_amount) > 0 ? parseFloat(g.current_amount) / parseFloat(g.target_amount) : 0)
+        , 0) / goals.length * 100)
+      : 50;
+
+    // Factor scoring
+    const srScore    = savingsRate >= 30 ? 20 : savingsRate >= 20 ? 16 : savingsRate >= 10 ? 10 : savingsRate > 0 ? 5 : 0;
+    const emiScore   = emiBurden <= 20 ? 20 : emiBurden <= 30 ? 15 : emiBurden <= 40 ? 8 : 2;
+    const emgScore   = emergencyMonths >= 6 ? 20 : emergencyMonths >= 3 ? 15 : emergencyMonths >= 1 ? 8 : 2;
+    const budScore   = overBudgetCats === 0 ? 20 : overBudgetCats === 1 ? 14 : overBudgetCats <= 3 ? 7 : 2;
+    const billScore  = billsPaidPct >= 100 ? 10 : billsPaidPct >= 80 ? 7 : billsPaidPct >= 60 ? 4 : 1;
+    const goalScore  = goalProgress >= 70 ? 10 : goalProgress >= 40 ? 6 : goalProgress >= 10 ? 3 : 1;
+
+    const score = Math.min(100, srScore + emiScore + emgScore + budScore + billScore + goalScore);
+    const grade = score >= 90 ? 'A+' : score >= 80 ? 'A' : score >= 70 ? 'B+' : score >= 60 ? 'B' : score >= 50 ? 'C' : 'D';
+    const level = score >= 90 ? 'Financially Elite' : score >= 75 ? 'Financially Fit' :
+                  score >= 60 ? 'Getting Stable' : score >= 45 ? 'Building Foundation' : 'Needs Attention';
+
+    return ok(res, {
+      score, grade, level,
+      factors: [
+        { name: 'Savings Rate', score: srScore, max: 20, pct: Math.round((srScore/20)*100),
+          status: srScore >= 16 ? 'good' : srScore >= 10 ? 'neutral' : 'bad',
+          detail: `${savingsRate}% of income saved`, tip: savingsRate < 20 ? 'Aim for 20%+ savings rate' : 'Great savings discipline!' },
+        { name: 'EMI Burden', score: emiScore, max: 20, pct: Math.round((emiScore/20)*100),
+          status: emiScore >= 15 ? 'good' : emiScore >= 8 ? 'neutral' : 'bad',
+          detail: `${emiBurden}% of income in EMIs`, tip: emiBurden > 30 ? 'EMIs over 30% — consider prepayment' : 'EMI load is manageable' },
+        { name: 'Emergency Fund', score: emgScore, max: 20, pct: Math.round((emgScore/20)*100),
+          status: emgScore >= 15 ? 'good' : emgScore >= 8 ? 'neutral' : 'bad',
+          detail: `${emergencyMonths.toFixed(1)} months of expenses covered`, tip: emergencyMonths < 3 ? 'Build to 3-6 months of expenses' : 'Emergency fund is healthy' },
+        { name: 'Budget Control', score: budScore, max: 20, pct: Math.round((budScore/20)*100),
+          status: budScore >= 14 ? 'good' : budScore >= 7 ? 'neutral' : 'bad',
+          detail: `${overBudgetCats} categor${overBudgetCats === 1 ? 'y' : 'ies'} over budget`, tip: overBudgetCats > 0 ? 'Review overspent categories' : 'All budgets on track!' },
+        { name: 'Bills On Time', score: billScore, max: 10, pct: Math.round((billScore/10)*100),
+          status: billScore >= 7 ? 'good' : billScore >= 4 ? 'neutral' : 'bad',
+          detail: `${billsPaidPct}% bills paid this month`, tip: billsPaidPct < 100 ? 'Pay all bills to avoid late fees' : 'All bills paid!' },
+        { name: 'Goal Progress', score: goalScore, max: 10, pct: Math.round((goalScore/10)*100),
+          status: goalScore >= 6 ? 'good' : goalScore >= 3 ? 'neutral' : 'bad',
+          detail: goals.length > 0 ? `${goalProgress}% avg goal completion` : 'No goals set yet',
+          tip: goals.length === 0 ? 'Set financial goals to get started' : goalProgress < 40 ? 'Increase goal contributions' : 'Making good progress!' },
+      ],
+    });
+  } catch (e: any) {
+    console.error('[health-score]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── GET /analytics/cash-flow ──────────────────────────────────
+// Returns predicted cash flow events for next 3 months
+app.get('/analytics/cash-flow', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const now    = new Date();
+
+    const [salary, bills, loans, bankBal] = await Promise.all([
+      dbOne<any>('SELECT amount,expected_day FROM salary_config WHERE user_id=$1', [userId]),
+      db<any>('SELECT name,amount,due_day,icon,is_paid_this_month FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT name,emi_amount FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      dbOne<any>('SELECT COALESCE(SUM(balance),0) as total FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [userId]),
+    ]);
+
+    const salaryAmt    = parseFloat(salary?.amount || 0);
+    const salaryDay    = salary?.expected_day || 1;
+    const startBalance = parseFloat(bankBal?.total || 0);
+    const emiTotal     = loans.reduce((s: number, l: any) => s + parseFloat(l.emi_amount || 0), 0);
+    const totalBills   = bills.reduce((s: number, b: any) => s + parseFloat(b.amount || 0), 0);
+    const dailySpend   = (salaryAmt > 0 ? salaryAmt * 0.03 : 1000); // ~3% of salary per day as baseline
+
+    const events: any[] = [];
+    let runningBalance = startBalance;
+
+    // Generate events for next 90 days
+    for (let d = 0; d < 90; d++) {
+      const date = new Date(now);
+      date.setDate(now.getDate() + d);
+      const dayOfMonth = date.getDate();
+      const dateStr = date.toISOString().split('T')[0];
+
+      const dayEvents: any[] = [];
+
+      // Salary credit
+      if (dayOfMonth === salaryDay && salaryAmt > 0) {
+        runningBalance += salaryAmt;
+        dayEvents.push({ type: 'credit', label: 'Salary Credit', amount: salaryAmt, icon: '💰', category: 'salary' });
+      }
+
+      // Bills due
+      for (const bill of bills) {
+        if (bill.due_day === dayOfMonth) {
+          // Skip if already paid this month for current month
+          const isCurrentMonth = date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
+          if (!(isCurrentMonth && bill.is_paid_this_month)) {
+            runningBalance -= parseFloat(bill.amount);
+            dayEvents.push({ type: 'debit', label: bill.name, amount: parseFloat(bill.amount), icon: bill.icon || '📄', category: 'bill' });
+          }
+        }
+      }
+
+      // EMI deductions (assume 5th of month as default EMI date)
+      if (dayOfMonth === 5 && emiTotal > 0) {
+        runningBalance -= emiTotal;
+        dayEvents.push({ type: 'debit', label: 'EMI Payments', amount: emiTotal, icon: '🏦', category: 'emi' });
+      }
+
+      // Daily spend baseline
+      runningBalance -= dailySpend;
+
+      if (dayEvents.length > 0 || runningBalance < salaryAmt * 0.1) {
+        events.push({
+          date: dateStr,
+          events: dayEvents,
+          projected_balance: Math.round(runningBalance),
+          is_low_balance: runningBalance < salaryAmt * 0.05,
+          is_negative: runningBalance < 0,
+        });
+      }
+    }
+
+    return ok(res, {
+      starting_balance: Math.round(startBalance),
+      salary_amount: salaryAmt,
+      salary_day: salaryDay,
+      monthly_bills_total: Math.round(totalBills),
+      monthly_emi_total: Math.round(emiTotal),
+      daily_spend_estimate: Math.round(dailySpend),
+      events: events.slice(0, 90),
+    });
+  } catch (e: any) {
+    console.error('[cash-flow]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── GET /analytics/debt-payoff ────────────────────────────────
+// Snowball vs Avalanche debt payoff comparison
+app.get('/analytics/debt-payoff', async (req, res) => {
+  try {
+    const userId = uid(req);
+    const [loans, creditCards, salary] = await Promise.all([
+      db<any>('SELECT id,name,emi_amount,interest_rate,outstanding,months_remaining,color FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
+      db<any>('SELECT id,name,outstanding,min_due,color FROM credit_cards WHERE user_id=$1 AND is_active=TRUE AND outstanding>0', [userId]),
+      dbOne<any>('SELECT amount FROM salary_config WHERE user_id=$1', [userId]),
+    ]);
+
+    // Combine debts: loans + credit cards (CC interest assumed at 36%/year)
+    const allDebts = [
+      ...loans.map((l: any) => ({
+        id: l.id, name: l.name, type: 'loan',
+        outstanding: parseFloat(l.outstanding),
+        monthly_payment: parseFloat(l.emi_amount),
+        interest_rate: parseFloat(l.interest_rate),
+        color: l.color,
+      })),
+      ...creditCards.map((c: any) => ({
+        id: c.id, name: c.name + ' CC', type: 'credit_card',
+        outstanding: parseFloat(c.outstanding),
+        monthly_payment: parseFloat(c.min_due) || Math.max(500, parseFloat(c.outstanding) * 0.05),
+        interest_rate: 36,
+        color: c.color,
+      })),
+    ].filter(d => d.outstanding > 0);
+
+    const totalDebt    = allDebts.reduce((s, d) => s + d.outstanding, 0);
+    const totalMonthly = allDebts.reduce((s, d) => s + d.monthly_payment, 0);
+
+    function simulate(debts: any[], order: 'snowball' | 'avalanche') {
+      const sorted = [...debts].sort((a, b) =>
+        order === 'snowball'
+          ? a.outstanding - b.outstanding
+          : b.interest_rate - a.interest_rate
+      );
+      let months = 0, totalInterest = 0;
+      const balances = sorted.map(d => ({ ...d, balance: d.outstanding }));
+      let extra = 0;
+      while (balances.some(d => d.balance > 0) && months < 600) {
+        months++;
+        let freed = extra;
+        for (const d of balances) {
+          if (d.balance <= 0) { freed += d.monthly_payment; continue; }
+          const monthlyRate = d.interest_rate / 100 / 12;
+          const interest = d.balance * monthlyRate;
+          totalInterest += interest;
+          const payment = Math.min(d.balance + interest, d.monthly_payment + (freed > 0 ? freed : 0));
+          freed = 0;
+          d.balance = Math.max(0, d.balance + interest - payment);
+          if (d.balance === 0) freed += d.monthly_payment;
+        }
+      }
+      const payoffDate = new Date();
+      payoffDate.setMonth(payoffDate.getMonth() + months);
+      return { months, totalInterest: Math.round(totalInterest), payoffDate: payoffDate.toISOString().split('T')[0], order_names: sorted.map(d => d.name) };
+    }
+
+    const snowball  = simulate(allDebts, 'snowball');
+    const avalanche = simulate(allDebts, 'avalanche');
+    const interestSaved = snowball.totalInterest - avalanche.totalInterest;
+
+    return ok(res, {
+      total_debt: Math.round(totalDebt),
+      total_monthly_payment: Math.round(totalMonthly),
+      debts: allDebts,
+      snowball: { ...snowball, description: 'Pay smallest balance first — quick wins boost motivation' },
+      avalanche: { ...avalanche, description: 'Pay highest interest first — saves the most money' },
+      recommended: interestSaved > 0 ? 'avalanche' : 'snowball',
+      interest_saved_by_avalanche: Math.max(0, interestSaved),
+    });
+  } catch (e: any) {
+    console.error('[debt-payoff]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// ── POST /analytics/tax-estimate ─────────────────────────────
+// Indian income tax computation — Old vs New Regime (FY 2024-25)
+app.post('/analytics/tax-estimate', async (req, res) => {
+  try {
+    const {
+      annual_salary,
+      other_income = 0,
+      section_80c = 0,     // PPF, ELSS, LIC, PF (max ₹1.5L)
+      section_80d = 0,     // Health insurance (max ₹25K self + ₹25K parents)
+      hra_exemption = 0,
+      nps_80ccd = 0,       // NPS additional (max ₹50K)
+      home_loan_interest = 0, // Section 24b (max ₹2L for self-occupied)
+    } = req.body;
+
+    if (!annual_salary || annual_salary <= 0) return fail(res, 'annual_salary required');
+
+    const grossIncome = parseFloat(annual_salary) + parseFloat(other_income);
+
+    // ── Old Regime ────────────────────────────────────────────
+    const stdDeductionOld  = 50000;
+    const deduction80C     = Math.min(parseFloat(section_80c), 150000);
+    const deduction80D     = Math.min(parseFloat(section_80d), 50000);
+    const deductionNPS     = Math.min(parseFloat(nps_80ccd), 50000);
+    const deductionHLI     = Math.min(parseFloat(home_loan_interest), 200000);
+    const hraDeduction     = parseFloat(hra_exemption);
+
+    const totalDeductionsOld = stdDeductionOld + deduction80C + deduction80D + deductionNPS + deductionHLI + hraDeduction;
+    const taxableOld = Math.max(0, grossIncome - totalDeductionsOld);
+
+    function calcOldTax(income: number): number {
+      if (income <= 250000)  return 0;
+      if (income <= 500000)  return (income - 250000) * 0.05;
+      if (income <= 1000000) return 12500 + (income - 500000) * 0.20;
+      return 12500 + 100000 + (income - 1000000) * 0.30;
+    }
+    let taxOld = calcOldTax(taxableOld);
+    if (taxableOld <= 500000) taxOld = 0; // 87A rebate
+    const surchargeOld = grossIncome > 5000000 ? taxOld * 0.10 :
+                         grossIncome > 10000000 ? taxOld * 0.15 : 0;
+    const cessOld = (taxOld + surchargeOld) * 0.04;
+    const totalTaxOld = Math.round(taxOld + surchargeOld + cessOld);
+
+    // ── New Regime (FY 2024-25) ───────────────────────────────
+    const stdDeductionNew = 75000; // Enhanced std deduction in new regime
+    const taxableNew = Math.max(0, grossIncome - stdDeductionNew);
+
+    function calcNewTax(income: number): number {
+      if (income <= 300000)  return 0;
+      if (income <= 700000)  return (income - 300000) * 0.05;
+      if (income <= 1000000) return 20000 + (income - 700000) * 0.10;
+      if (income <= 1200000) return 50000 + (income - 1000000) * 0.15;
+      if (income <= 1500000) return 80000 + (income - 1200000) * 0.20;
+      return 140000 + (income - 1500000) * 0.30;
+    }
+    let taxNew = calcNewTax(taxableNew);
+    if (taxableNew <= 700000) taxNew = 0; // 87A rebate under new regime
+    const surchargeNew = grossIncome > 5000000 ? taxNew * 0.10 : 0;
+    const cessNew = (taxNew + surchargeNew) * 0.04;
+    const totalTaxNew = Math.round(taxNew + surchargeNew + cessNew);
+
+    const savings80CRemaining = Math.max(0, 150000 - parseFloat(section_80c));
+    const recommended = totalTaxNew < totalTaxOld ? 'new' : 'old';
+    const taxSavingsByRegime = Math.abs(totalTaxOld - totalTaxNew);
+
+    return ok(res, {
+      gross_income: Math.round(grossIncome),
+      old_regime: {
+        total_deductions: Math.round(totalDeductionsOld),
+        taxable_income: Math.round(taxableOld),
+        tax_before_cess: Math.round(taxOld),
+        total_tax: totalTaxOld,
+        effective_rate: grossIncome > 0 ? Math.round((totalTaxOld / grossIncome) * 100 * 10) / 10 : 0,
+        monthly_tds: Math.round(totalTaxOld / 12),
+      },
+      new_regime: {
+        total_deductions: stdDeductionNew,
+        taxable_income: Math.round(taxableNew),
+        tax_before_cess: Math.round(taxNew),
+        total_tax: totalTaxNew,
+        effective_rate: grossIncome > 0 ? Math.round((totalTaxNew / grossIncome) * 100 * 10) / 10 : 0,
+        monthly_tds: Math.round(totalTaxNew / 12),
+      },
+      recommended,
+      tax_savings_by_switching: taxSavingsByRegime,
+      suggestions: [
+        ...(savings80CRemaining > 0 ? [`Invest ₹${savings80CRemaining.toLocaleString('en-IN')} more in 80C (ELSS/PPF) to maximize old-regime deduction`] : []),
+        ...(deductionNPS < 50000 ? [`Contribute ₹${(50000-deductionNPS).toLocaleString('en-IN')} to NPS for extra ₹50K deduction (Section 80CCD(1B))`] : []),
+        ...(recommended === 'new' ? ['New regime saves you more — avoid unnecessary old-regime lock-ins'] : ['Old regime is better — maximize your deductions']),
+      ],
+    });
+  } catch (e: any) {
+    console.error('[tax-estimate]', e.message);
     return fail(res, 'Server error', 500);
   }
 });

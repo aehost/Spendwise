@@ -2,13 +2,7 @@ package com.spendwise.app.di
 
 import com.spendwise.app.BuildConfig
 import com.spendwise.app.data.local.preferences.TokenManager
-import com.spendwise.app.data.remote.api.AnalyticsApi
-import com.spendwise.app.data.remote.api.AuthApi
-import com.spendwise.app.data.remote.api.GmailApi
-import com.spendwise.app.data.remote.api.GoalsApi
-import com.spendwise.app.data.remote.api.IntelligenceApi
-import com.spendwise.app.data.remote.api.TransactionApi
-import com.spendwise.app.data.remote.api.UserApi
+import com.spendwise.app.data.remote.api.*
 import com.spendwise.app.data.remote.interceptor.AuthInterceptor
 import dagger.Module
 import dagger.Provides
@@ -37,9 +31,9 @@ object NetworkModule {
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
             .addInterceptor(logging)
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
     }
 
@@ -51,11 +45,17 @@ object NetworkModule {
             .addConverterFactory(GsonConverterFactory.create())
             .build()
 
-    @Provides @Singleton fun provideAuthApi(r: Retrofit):        AuthApi        = r.create(AuthApi::class.java)
-    @Provides @Singleton fun provideTransactionApi(r: Retrofit): TransactionApi = r.create(TransactionApi::class.java)
-    @Provides @Singleton fun provideUserApi(r: Retrofit):        UserApi        = r.create(UserApi::class.java)
-    @Provides @Singleton fun provideAnalyticsApi(r: Retrofit):   AnalyticsApi   = r.create(AnalyticsApi::class.java)
-    @Provides @Singleton fun provideIntelligenceApi(r: Retrofit): IntelligenceApi = r.create(IntelligenceApi::class.java)
-    @Provides @Singleton fun provideGoalsApi(r: Retrofit):        GoalsApi        = r.create(GoalsApi::class.java)
-    @Provides @Singleton fun provideGmailApi(r: Retrofit):        GmailApi        = r.create(GmailApi::class.java)
+    @Provides @Singleton fun provideAuthApi(r: Retrofit):          AuthApi          = r.create(AuthApi::class.java)
+    @Provides @Singleton fun provideTransactionApi(r: Retrofit):   TransactionApi   = r.create(TransactionApi::class.java)
+    @Provides @Singleton fun provideUserApi(r: Retrofit):          UserApi          = r.create(UserApi::class.java)
+    @Provides @Singleton fun provideAnalyticsApi(r: Retrofit):     AnalyticsApi     = r.create(AnalyticsApi::class.java)
+    @Provides @Singleton fun provideIntelligenceApi(r: Retrofit):  IntelligenceApi  = r.create(IntelligenceApi::class.java)
+    @Provides @Singleton fun provideGoalsApi(r: Retrofit):         GoalsApi         = r.create(GoalsApi::class.java)
+    @Provides @Singleton fun provideGmailApi(r: Retrofit):         GmailApi         = r.create(GmailApi::class.java)
+    @Provides @Singleton fun provideAiCoachApi(r: Retrofit):       AiCoachApi       = r.create(AiCoachApi::class.java)
+    @Provides @Singleton fun provideHealthScoreApi(r: Retrofit):   HealthScoreApi   = r.create(HealthScoreApi::class.java)
+    @Provides @Singleton fun provideCashFlowApi(r: Retrofit):      CashFlowApi      = r.create(CashFlowApi::class.java)
+    @Provides @Singleton fun provideDebtPayoffApi(r: Retrofit):    DebtPayoffApi    = r.create(DebtPayoffApi::class.java)
+    @Provides @Singleton fun provideTaxApi(r: Retrofit):           TaxApi           = r.create(TaxApi::class.java)
+    @Provides @Singleton fun provideIouApi(r: Retrofit):           IouApi           = r.create(IouApi::class.java)
 }

@@ -519,3 +519,140 @@ data class EmailBillDetectionDto(
     @SerializedName("email_date")       val emailDate: String,
     @SerializedName("is_minimum_due")   val isMinimumDue: Boolean = false
 )
+
+// ── AI Finance Coach ──────────────────────────────────────────
+data class AiCoachMessage(
+    @SerializedName("role")    val role: String,
+    @SerializedName("content") val content: String
+)
+data class AiCoachRequest(
+    @SerializedName("message") val message: String,
+    @SerializedName("history") val history: List<AiCoachMessage> = emptyList()
+)
+data class AiCoachResponse(
+    @SerializedName("reply")          val reply: String,
+    @SerializedName("input_tokens")   val inputTokens: Int = 0,
+    @SerializedName("output_tokens")  val outputTokens: Int = 0
+)
+
+// ── Financial Health Score ────────────────────────────────────
+data class HealthFactorDto(
+    @SerializedName("name")   val name: String,
+    @SerializedName("score")  val score: Int,
+    @SerializedName("max")    val max: Int,
+    @SerializedName("pct")    val pct: Int,
+    @SerializedName("status") val status: String,
+    @SerializedName("detail") val detail: String,
+    @SerializedName("tip")    val tip: String
+)
+data class HealthScoreDto(
+    @SerializedName("score")   val score: Int,
+    @SerializedName("grade")   val grade: String,
+    @SerializedName("level")   val level: String,
+    @SerializedName("factors") val factors: List<HealthFactorDto>
+)
+
+// ── Cash Flow Calendar ────────────────────────────────────────
+data class CashFlowEventDto(
+    @SerializedName("type")     val type: String,
+    @SerializedName("label")    val label: String,
+    @SerializedName("amount")   val amount: Double,
+    @SerializedName("icon")     val icon: String,
+    @SerializedName("category") val category: String
+)
+data class CashFlowDayDto(
+    @SerializedName("date")               val date: String,
+    @SerializedName("events")             val events: List<CashFlowEventDto>,
+    @SerializedName("projected_balance")  val projectedBalance: Double,
+    @SerializedName("is_low_balance")     val isLowBalance: Boolean,
+    @SerializedName("is_negative")        val isNegative: Boolean
+)
+data class CashFlowDto(
+    @SerializedName("starting_balance")      val startingBalance: Double,
+    @SerializedName("salary_amount")         val salaryAmount: Double,
+    @SerializedName("salary_day")            val salaryDay: Int,
+    @SerializedName("monthly_bills_total")   val monthlyBillsTotal: Double,
+    @SerializedName("monthly_emi_total")     val monthlyEmiTotal: Double,
+    @SerializedName("daily_spend_estimate")  val dailySpendEstimate: Double,
+    @SerializedName("events")               val events: List<CashFlowDayDto>
+)
+
+// ── Debt Payoff Planner ───────────────────────────────────────
+data class DebtItemDto(
+    @SerializedName("id")               val id: String,
+    @SerializedName("name")             val name: String,
+    @SerializedName("type")             val type: String,
+    @SerializedName("outstanding")      val outstanding: Double,
+    @SerializedName("monthly_payment")  val monthlyPayment: Double,
+    @SerializedName("interest_rate")    val interestRate: Double,
+    @SerializedName("color")            val color: String
+)
+data class PayoffStrategyDto(
+    @SerializedName("months")        val months: Int,
+    @SerializedName("total_interest") val totalInterest: Double,
+    @SerializedName("payoff_date")   val payoffDate: String,
+    @SerializedName("order_names")   val orderNames: List<String>,
+    @SerializedName("description")   val description: String
+)
+data class DebtPayoffDto(
+    @SerializedName("total_debt")             val totalDebt: Double,
+    @SerializedName("total_monthly_payment")  val totalMonthlyPayment: Double,
+    @SerializedName("debts")                  val debts: List<DebtItemDto>,
+    @SerializedName("snowball")               val snowball: PayoffStrategyDto,
+    @SerializedName("avalanche")              val avalanche: PayoffStrategyDto,
+    @SerializedName("recommended")            val recommended: String,
+    @SerializedName("interest_saved_by_avalanche") val interestSavedByAvalanche: Double
+)
+
+// ── Tax Planning ──────────────────────────────────────────────
+data class TaxEstimateRequest(
+    @SerializedName("annual_salary")        val annualSalary: Double,
+    @SerializedName("other_income")         val otherIncome: Double = 0.0,
+    @SerializedName("section_80c")          val section80c: Double = 0.0,
+    @SerializedName("section_80d")          val section80d: Double = 0.0,
+    @SerializedName("hra_exemption")        val hraExemption: Double = 0.0,
+    @SerializedName("nps_80ccd")            val nps80ccd: Double = 0.0,
+    @SerializedName("home_loan_interest")   val homeLoanInterest: Double = 0.0
+)
+data class TaxRegimeDto(
+    @SerializedName("total_deductions")  val totalDeductions: Double,
+    @SerializedName("taxable_income")    val taxableIncome: Double,
+    @SerializedName("tax_before_cess")   val taxBeforeCess: Double,
+    @SerializedName("total_tax")         val totalTax: Double,
+    @SerializedName("effective_rate")    val effectiveRate: Double,
+    @SerializedName("monthly_tds")       val monthlyTds: Double
+)
+data class TaxEstimateDto(
+    @SerializedName("gross_income")              val grossIncome: Double,
+    @SerializedName("old_regime")                val oldRegime: TaxRegimeDto,
+    @SerializedName("new_regime")                val newRegime: TaxRegimeDto,
+    @SerializedName("recommended")               val recommended: String,
+    @SerializedName("tax_savings_by_switching")  val taxSavingsBySwitching: Double,
+    @SerializedName("suggestions")               val suggestions: List<String>
+)
+
+// ── IOU Tracker ───────────────────────────────────────────────
+data class IouEntryDto(
+    @SerializedName("id")           val id: String,
+    @SerializedName("contact_name") val contactName: String,
+    @SerializedName("amount")       val amount: Double,
+    @SerializedName("direction")    val direction: String,  // "lent" | "borrowed"
+    @SerializedName("description")  val description: String?,
+    @SerializedName("date")         val date: String,
+    @SerializedName("is_settled")   val isSettled: Boolean = false,
+    @SerializedName("settled_at")   val settledAt: String? = null
+)
+data class CreateIouRequest(
+    @SerializedName("contact_name") val contactName: String,
+    @SerializedName("amount")       val amount: Double,
+    @SerializedName("direction")    val direction: String,
+    @SerializedName("description")  val description: String? = null,
+    @SerializedName("date")         val date: String
+)
+data class IouSummaryDto(
+    @SerializedName("contact_name")   val contactName: String,
+    @SerializedName("total_lent")     val totalLent: Double,
+    @SerializedName("total_borrowed") val totalBorrowed: Double,
+    @SerializedName("net")            val net: Double,
+    @SerializedName("count")          val count: Int
+)

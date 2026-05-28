@@ -530,5 +530,100 @@ app.put('/gmail/sync-timestamp', async (req, res) => {
   } catch { return fail(res, 'Server error', 500); }
 });
 
+// ── IOU TRACKER ───────────────────────────────────────────────
+// Auto-migrate IOU table on startup
+;(async () => {
+  try {
+    await execute(`
+      CREATE TABLE IF NOT EXISTS iou_entries (
+        id            UUID          PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id       UUID          NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        contact_name  VARCHAR(255)  NOT NULL,
+        amount        DECIMAL(12,2) NOT NULL,
+        direction     VARCHAR(10)   NOT NULL CHECK (direction IN ('lent','borrowed')),
+        description   TEXT,
+        date          DATE          NOT NULL DEFAULT CURRENT_DATE,
+        is_settled    BOOLEAN       DEFAULT FALSE,
+        settled_at    TIMESTAMPTZ,
+        created_at    TIMESTAMPTZ   DEFAULT NOW(),
+        updated_at    TIMESTAMPTZ   DEFAULT NOW()
+      )
+    `);
+    await execute(`CREATE INDEX IF NOT EXISTS idx_iou_user ON iou_entries(user_id)`);
+  } catch (e: any) { console.warn('[iou-migrate]', e.message); }
+})();
+
+app.get('/iou', async (req, res) => {
+  try {
+    const settled = req.query.settled === 'true';
+    const rows = await db<any>(
+      `SELECT * FROM iou_entries WHERE user_id=$1 AND is_settled=$2 ORDER BY date DESC, created_at DESC`,
+      [uid(req), settled]
+    );
+    return ok(res, rows);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.post('/iou', async (req, res) => {
+  try {
+    const { contact_name, amount, direction, description, date } = req.body;
+    if (!contact_name || !amount || !direction) return fail(res, 'contact_name, amount, direction required');
+    if (!['lent','borrowed'].includes(direction)) return fail(res, 'direction must be lent or borrowed');
+    const row = await dbOne<any>(
+      `INSERT INTO iou_entries(id,user_id,contact_name,amount,direction,description,date)
+       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+      [uuidv4(), uid(req), contact_name, parseFloat(amount), direction, description || null, date || new Date().toISOString().split('T')[0]]
+    );
+    return ok(res, row, 201);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.put('/iou/:id', async (req, res) => {
+  try {
+    const { contact_name, amount, description, is_settled } = req.body;
+    const row = await dbOne<any>(
+      `UPDATE iou_entries SET
+        contact_name = COALESCE($1, contact_name),
+        amount       = COALESCE($2, amount),
+        description  = COALESCE($3, description),
+        is_settled   = COALESCE($4, is_settled),
+        settled_at   = CASE WHEN $4 = TRUE THEN NOW() ELSE settled_at END,
+        updated_at   = NOW()
+       WHERE id=$5 AND user_id=$6 RETURNING *`,
+      [contact_name, amount ? parseFloat(amount) : null, description, is_settled ?? null, req.params.id, uid(req)]
+    );
+    return row ? ok(res, row) : fail(res, 'Not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+app.delete('/iou/:id', async (req, res) => {
+  try {
+    const n = await execute('DELETE FROM iou_entries WHERE id=$1 AND user_id=$2', [req.params.id, uid(req)]);
+    return n ? ok(res, { deleted: true }) : fail(res, 'Not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// Summary: net lent vs borrowed per contact
+app.get('/iou/summary', async (req, res) => {
+  try {
+    const rows = await db<any>(
+      `SELECT contact_name,
+        SUM(CASE WHEN direction='lent'     THEN amount ELSE 0 END) as total_lent,
+        SUM(CASE WHEN direction='borrowed' THEN amount ELSE 0 END) as total_borrowed,
+        COUNT(*) as count
+       FROM iou_entries WHERE user_id=$1 AND is_settled=FALSE
+       GROUP BY contact_name ORDER BY total_lent DESC`,
+      [uid(req)]
+    );
+    return ok(res, rows.map((r: any) => ({
+      contact_name:   r.contact_name,
+      total_lent:     parseFloat(r.total_lent),
+      total_borrowed: parseFloat(r.total_borrowed),
+      net:            parseFloat(r.total_lent) - parseFloat(r.total_borrowed),
+      count:          parseInt(r.count),
+    })));
+  } catch { return fail(res, 'Server error', 500); }
+});
+
 app.listen(PORT, () => console.log(`[user-service] running on :${PORT}`));
 export default app;

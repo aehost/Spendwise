@@ -217,6 +217,51 @@ interface GoalsApi {
     suspend fun deleteGoal(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
 }
 
+interface AiCoachApi {
+    @POST("analytics/ai-coach")
+    suspend fun chat(@Body req: AiCoachRequest): Response<ApiResponse<AiCoachResponse>>
+}
+
+interface HealthScoreApi {
+    @GET("analytics/health-score")
+    suspend fun getHealthScore(): Response<ApiResponse<HealthScoreDto>>
+}
+
+interface CashFlowApi {
+    @GET("analytics/cash-flow")
+    suspend fun getCashFlow(): Response<ApiResponse<CashFlowDto>>
+}
+
+interface DebtPayoffApi {
+    @GET("analytics/debt-payoff")
+    suspend fun getDebtPayoff(): Response<ApiResponse<DebtPayoffDto>>
+}
+
+interface TaxApi {
+    @POST("analytics/tax-estimate")
+    suspend fun estimateTax(@Body req: TaxEstimateRequest): Response<ApiResponse<TaxEstimateDto>>
+}
+
+interface IouApi {
+    @GET("user/iou")
+    suspend fun getEntries(@Query("settled") settled: Boolean = false): Response<ApiResponse<List<IouEntryDto>>>
+
+    @GET("user/iou/summary")
+    suspend fun getSummary(): Response<ApiResponse<List<IouSummaryDto>>>
+
+    @POST("user/iou")
+    suspend fun create(@Body req: CreateIouRequest): Response<ApiResponse<IouEntryDto>>
+
+    @PUT("user/iou/{id}")
+    suspend fun update(
+        @Path("id") id: String,
+        @Body req: Map<String, @JvmSuppressWildcards Any?>
+    ): Response<ApiResponse<IouEntryDto>>
+
+    @DELETE("user/iou/{id}")
+    suspend fun delete(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
+}
+
 interface GmailApi {
     @GET("user/gmail/status")
     suspend fun getStatus(): Response<ApiResponse<GmailStatusDto>>
