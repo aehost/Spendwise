@@ -4,29 +4,36 @@ import com.google.gson.annotations.SerializedName
 
 // ── Generic wrapper ────────────────────────────────────────────
 data class ApiResponse<T>(
-    val success: Boolean,
-    val data: T?,
-    val error: String?,
-    val code: String?
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("data")    val data: T?,
+    @SerializedName("error")   val error: String?,
+    @SerializedName("code")    val code: String?
 )
 
 // ── Auth ───────────────────────────────────────────────────────
-data class LoginRequest(val email: String, val password: String)
-data class RegisterRequest(val email: String, val password: String, val name: String = "")
+data class LoginRequest(
+    @SerializedName("email")    val email: String,
+    @SerializedName("password") val password: String
+)
+data class RegisterRequest(
+    @SerializedName("email")    val email: String,
+    @SerializedName("password") val password: String,
+    @SerializedName("name")     val name: String = ""
+)
 data class RefreshRequest(@SerializedName("refreshToken") val refreshToken: String)
 data class LogoutRequest(@SerializedName("refreshToken") val refreshToken: String)
 
 data class AuthResponse(
     @SerializedName("accessToken")  val accessToken: String,
     @SerializedName("refreshToken") val refreshToken: String,
-    val user: UserDto
+    @SerializedName("user")         val user: UserDto
 )
 
 data class UserDto(
-    val id: String,
-    val email: String,
-    val name: String,
-    val role: String = "user",
+    @SerializedName("id")            val id: String,
+    @SerializedName("email")         val email: String,
+    @SerializedName("name")          val name: String,
+    @SerializedName("role")          val role: String = "user",
     @SerializedName("currency_code") val currencyCode: String = "INR"
 )
 
@@ -52,11 +59,11 @@ data class TransactionDto(
 )
 
 data class TransactionListResponse(
-    val transactions: List<TransactionDto>,
-    val total: Int,
-    val page: Int,
-    val limit: Int,
-    val pages: Int
+    @SerializedName("transactions") val transactions: List<TransactionDto>,
+    @SerializedName("total")        val total: Int,
+    @SerializedName("page")         val page: Int,
+    @SerializedName("limit")        val limit: Int,
+    @SerializedName("pages")        val pages: Int
 )
 
 data class CreateTransactionRequest(
@@ -91,7 +98,10 @@ data class CategoryTotalDto(
 )
 
 // ── User / Profile ────────────────────────────────────────────
-data class UpdateProfileRequest(val name: String?, val phone: String?)
+data class UpdateProfileRequest(
+    @SerializedName("name")  val name: String?,
+    @SerializedName("phone") val phone: String?
+)
 
 data class BankAccountDto(
     val id: String,
@@ -164,12 +174,33 @@ data class DashboardDto(
     @SerializedName("by_category")      val byCategory: List<CategoryTotalDto>
 )
 
-data class SalaryInfoDto(val amount: Double, @SerializedName("expected_day") val expectedDay: Int)
-data class BudgetAlertDto(@SerializedName("category_slug") val categorySlug: String, val budget: Double, val spent: Double, val pct: Int)
+data class SalaryInfoDto(
+    @SerializedName("amount")       val amount: Double,
+    @SerializedName("expected_day") val expectedDay: Int
+)
+data class BudgetAlertDto(
+    @SerializedName("category_slug") val categorySlug: String,
+    @SerializedName("budget")        val budget: Double,
+    @SerializedName("spent")         val spent: Double,
+    @SerializedName("pct")           val pct: Int
+)
 
-data class TrendPoint(val month: String, val spent: Double, val income: Double)
-data class CategoryAnalysis(@SerializedName("category_slug") val categorySlug: String, val spent: Double, val budget: Double, val pct: Int?)
-data class CategoriesAnalyticsResponse(val month: Int, val year: Int, val categories: List<CategoryAnalysis>)
+data class TrendPoint(
+    @SerializedName("month")  val month: String,
+    @SerializedName("spent")  val spent: Double,
+    @SerializedName("income") val income: Double
+)
+data class CategoryAnalysis(
+    @SerializedName("category_slug") val categorySlug: String,
+    @SerializedName("spent")         val spent: Double,
+    @SerializedName("budget")        val budget: Double,
+    @SerializedName("pct")           val pct: Int?
+)
+data class CategoriesAnalyticsResponse(
+    @SerializedName("month")      val month: Int,
+    @SerializedName("year")       val year: Int,
+    @SerializedName("categories") val categories: List<CategoryAnalysis>
+)
 
 // ── Intelligence / AI ─────────────────────────────────────────
 data class RecurringBillSuggestionDto(

@@ -1,4 +1,30 @@
-# Keep JavaScript bridge methods (called via reflection from WebView)
+# ── Gson / Retrofit ─────────────────────────────────────────────────────────
+# R8 obfuscates field names by default. Without explicit keep rules Gson
+# serialises request bodies as {} (empty) and the server returns 400
+# "email and password required" because it can't find the JSON keys.
+#
+# Keep all declared fields on every DTO class so Gson can map them.
+-keepclassmembers class com.spendwise.app.data.remote.dto.** {
+    <fields>;
+    <init>(...);
+}
+-keepclassmembers class com.spendwise.app.domain.model.** {
+    <fields>;
+    <init>(...);
+}
+
+# Preserve generic type signatures (used by Retrofit + Gson TypeToken)
+-keepattributes Signature
+
+# Preserve all annotations (needed for @SerializedName, @Body, @GET, etc.)
+-keepattributes *Annotation*
+
+# Keep Retrofit API interface methods (annotated with @GET, @POST, etc.)
+-keepclassmembers,allowshrinking,allowobfuscation interface * {
+    @retrofit2.http.* <methods>;
+}
+
+# ── Keep JavaScript bridge methods (called via reflection from WebView) ────────
 -keepclassmembers class com.spendwise.app.SMSBridge {
     @android.webkit.JavascriptInterface <methods>;
 }
