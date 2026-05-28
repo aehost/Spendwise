@@ -2,7 +2,7 @@
 
 > Full-stack personal finance platform for the Indian market. Bank SMS transactions are auto-detected, intelligently parsed, and classified by a 4-tier merchant engine — all in real time.
 
-Built with: **Kotlin / Jetpack Compose** Android · **Node.js microservices** · **React** admin & support dashboards · **PostgreSQL / Supabase**
+Built with: **Kotlin / Jetpack Compose** Android · **Node.js microservices** · **React** admin & support dashboards · **PostgreSQL / Neon**
 
 ---
 
@@ -31,7 +31,7 @@ Built with: **Kotlin / Jetpack Compose** Android · **Node.js microservices** ·
                          │
                ┌─────────▼─────────┐
                │    PostgreSQL DB   │
-               │  (Docker / Supabase│
+               │  (Docker / Neon)   │
                └───────────────────┘
 ```
 
@@ -116,7 +116,7 @@ Use the same admin credentials, or create a support agent via Admin Dashboard �
 4. Start the emulator
 5. In Android Studio, click **▶ Run** (Shift+F10)
 
-> **Note:** The emulator accesses your host machine at `10.0.2.2`. The app's `BASE_URL` is pre-configured to `http://10.0.2.2:3000` for debug builds.
+> **Note:** For **emulator** testing, set `dev.baseUrl=http://10.0.2.2:3000/` in `android/local.properties`. For **real device** testing, set it to your PC's LAN IP (e.g. `http://192.168.1.X:3000/`). Without a `local.properties` file the app points to the **production Railway backend** by default.
 
 ---
 
@@ -163,10 +163,10 @@ Full step-by-step deployment guide: **[DEPLOYMENT.md](DEPLOYMENT.md)**
 
 | Service | Platform | Notes |
 |---|---|---|
-| 5 backend microservices | **Railway.app** | Docker auto-detected from `railway.toml` |
+| 5 backend microservices | **Railway.app** | Docker images from GHCR (`ghcr.io/aehost/spendwise-*`) |
 | Admin dashboard | **Vercel** | Root dir: `admin-dashboard/` |
 | Support dashboard | **Vercel** | Root dir: `support-dashboard/` |
-| Database | **Supabase** | Already provisioned; just set `DATABASE_URL` + `DB_SSL=true` |
+| Database | **Neon PostgreSQL** | Serverless PG 17 — set `DATABASE_URL` in Railway env vars |
 
 ### Real Device Testing (Before Deployment)
 
@@ -175,37 +175,46 @@ Testing on a **physical Android phone** (not emulator):
 ```properties
 # android/local.properties  (gitignored — never committed)
 # Find your PC's IP: run ipconfig → look for "IPv4 Address"
-dev.baseUrl=http://192.168.1.X:3000/api/
+dev.baseUrl=http://192.168.1.X:3000/
 ```
 
 Then run the debug build. The app reads `local.properties` automatically.
 
+> ⚠️ No trailing `/api/` — the gateway serves routes at the root (e.g. `/auth/register`, `/transactions`).
+
 ---
 
-## Connecting to Supabase (Cloud DB)
+## Connecting to Neon (Cloud DB)
 
-All 5 backend services support Supabase out of the box. An interactive step-by-step wizard is available at **Admin Dashboard → Cloud Setup** (`/cloud-setup`).
+Production database runs on **Neon PostgreSQL** (serverless PG 17, free tier, IPv4, Singapore region).
 
 ### Manual Setup
 
 ```bash
-# 1. Apply schema to your Supabase project
-psql "postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres" \
+# 1. Create a Neon project at https://neon.tech
+#    Copy the connection string from Dashboard → Connection Details
+
+# 2. Apply schema
+psql "postgresql://user:pw@ep-xxx.region.aws.neon.tech/neondb?sslmode=require" \
   -f database/schema.sql
 
-# 2. Update every service's .env
-DATABASE_URL=postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres
-DB_SSL=true          # enables SSL without NODE_ENV=production
+# 3. Apply intelligence migration
+psql "postgresql://user:pw@ep-xxx.region.aws.neon.tech/neondb?sslmode=require" \
+  -f database/migrations/001_intelligence.sql
+
+# 4. Set in every service's .env
+DATABASE_URL=postgresql://user:pw@ep-xxx.region.aws.neon.tech/neondb?sslmode=require
+# DB_SSL is NOT needed — sslmode=require in the URL handles SSL automatically
 NODE_ENV=development
 ```
 
-> **Why `DB_SSL=true`?** Supabase requires SSL. Setting `DB_SSL=true` activates `{ rejectUnauthorized: false }` in the pg Pool config without the side-effects of switching to production mode.
+> **Why no `DB_SSL=true`?** Neon includes `?sslmode=require` in the connection string itself. The pg driver respects it automatically.
 
 ### Production Deployment
 
 | Platform | Notes |
 |---|---|
-| **Railway.app** | Connect GitHub repo; each `backend/*` folder auto-deploys as a separate service |
+| **Railway.app** | Docker images from GHCR; set `DATABASE_URL` env var in each service |
 | **Render.com** | Free tier Node.js services; set env vars in dashboard |
 | **Fly.io** | 256MB RAM free tier, good for microservices |
 | **AWS ECS** | Full production setup; pair with Aurora PostgreSQL Serverless v2 |
@@ -213,8 +222,8 @@ NODE_ENV=development
 ### AWS Migration Path
 
 ```bash
-# Dump from Supabase → restore to Aurora PostgreSQL
-pg_dump "postgresql://postgres:<pw>@db.<ref>.supabase.co:5432/postgres" \
+# Dump from Neon → restore to Aurora PostgreSQL
+pg_dump "postgresql://user:pw@ep-xxx.region.aws.neon.tech/neondb?sslmode=require" \
   --no-owner --no-acl -Fc -f spendwise.dump
 
 pg_restore -d "postgresql://admin:<pw>@<aurora>.cluster-xxx.us-east-1.rds.amazonaws.com/spendwise" \
@@ -405,15 +414,15 @@ Bill:  Bill payment of Rs.599 for Airtel Mobile processed successfully
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET/PUT | `/users/profile` | Profile management |
-| GET/POST | `/users/bank-accounts` | Bank accounts |
-| GET/POST | `/users/credit-cards` | Credit cards |
-| GET/POST | `/users/loans` | Loans |
-| GET/PUT | `/users/salary` | Salary configuration |
-| GET/POST | `/users/investments` | Investments |
-| GET/POST | `/users/bills` | Mandatory bills |
-| PUT | `/users/bills/:id/pay` | Mark bill as paid |
-| GET/PUT | `/users/budgets` | Monthly budgets |
+| GET/PUT | `/user/profile` | Profile management |
+| GET/POST | `/user/bank-accounts` | Bank accounts |
+| GET/POST | `/user/credit-cards` | Credit cards |
+| GET/POST | `/user/loans` | Loans |
+| GET/PUT | `/user/salary` | Salary configuration |
+| GET/POST | `/user/investments` | Investments |
+| GET/POST | `/user/bills` | Mandatory bills |
+| PUT | `/user/bills/:id/pay` | Mark bill as paid |
+| GET/PUT | `/user/budgets` | Monthly budgets |
 
 ### Analytics
 
@@ -432,11 +441,11 @@ Bill:  Bill payment of Rs.599 for Airtel Mobile processed successfully
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/users/goals` | List financial goals |
-| POST | `/users/goals` | Create goal (emergency fund, vacation, etc.) |
-| PUT | `/users/goals/:id` | Update goal |
-| DELETE | `/users/goals/:id` | Delete goal |
-| POST | `/users/goals/:id/contribute` | Add contribution to goal |
+| GET | `/user/goals` | List financial goals |
+| POST | `/user/goals` | Create goal (emergency fund, vacation, etc.) |
+| PUT | `/user/goals/:id` | Update goal |
+| DELETE | `/user/goals/:id` | Delete goal |
+| POST | `/user/goals/:id/contribute` | Add contribution to goal |
 
 ---
 
@@ -501,12 +510,12 @@ Only users with `role = 'support'` or `role = 'admin'` can log into the support 
 ### Backend Services
 
 ```env
-DATABASE_URL=postgresql://user:password@host:5432/dbname
+DATABASE_URL=postgresql://user:password@host:5432/dbname?sslmode=require
 JWT_ACCESS_SECRET=your-super-secret-access-key-min-32-chars
 JWT_REFRESH_SECRET=your-super-secret-refresh-key-min-32-chars
 PORT=3001              # (per service: 3001–3004, gateway = 3000)
 NODE_ENV=development
-DB_SSL=true            # set for Supabase / any cloud PostgreSQL (enables SSL)
+# DB_SSL is NOT needed when sslmode=require is embedded in DATABASE_URL (e.g. Neon)
 CORS_ORIGINS=http://localhost:5173,http://localhost:5174
 ```
 

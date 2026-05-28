@@ -9,6 +9,8 @@ import com.spendwise.app.data.remote.dto.RefreshRequest
 import com.spendwise.app.data.remote.dto.RegisterRequest
 import com.spendwise.app.domain.model.AuthTokens
 import com.spendwise.app.domain.model.User
+import org.json.JSONObject
+import retrofit2.Response
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,7 +31,8 @@ class AuthRepository @Inject constructor(
                     user = User(data.user.id, data.user.email, data.user.name, data.user.role, data.user.currencyCode)
                 ))
             } else {
-                Result.Error(response.body()?.error ?: "Login failed", response.body()?.code)
+                val err = response.body()?.error ?: parseErrorBody(response) ?: "Login failed"
+                Result.Error(err, response.body()?.code)
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Network error")
@@ -48,7 +51,8 @@ class AuthRepository @Inject constructor(
                     user = User(data.user.id, data.user.email, data.user.name, data.user.role, data.user.currencyCode)
                 ))
             } else {
-                Result.Error(response.body()?.error ?: "Registration failed", response.body()?.code)
+                val err = response.body()?.error ?: parseErrorBody(response) ?: "Registration failed"
+                Result.Error(err, response.body()?.code)
             }
         } catch (e: Exception) {
             Result.Error(e.message ?: "Network error")
@@ -95,4 +99,10 @@ class AuthRepository @Inject constructor(
         tokenManager.userEmail    = email
         tokenManager.userName     = name
     }
+
+    /** Parse the error message from a non-2xx response body (e.g. 400 / 409 / 500). */
+    private fun parseErrorBody(response: Response<*>): String? = try {
+        val body = response.errorBody()?.string() ?: return null
+        JSONObject(body).optString("error").takeIf { it.isNotBlank() }
+    } catch (_: Exception) { null }
 }
