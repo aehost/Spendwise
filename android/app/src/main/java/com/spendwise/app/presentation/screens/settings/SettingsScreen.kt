@@ -36,7 +36,6 @@ fun SettingsScreen(
     var showSalaryDialog     by remember { mutableStateOf(false) }
     var showPasswordDialog   by remember { mutableStateOf(false) }
     var showTicketDialog     by remember { mutableStateOf(false) }
-    var showGmailDisconnect  by remember { mutableStateOf(false) }
 
     // Salary inputs
     var salaryInput    by remember { mutableStateOf("") }
@@ -86,26 +85,71 @@ fun SettingsScreen(
                 }
             }
 
-            // ── Gmail ─────────────────────────────────────────────
+            // ── Gmail Sync (multi-account) ────────────────────────
             item {
                 SettingsSection("Gmail Sync") {
-                    if (state.gmailConnected) {
-                        SettingsRow(Icons.Filled.Email, "Gmail Connected", state.gmailEmail ?: "Connected",
-                            onClick = { showGmailDisconnect = true })
-                    } else {
-                        SettingsRow(Icons.Filled.Email, "Connect Gmail", "Scan credit card bills from email",
-                            onClick = {
-                                val intent = vm.getGmailSignInIntent()
-                                gmailLauncher.launch(intent)
-                            })
+                    // Connected accounts list
+                    state.gmailAccounts.forEach { account ->
+                        Row(
+                            Modifier.padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(Icons.Filled.Email, "Gmail", tint = Primary, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(12.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(account.gmailEmail, fontSize = 13.sp, color = TextPrimary)
+                                val syncLabel = account.lastSyncedAt?.take(10)?.let { "Last synced: $it" } ?: "Never synced"
+                                Text(syncLabel, fontSize = 11.sp, color = TextMuted)
+                            }
+                            IconButton(
+                                onClick = { vm.removeGmailAccount(account.id) },
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(Icons.Filled.RemoveCircle, "Remove", tint = ErrorColor, modifier = Modifier.size(18.dp))
+                            }
+                        }
+                        HorizontalDivider(color = BorderColor.copy(0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
                     }
+
+                    // Add account button
+                    SettingsRow(
+                        icon  = Icons.Filled.Add,
+                        label = if (state.gmailAccounts.isEmpty()) "Connect Gmail" else "Add Another Gmail",
+                        value = if (state.gmailAccounts.isEmpty()) "Scan bills, salary & transfers from email" else "",
+                        onClick = {
+                            val intent = vm.getGmailSignInIntent()
+                            gmailLauncher.launch(intent)
+                        }
+                    )
+
+                    // Sync Now button — only when accounts are connected
+                    if (state.gmailConnected) {
+                        HorizontalDivider(color = BorderColor.copy(0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
+                        Row(
+                            Modifier.padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            TextButton(
+                                onClick = vm::syncGmailNow,
+                                enabled = !state.gmailSyncing
+                            ) {
+                                if (state.gmailSyncing) {
+                                    CircularProgressIndicator(Modifier.size(14.dp), color = Primary, strokeWidth = 2.dp)
+                                    Spacer(Modifier.width(6.dp))
+                                }
+                                Text(if (state.gmailSyncing) "Syncing…" else "Sync Now", color = Primary, fontSize = 13.sp)
+                            }
+                        }
+                    }
+
                     if (state.gmailLoading) {
                         Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(Modifier.size(20.dp), color = Primary, strokeWidth = 2.dp)
                         }
                     }
                     state.gmailError?.let {
-                        Text(it, color = ErrorColor, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
+                        Text(it, color = ErrorColor, fontSize = 12.sp,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 4.dp))
                     }
                 }
             }
@@ -204,16 +248,6 @@ fun SettingsScreen(
         )
     }
 
-    // ── Gmail disconnect confirm ───────────────────────────────
-    if (showGmailDisconnect) {
-        AlertDialog(
-            onDismissRequest = { showGmailDisconnect = false }, containerColor = CardBg,
-            title = { Text("Disconnect Gmail?", color = TextPrimary) },
-            text  = { Text("Gmail bill scanning will be disabled.", color = TextSecondary) },
-            confirmButton = { Button(onClick = { vm.disconnectGmail(); showGmailDisconnect = false }, colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)) { Text("Disconnect") } },
-            dismissButton = { TextButton(onClick = { showGmailDisconnect = false }) { Text("Cancel", color = TextSecondary) } }
-        )
-    }
 }
 
 // ── Reusable composables ──────────────────────────────────────

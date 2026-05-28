@@ -398,30 +398,108 @@ app.delete('/goals/:id', async (req, res) => {
   } catch { return fail(res, 'Server error', 500); }
 });
 
-// ── GMAIL OAUTH TOKEN STORAGE ─────────────────────────────────
-// Tokens are stored server-side; the Android app exchanges an auth code
-// via this endpoint and the backend handles token refresh.
-app.post('/gmail/connect', async (req, res) => {
+// ── GMAIL MULTI-ACCOUNT STORAGE ───────────────────────────────
+// Auto-create the gmail_accounts table on startup (idempotent).
+pool.query(`
+  CREATE TABLE IF NOT EXISTS gmail_accounts (
+    id             UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    gmail_email    VARCHAR(255) NOT NULL,
+    access_token   TEXT,
+    refresh_token  TEXT,
+    token_expiry   TIMESTAMPTZ,
+    last_synced_at TIMESTAMPTZ,
+    is_active      BOOLEAN      DEFAULT TRUE,
+    created_at     TIMESTAMPTZ  DEFAULT NOW(),
+    UNIQUE(user_id, gmail_email)
+  );
+  CREATE INDEX IF NOT EXISTS idx_gmail_accounts_user ON gmail_accounts(user_id);
+`).catch(() => {/* table already exists — ignore */});
+
+// GET /gmail/accounts — list all connected Gmail accounts for this user
+app.get('/gmail/accounts', async (req, res) => {
+  try {
+    const rows = await db(
+      `SELECT id, gmail_email, last_synced_at, is_active, created_at
+       FROM gmail_accounts WHERE user_id=$1 AND is_active=TRUE ORDER BY created_at ASC`,
+      [uid(req)]
+    );
+    return ok(res, { accounts: rows });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// POST /gmail/accounts — add (or re-activate) a Gmail account
+app.post('/gmail/accounts', async (req, res) => {
   try {
     const { gmail_email, access_token, refresh_token, token_expiry } = req.body;
-    if (!gmail_email || !access_token) return fail(res, 'gmail_email and access_token required');
-    await execute(
-      `UPDATE users SET gmail_connected=TRUE, gmail_email=$1, gmail_access_token=$2,
-         gmail_refresh_token=$3, gmail_token_expiry=$4, updated_at=NOW()
-       WHERE id=$5`,
-      [gmail_email, access_token, refresh_token || null,
-       token_expiry ? new Date(token_expiry) : null, uid(req)]
+    if (!gmail_email) return fail(res, 'gmail_email required');
+    const { v4: uuidv4 } = await import('uuid');
+    const row = await dbOne<any>(
+      `INSERT INTO gmail_accounts(id, user_id, gmail_email, access_token, refresh_token, token_expiry)
+       VALUES($1,$2,$3,$4,$5,$6)
+       ON CONFLICT(user_id, gmail_email) DO UPDATE
+         SET is_active=TRUE, access_token=EXCLUDED.access_token,
+             refresh_token=EXCLUDED.refresh_token, token_expiry=EXCLUDED.token_expiry
+       RETURNING id, gmail_email, last_synced_at, is_active`,
+      [uuidv4(), uid(req), gmail_email.toLowerCase(),
+       access_token || null, refresh_token || null,
+       token_expiry ? new Date(token_expiry) : null]
     );
-    return ok(res, { connected: true, gmail_email });
+    return ok(res, row, 201);
+  } catch (e: any) {
+    console.error('[gmail/accounts POST]', e.message);
+    return fail(res, 'Server error', 500);
+  }
+});
+
+// DELETE /gmail/accounts/:id — disconnect a specific Gmail account
+app.delete('/gmail/accounts/:id', async (req, res) => {
+  try {
+    const n = await execute(
+      `UPDATE gmail_accounts SET is_active=FALSE WHERE id=$1 AND user_id=$2`,
+      [req.params.id, uid(req)]
+    );
+    return n ? ok(res, { removed: true }) : fail(res, 'Account not found', 404);
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// PUT /gmail/accounts/:id/sync-timestamp — update last_synced_at for a specific account
+app.put('/gmail/accounts/:id/sync-timestamp', async (req, res) => {
+  try {
+    await execute(
+      `UPDATE gmail_accounts SET last_synced_at=NOW() WHERE id=$1 AND user_id=$2`,
+      [req.params.id, uid(req)]
+    );
+    return ok(res, { updated: true });
+  } catch { return fail(res, 'Server error', 500); }
+});
+
+// ── Legacy single-account endpoints (backward compat) ─────────
+app.post('/gmail/connect', async (req, res) => {
+  // Delegates to the multi-account POST
+  const { gmail_email, access_token, refresh_token, token_expiry } = req.body;
+  if (!gmail_email) return fail(res, 'gmail_email required');
+  const { v4: uuidv4 } = await import('uuid');
+  try {
+    const row = await dbOne<any>(
+      `INSERT INTO gmail_accounts(id, user_id, gmail_email, access_token, refresh_token, token_expiry)
+       VALUES($1,$2,$3,$4,$5,$6)
+       ON CONFLICT(user_id, gmail_email) DO UPDATE
+         SET is_active=TRUE, access_token=EXCLUDED.access_token,
+             refresh_token=EXCLUDED.refresh_token, token_expiry=EXCLUDED.token_expiry
+       RETURNING id, gmail_email`,
+      [uuidv4(), uid(req), gmail_email.toLowerCase(),
+       access_token || null, refresh_token || null,
+       token_expiry ? new Date(token_expiry) : null]
+    );
+    return ok(res, { connected: true, gmail_email: row?.gmail_email });
   } catch { return fail(res, 'Server error', 500); }
 });
 
 app.post('/gmail/disconnect', async (req, res) => {
   try {
     await execute(
-      `UPDATE users SET gmail_connected=FALSE, gmail_email=NULL,
-         gmail_access_token=NULL, gmail_refresh_token=NULL, gmail_token_expiry=NULL
-       WHERE id=$1`, [uid(req)]
+      `UPDATE gmail_accounts SET is_active=FALSE WHERE user_id=$1`, [uid(req)]
     );
     return ok(res, { disconnected: true });
   } catch { return fail(res, 'Server error', 500); }
@@ -429,20 +507,25 @@ app.post('/gmail/disconnect', async (req, res) => {
 
 app.get('/gmail/status', async (req, res) => {
   try {
-    const row = await dbOne<any>(
-      'SELECT gmail_connected, gmail_email, gmail_last_synced_at FROM users WHERE id=$1', [uid(req)]
+    const rows = await db<any>(
+      `SELECT id, gmail_email, last_synced_at FROM gmail_accounts
+       WHERE user_id=$1 AND is_active=TRUE ORDER BY created_at ASC`, [uid(req)]
     );
+    const first = rows[0];
     return ok(res, {
-      connected: row?.gmail_connected || false,
-      gmail_email: row?.gmail_email || null,
-      last_synced_at: row?.gmail_last_synced_at || null,
+      connected:      rows.length > 0,
+      gmail_email:    first?.gmail_email || null,
+      last_synced_at: first?.last_synced_at || null,
+      accounts:       rows
     });
   } catch { return fail(res, 'Server error', 500); }
 });
 
 app.put('/gmail/sync-timestamp', async (req, res) => {
   try {
-    await execute('UPDATE users SET gmail_last_synced_at=NOW() WHERE id=$1', [uid(req)]);
+    await execute(
+      `UPDATE gmail_accounts SET last_synced_at=NOW() WHERE user_id=$1 AND is_active=TRUE`, [uid(req)]
+    );
     return ok(res, { updated: true });
   } catch { return fail(res, 'Server error', 500); }
 });

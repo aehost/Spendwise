@@ -197,11 +197,29 @@ data class FinancialGoal(
 
 // ── Gmail integration ─────────────────────────────────────────
 
+data class GmailAccount(
+    val id: String,
+    val gmailEmail: String,
+    val lastSyncedAt: String?,
+    val isActive: Boolean = true
+)
+
 data class GmailStatus(
     val connected: Boolean,
     val gmailEmail: String?,
-    val lastSyncedAt: String?
+    val lastSyncedAt: String?,
+    val accounts: List<GmailAccount> = emptyList()
 )
+
+enum class EmailType {
+    BILL,           // CC statement / recurring bill due
+    SALARY_CREDIT,  // salary credited to bank account
+    IMPS_CREDIT,    // money received via IMPS
+    NEFT_CREDIT,    // money received via NEFT
+    UPI_CREDIT,     // money received via UPI / BHIM
+    CC_PAYMENT,     // credit card payment made / received by bank
+    UNKNOWN
+}
 
 data class EmailBillDetection(
     val billName: String,
@@ -213,5 +231,7 @@ data class EmailBillDetection(
     val bankName: String?,
     val emailSubject: String,
     val emailDate: String,
-    val isMinimumDue: Boolean = false
+    val isMinimumDue: Boolean = false,
+    val emailType: EmailType = EmailType.BILL,
+    val senderName: String? = null  // payer name for IMPS/NEFT/UPI credits
 )

@@ -482,10 +482,22 @@ data class SupportTicketDto(
 )
 
 // ── Gmail ─────────────────────────────────────────────────────
+data class GmailAccountDto(
+    @SerializedName("id")              val id: String,
+    @SerializedName("gmail_email")     val gmailEmail: String,
+    @SerializedName("last_synced_at")  val lastSyncedAt: String?,
+    @SerializedName("is_active")       val isActive: Boolean = true
+)
+
+data class GmailAccountsData(
+    @SerializedName("accounts") val accounts: List<GmailAccountDto>
+)
+
 data class GmailStatusDto(
     val connected: Boolean,
     @SerializedName("gmail_email")      val gmailEmail: String?,
-    @SerializedName("last_synced_at")   val lastSyncedAt: String?
+    @SerializedName("last_synced_at")   val lastSyncedAt: String?,
+    @SerializedName("accounts")         val accounts: List<GmailAccountDto>? = null
 )
 
 data class GmailConnectRequest(
