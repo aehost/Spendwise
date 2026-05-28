@@ -227,8 +227,6 @@ class GmailSyncWorker @AssistedInject constructor(
 
     // ── Credit classification ─────────────────────────────────────────────────
 
-    private data class TxMeta(val categorySlug: String, val merchant: String, val note: String)
-
     private fun classifyCredit(det: EmailBillDetection): TxMeta {
         val bank   = det.bankName ?: "Bank"
         val sender = det.senderName
@@ -274,3 +272,5 @@ class GmailSyncWorker @AssistedInject constructor(
         )
     }
 }
+
+private data class TxMeta(val categorySlug: String, val merchant: String, val note: String)
