@@ -35,10 +35,19 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.time.Month
 import kotlin.math.ceil
+import kotlinx.coroutines.delay
 
 @Composable
 fun HomeScreen(onSettings: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
+
+    // Auto-refresh every 30 seconds to pick up new SMS-imported transactions
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(30_000L)
+            vm.refresh()
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Background)) {
         when {
@@ -457,15 +466,63 @@ private fun SavingsRateRing(savingsRate: Int) {
 
 // ── Financial Health Strip ────────────────────────────────────
 
+/**
+ * Computes a 0–100 financial health score from three weighted components.
+ * Returns a data class so the info dialog can show each contribution.
+ */
+private data class HealthScoreBreakdown(
+    val savingsScore: Int,   // -10 to +20
+    val emiScore: Int,       // -15 to +10
+    val ccScore: Int,        // -15 to +10
+    val totalScore: Int,     // 0–100
+    val savingsRate: Int,
+    val emiBurden: Int,
+    val ccVsSalaryPct: Int
+)
+
+private fun computeHealthScore(
+    savingsRate: Int,
+    emiBurden: Int,
+    ccOutstanding: Double,
+    salary: Double
+): HealthScoreBreakdown {
+    // Savings rate component: how much of income is saved (most important factor)
+    val savingsScore = when {
+        savingsRate >= 30 -> 20
+        savingsRate >= 25 -> 15
+        savingsRate >= 20 -> 10
+        savingsRate >= 15 ->  5
+        savingsRate >= 10 ->  0
+        savingsRate >=  5 -> -5
+        else              -> -10
+    }
+    // EMI burden: monthly EMIs as % of salary
+    val emiScore = when {
+        emiBurden < 15    -> 10
+        emiBurden < 25    ->  5
+        emiBurden < 35    ->  0
+        emiBurden < 45    -> -10
+        else              -> -15
+    }
+    // CC outstanding vs monthly salary
+    val ccVsSalaryPct = if (salary > 0) (ccOutstanding / salary * 100).toInt()
+                        else if (ccOutstanding > 0) 100 else 0
+    val ccScore = when {
+        ccOutstanding == 0.0 -> 10
+        ccVsSalaryPct < 25   ->  5
+        ccVsSalaryPct < 50   ->  0
+        ccVsSalaryPct < 75   -> -10
+        else                 -> -15
+    }
+    val total = (50 + savingsScore + emiScore + ccScore).coerceIn(0, 100)
+    return HealthScoreBreakdown(savingsScore, emiScore, ccScore, total, savingsRate, emiBurden, ccVsSalaryPct)
+}
+
 @Composable
 private fun FinancialHealthStrip(savingsRate: Int, emiBurden: Int, ccOutstanding: Double, salary: Double) {
-    val healthScore = run {
-        var score = 70
-        if (savingsRate >= 25) score += 15 else if (savingsRate >= 15) score += 8 else if (savingsRate < 5) score -= 10
-        if (emiBurden > 50) score -= 15 else if (emiBurden > 35) score -= 8 else if (emiBurden < 20) score += 8
-        if (salary > 0 && ccOutstanding > salary * 0.5) score -= 10 else if (ccOutstanding == 0.0) score += 5
-        score.coerceIn(0, 100)
-    }
+    var showInfo by remember { mutableStateOf(false) }
+    val hsd = computeHealthScore(savingsRate, emiBurden, ccOutstanding, salary)
+    val healthScore = hsd.totalScore
     val (healthLabel, healthColor) = when {
         healthScore >= 80 -> "Excellent" to SuccessColor
         healthScore >= 60 -> "Good"      to Color(0xFF00D4FF)
@@ -490,10 +547,19 @@ private fun FinancialHealthStrip(savingsRate: Int, emiBurden: Int, ccOutstanding
             }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Financial Health", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Spacer(Modifier.width(6.dp))
                     Box(Modifier.background(healthColor.copy(0.15f), RoundedCornerShape(20.dp)).padding(horizontal = 8.dp, vertical = 3.dp)) {
                         Text(healthLabel, fontSize = 10.sp, color = healthColor, fontWeight = FontWeight.Bold)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    // Info button — explains how the score is calculated
+                    IconButton(
+                        onClick = { showInfo = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(Icons.Filled.Info, "How is this calculated?", tint = TextMuted, modifier = Modifier.size(16.dp))
                     }
                 }
                 Text(
@@ -507,6 +573,125 @@ private fun FinancialHealthStrip(savingsRate: Int, emiBurden: Int, ccOutstanding
                 )
             }
         }
+    }
+
+    if (showInfo) {
+        HealthScoreInfoDialog(hsd = hsd, healthLabel = healthLabel, healthColor = healthColor, onDismiss = { showInfo = false })
+    }
+}
+
+@Composable
+private fun HealthScoreInfoDialog(
+    hsd: HealthScoreBreakdown,
+    healthLabel: String,
+    healthColor: Color,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardBg,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(36.dp).background(healthColor.copy(0.15f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) { Text("${hsd.totalScore}", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = healthColor) }
+                Column {
+                    Text("Financial Health Score", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Score: $healthLabel", fontSize = 11.sp, color = healthColor)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Your score is calculated from 3 components (base 50 points):", fontSize = 12.sp, color = TextSecondary)
+
+                HealthScoreRow(
+                    icon = "💰",
+                    label = "Savings Rate",
+                    detail = "${hsd.savingsRate}% of income saved",
+                    score = hsd.savingsScore,
+                    tip = when {
+                        hsd.savingsRate >= 25 -> "Excellent! Saving ≥25% is best-in-class."
+                        hsd.savingsRate >= 15 -> "Good. Push to 25%+ for maximum points."
+                        hsd.savingsRate >= 5  -> "Try to cut non-essential spending to save more."
+                        else                  -> "Start saving even ₹500/month to improve this."
+                    }
+                )
+
+                HorizontalDivider(color = BorderColor.copy(0.4f), thickness = 0.5.dp)
+
+                HealthScoreRow(
+                    icon = "🏦",
+                    label = "EMI Burden",
+                    detail = "${hsd.emiBurden}% of salary on EMIs",
+                    score = hsd.emiScore,
+                    tip = when {
+                        hsd.emiBurden < 20  -> "Healthy! EMIs under 20% of salary."
+                        hsd.emiBurden < 35  -> "Manageable. Avoid taking new loans."
+                        hsd.emiBurden < 45  -> "High EMI load — prepay loans if possible."
+                        else                -> "Critical: EMIs consuming 45%+ of income."
+                    }
+                )
+
+                HorizontalDivider(color = BorderColor.copy(0.4f), thickness = 0.5.dp)
+
+                HealthScoreRow(
+                    icon = "💳",
+                    label = "Credit Card Debt",
+                    detail = "${hsd.ccVsSalaryPct}% of monthly salary outstanding",
+                    score = hsd.ccScore,
+                    tip = when {
+                        hsd.ccVsSalaryPct == 0  -> "Zero CC outstanding — perfect!"
+                        hsd.ccVsSalaryPct < 30  -> "Low CC balance. Pay in full each month."
+                        hsd.ccVsSalaryPct < 60  -> "Moderate. Pay more than the minimum due."
+                        else                     -> "High CC debt. Prioritise clearing this."
+                    }
+                )
+
+                HorizontalDivider(color = BorderColor.copy(0.4f), thickness = 0.5.dp)
+
+                Row(Modifier.fillMaxWidth().background(healthColor.copy(0.08f), RoundedCornerShape(10.dp)).padding(10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("Total Score", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("${hsd.totalScore} / 100", fontSize = 15.sp, fontWeight = FontWeight.ExtraBold, color = healthColor)
+                }
+                Text(
+                    "Score updates automatically as you add transactions, pay off debt, and save more.",
+                    fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp
+                )
+            }
+        },
+        confirmButton = {
+            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = Primary), shape = RoundedCornerShape(12.dp)) {
+                Text("Got it")
+            }
+        }
+    )
+}
+
+@Composable
+private fun HealthScoreRow(icon: String, label: String, detail: String, score: Int, tip: String) {
+    val scoreColor = when {
+        score > 0  -> SuccessColor
+        score == 0 -> WarningColor
+        else       -> ErrorColor
+    }
+    val scoreStr = if (score > 0) "+$score" else "$score"
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(icon, fontSize = 14.sp)
+            Spacer(Modifier.width(8.dp))
+            Column(Modifier.weight(1f)) {
+                Text(label, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text(detail, fontSize = 11.sp, color = TextSecondary)
+            }
+            Box(
+                Modifier.background(scoreColor.copy(0.15f), RoundedCornerShape(8.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+            ) { Text(scoreStr, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = scoreColor) }
+        }
+        Text(tip, fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp, modifier = Modifier.padding(start = 22.dp))
     }
 }
 

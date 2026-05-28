@@ -138,20 +138,25 @@ class SettingsViewModel @Inject constructor(
                     doConnectGmail(email, tokenResult.getOrNull() ?: "")
                 }
                 tokenResult.exceptionOrNull() is UserRecoverableAuthException -> {
-                    // User must grant Gmail read permission — launch the system dialog
+                    // User must grant Gmail read permission — launch the system consent dialog
                     val authIntent = (tokenResult.exceptionOrNull() as UserRecoverableAuthException).intent
                     if (authIntent != null) {
                         _gmailAuthIntent.emit(authIntent)
                         _state.value = _state.value.copy(gmailLoading = false)
                     } else {
-                        // No intent to show — connect with empty token as fallback
+                        // Permission exception but no intent — try connecting anyway (edge case)
                         doConnectGmail(email, "")
                     }
                 }
                 else -> {
-                    // Account not found on device or non-recoverable error.
-                    // Connect with empty token — GmailSyncWorker will acquire it at sync time.
-                    doConnectGmail(email, "")
+                    // Account not found on this device's Google account manager.
+                    // Show a clear actionable error instead of silently connecting with no token.
+                    _state.value = _state.value.copy(
+                        gmailLoading = false,
+                        gmailError   = "\"$email\" is not signed in on this device.\n" +
+                            "Go to Device Settings → Accounts → Add Account → Google, " +
+                            "sign in with that Gmail, then come back here to connect."
+                    )
                 }
             }
         }

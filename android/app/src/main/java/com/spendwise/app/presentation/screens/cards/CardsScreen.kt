@@ -7,12 +7,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -56,7 +58,8 @@ fun CardsScreen(vm: CardsViewModel = hiltViewModel()) {
             Icon(Icons.Filled.Add, "Add Card")
         }
 
-        if (state.showDialog) AddCardDialog(onDismiss = vm::hideDialog, onAdd = vm::addCard)
+        if (state.showDialog) AddCardDialog(onDismiss = vm::hideDialog,
+            onAdd = { name, limit, dueDay, lastFour -> vm.addCard(name, limit, dueDay, lastFour) })
     }
 }
 
@@ -94,23 +97,49 @@ fun CreditCardItem(card: CreditCardDto, onDelete: (String) -> Unit) {
 }
 
 @Composable
-fun AddCardDialog(onDismiss: () -> Unit, onAdd: (name: String, limit: Double, dueDay: Int) -> Unit) {
-    var name by remember { mutableStateOf("") }
-    var limit by remember { mutableStateOf("") }
-    var dueDay by remember { mutableStateOf("1") }
+fun AddCardDialog(onDismiss: () -> Unit, onAdd: (name: String, limit: Double, dueDay: Int, lastFour: String?) -> Unit) {
+    var name     by remember { mutableStateOf("") }
+    var limit    by remember { mutableStateOf("") }
+    var dueDay   by remember { mutableStateOf("1") }
+    var lastFour by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardBg,
-        title = { Text("Add Credit Card", color = TextPrimary) },
+        shape = RoundedCornerShape(20.dp),
+        title = { Text("Add Credit Card", color = TextPrimary, fontWeight = FontWeight.Bold) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Card Name", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = limit, onValueChange = { limit = it }, label = { Text("Credit Limit (₹)", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth())
-                OutlinedTextField(value = dueDay, onValueChange = { dueDay = it }, label = { Text("Due Day (1-31)", color = TextSecondary) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it },
+                    label = { Text("Card Name (e.g. Axis Bank Platinum)", color = TextSecondary) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(value = limit, onValueChange = { limit = it.filter { c -> c.isDigit() || c == '.' } },
+                    label = { Text("Credit Limit (₹)", color = TextSecondary) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(value = dueDay, onValueChange = { dueDay = it.filter { c -> c.isDigit() } },
+                    label = { Text("Payment Due Day (1–31)", color = TextSecondary) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                OutlinedTextField(value = lastFour, onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) lastFour = it },
+                    label = { Text("Last 4 digits of card (for SMS matching)", color = TextSecondary) },
+                    placeholder = { Text("e.g. 9156", color = TextMuted) },
+                    singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    supportingText = { Text("Used to auto-match CC bill reminders", fontSize = 11.sp, color = TextMuted) })
             }
         },
         confirmButton = {
-            Button(onClick = { onAdd(name, limit.toDoubleOrNull() ?: 0.0, dueDay.toIntOrNull() ?: 1); onDismiss() }, colors = ButtonDefaults.buttonColors(containerColor = Primary)) { Text("Add") }
+            Button(onClick = {
+                onAdd(
+                    name,
+                    limit.toDoubleOrNull() ?: 0.0,
+                    dueDay.toIntOrNull() ?: 1,
+                    lastFour.takeIf { it.length == 4 }
+                )
+                onDismiss()
+            }, colors = ButtonDefaults.buttonColors(containerColor = Primary), enabled = name.isNotBlank()) {
+                Text("Add Card")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
     )

@@ -3,6 +3,7 @@ package com.spendwise.app.presentation.screens.transactions
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendwise.app.data.remote.api.TransactionApi
+import com.spendwise.app.data.remote.dto.CreateTransactionRequest
 import com.spendwise.app.data.remote.dto.TransactionDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +76,33 @@ class TransactionViewModel @Inject constructor(
                 api.deleteTransaction(id)
                 load()
             } catch (_: Exception) { }
+        }
+    }
+
+    fun createTransaction(
+        amount: Double,
+        merchant: String,
+        categorySlug: String,
+        transactionDate: String,
+        isCredit: Boolean,
+        note: String
+    ) {
+        if (amount <= 0 || merchant.isBlank()) return
+        viewModelScope.launch {
+            try {
+                api.createTransaction(
+                    CreateTransactionRequest(
+                        amount          = amount,
+                        merchant        = merchant.trim(),
+                        categorySlug    = categorySlug,
+                        transactionDate = transactionDate,
+                        note            = note.trim(),
+                        isCredit        = isCredit,
+                        isPending       = false
+                    )
+                )
+                load()
+            } catch (_: Exception) {}
         }
     }
 }

@@ -183,35 +183,63 @@ class ParseSmsUseCase @Inject constructor() {
 
     // ── Merchant extraction ───────────────────────────────────────
     private fun extractMerchant(body: String): String {
-        // 1. Parentheses: (Merchant Name)
+        // 1. Explicit "Merchant:" or "Merchant Name:" label (highest confidence)
+        Regex("""[Mm]erchant\s*[:/]\s*([A-Za-z][A-Za-z0-9\s&'._\-]{2,40})""")
+            .find(body)?.let { return it.groupValues[1].trim() }
+
+        // 2. Parentheses: (Merchant Name)
         Regex("""\(([A-Za-z][A-Za-z0-9\s&'._\-]{1,40})\)""").find(body)
             ?.let { return it.groupValues[1].trim() }
 
-        // 2. spent at / paid at / purchase at / at
+        // 3. spent at / paid at / purchase at / at <Merchant>
         Regex("""(?:spent at|paid at|payment at|purchase at|purchase of|at)\s+([A-Za-z0-9][A-Za-z0-9\s&'._\-]{1,35}?)(?:\s+on\s|\s+for\s|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 3. towards / for
+        // 4. towards <Merchant>
         Regex("""towards?\s+([A-Za-z0-9][A-Za-z0-9\s&'._\-]{1,35}?)(?:\s+on\s|\s+via\s|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 4. UPI VPA description field
+        // 5. UPI ref field: UPI/TxnRef/TxnRef/MerchantName or UPI-TxnRef-MerchantName
         Regex("""UPI[/\-][A-Z0-9]{5,}[/\-][A-Z0-9]{5,}[/\-]([^\n/]{3,40})(?:/|\.|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 5. transferred to / trf to
-        Regex("""(?:transferred?|trf)\s+to\s+([A-Za-z][A-Za-z0-9\s]{2,30}?)(?:\.|,|\s+on\s|\n|$)""", RegexOption.IGNORE_CASE)
+        // 6. transferred to / trf to <Name> (but not a phone number)
+        Regex("""(?:transferred?|trf)\s+to\s+([A-Za-z][A-Za-z\s]{2,30}?)(?:\.|,|\s+on\s|\n|$)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 6. for … payment/transfer
-        Regex("""for\s+([A-Za-z][A-Za-z0-9\s&'._\-]{2,30}?)\s+(?:payment|transfer|txn)""", RegexOption.IGNORE_CASE)
+        // 7. for <Merchant> <payment|transfer|txn|transaction>
+        Regex("""for\s+([A-Za-z][A-Za-z0-9\s&'._\-]{2,30}?)\s+(?:payment|transfer|txn|transaction)""", RegexOption.IGNORE_CASE)
             .find(body)?.let { return it.groupValues[1].trim() }
 
-        // 7. VPA domain as merchant name
-        extractUpiVpa(body)?.let { vpa ->
-            val domain = vpa.substringBefore('@').replace(Regex("""[0-9]"""), "").trim()
-            if (domain.length >= 3) return domain.replaceFirstChar { it.uppercase() }
+        // 8. Broad "debited for / paid for / deducted for" <Merchant> before punctuation/INR/RS/balance keywords
+        Regex("""(?:debited for|paid for|deducted for|credited for)\s+([A-Za-z][A-Za-z0-9\s&'._\-]{2,35}?)(?:\s+on\s|\s+via\s|\s+INR|\s+Rs\.?|\s+UPI|\s+Avl|\s+Avail|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { return it.groupValues[1].trim() }
+
+        // 9. VPA domain as merchant — but ONLY if domain is not purely numeric (phone-number VPAs)
+        val vpa = extractUpiVpa(body)
+        if (vpa != null) {
+            val domain = vpa.substringBefore('@')
+            val domainLetters = domain.replace(Regex("""[0-9._\-]"""), "").trim()
+            if (domainLetters.length >= 3) {
+                // Domain has meaningful letters (e.g. "paytm", "okaxis", "yesbank")
+                return domainLetters.replaceFirstChar { it.uppercase() }
+            }
         }
+
+        // 10. "paid to <Name>" or "trf to <Name>" — name may start with capital letter
+        Regex("""(?:paid to|pay to|send to)\s+([A-Za-z][A-Za-z\s]{2,30}?)(?:@|\s+via|\s+UPI|\.|,|;|\n|$)""", RegexOption.IGNORE_CASE)
+            .find(body)?.let { m ->
+                val name = m.groupValues[1].trim()
+                if (name.length >= 2) return name
+            }
+
+        // 11. EMI / loan-specific fallback
+        if (Regex("""\b(?:EMI|loan|mandate)\b""", RegexOption.IGNORE_CASE).containsMatchIn(body)) {
+            return extractBankName(body)?.let { "$it EMI" } ?: "EMI Payment"
+        }
+
+        // 12. For UPI debits with phone-number VPA, use "UPI Transfer"
+        if (vpa != null) return "UPI Transfer"
 
         return "Bank Transaction"
     }

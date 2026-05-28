@@ -34,12 +34,22 @@ class CardsViewModel @Inject constructor(private val api: UserApi) : ViewModel()
     fun showAddDialog() { _state.value = _state.value.copy(showDialog = true) }
     fun hideDialog()    { _state.value = _state.value.copy(showDialog = false) }
 
-    fun addCard(name: String, limit: Double, dueDay: Int) {
+    fun addCard(name: String, limit: Double, dueDay: Int, lastFour: String? = null) {
         viewModelScope.launch {
-            try { api.createCreditCard(CreateCreditCardRequest(name, limit, dueDay = dueDay)); load() }
-            catch (_: Exception) {}
+            try {
+                api.createCreditCard(CreateCreditCardRequest(
+                    name      = name,
+                    creditLimit = limit,
+                    dueDay    = dueDay,
+                    lastFour  = lastFour?.trimStart('X', 'x', '*', ' ')?.takeLast(4)?.takeIf { it.isNotBlank() && it.all { c -> c.isDigit() } }
+                ))
+                load()
+            } catch (_: Exception) {}
         }
     }
+
+    /** Called by SmsSyncWorker-triggered refresh — just reloads the cards list. */
+    fun refresh() { load() }
 
     fun delete(id: String) {
         viewModelScope.launch {
