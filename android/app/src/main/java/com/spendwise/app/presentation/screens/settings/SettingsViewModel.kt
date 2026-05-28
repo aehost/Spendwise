@@ -128,14 +128,28 @@ class SettingsViewModel @Inject constructor(
             _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
 
             // Try to obtain a real OAuth token from the device account manager.
-            // This verifies the account exists on this device and grants read access.
+            // NOTE: do NOT apply ?: "" here — a null return means the account is NOT
+            // on this device, which must be handled as an error, not as a success with
+            // an empty token (the old ?: "" bug allowed connecting with no credentials).
             val tokenResult = withContext(Dispatchers.IO) {
-                runCatching { gmailAuthManager.getTokenOrThrow(email) ?: "" }
+                runCatching { gmailAuthManager.getTokenOrThrow(email) }
             }
 
             when {
                 tokenResult.isSuccess -> {
-                    doConnectGmail(email, tokenResult.getOrNull() ?: "")
+                    val token = tokenResult.getOrNull()
+                    if (!token.isNullOrBlank()) {
+                        // Valid token obtained — proceed with connection
+                        doConnectGmail(email, token)
+                    } else {
+                        // getTokenOrThrow() returned null — account not on this device
+                        _state.value = _state.value.copy(
+                            gmailLoading = false,
+                            gmailError   = "\"$email\" is not signed in on this device.\n" +
+                                "Go to Device Settings → Accounts → Add Account → Google, " +
+                                "sign in with that Gmail, then come back here to connect."
+                        )
+                    }
                 }
                 tokenResult.exceptionOrNull() is UserRecoverableAuthException -> {
                     // User must grant Gmail read permission — launch the system consent dialog
@@ -149,8 +163,7 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
                 else -> {
-                    // Account not found on this device's Google account manager.
-                    // Show a clear actionable error instead of silently connecting with no token.
+                    // Non-recoverable error (account removed, GMS unavailable, etc.)
                     _state.value = _state.value.copy(
                         gmailLoading = false,
                         gmailError   = "\"$email\" is not signed in on this device.\n" +

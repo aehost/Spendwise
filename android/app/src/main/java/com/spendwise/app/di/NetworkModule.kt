@@ -4,6 +4,7 @@ import com.spendwise.app.BuildConfig
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.*
 import com.spendwise.app.data.remote.interceptor.AuthInterceptor
+import com.spendwise.app.data.remote.interceptor.TokenAuthenticator
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -23,13 +24,20 @@ object NetworkModule {
     fun provideAuthInterceptor(tokenManager: TokenManager) = AuthInterceptor(tokenManager)
 
     @Provides @Singleton
-    fun provideOkHttp(authInterceptor: AuthInterceptor): OkHttpClient {
+    fun provideTokenAuthenticator(tokenManager: TokenManager) = TokenAuthenticator(tokenManager)
+
+    @Provides @Singleton
+    fun provideOkHttp(
+        authInterceptor: AuthInterceptor,
+        tokenAuthenticator: TokenAuthenticator
+    ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY
                     else HttpLoggingInterceptor.Level.NONE
         }
         return OkHttpClient.Builder()
             .addInterceptor(authInterceptor)
+            .authenticator(tokenAuthenticator)   // auto-refresh JWT on 401
             .addInterceptor(logging)
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)

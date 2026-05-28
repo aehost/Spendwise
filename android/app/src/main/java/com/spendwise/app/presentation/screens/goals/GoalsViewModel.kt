@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.goals
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.GoalsApi
 import com.spendwise.app.data.remote.api.UserApi
@@ -127,7 +128,7 @@ class GoalsViewModel @Inject constructor(
                     _state.value = _state.value.copy(successMessage = "Goal created!")
                     load()
                 } else {
-                    _state.value = _state.value.copy(error = resp.body()?.error ?: "Failed to create goal")
+                    _state.value = _state.value.copy(error = resp.apiErrorMessage())
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message ?: "Network error")
@@ -143,7 +144,7 @@ class GoalsViewModel @Inject constructor(
                     _state.value = _state.value.copy(successMessage = "Contribution added!")
                     load()
                 } else {
-                    _state.value = _state.value.copy(error = resp.body()?.error ?: "Failed to contribute")
+                    _state.value = _state.value.copy(error = resp.apiErrorMessage())
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(error = e.message ?: "Network error")

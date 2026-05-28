@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.cashflow
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.CashFlowApi
 import com.spendwise.app.data.remote.dto.CashFlowDto
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,7 +24,7 @@ class CashFlowViewModel @Inject constructor(private val api: CashFlowApi) : View
             try {
                 val r = api.getCashFlow()
                 if (r.isSuccessful) _state.value = CashFlowState(isLoading = false, cashFlow = r.body()?.data)
-                else _state.value = CashFlowState(isLoading = false, error = r.body()?.error ?: "Failed")
+                else _state.value = CashFlowState(isLoading = false, error = r.apiErrorMessage())
             } catch (e: Exception) { _state.value = CashFlowState(isLoading = false, error = e.message) }
         }
     }

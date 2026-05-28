@@ -1,10 +1,30 @@
 package com.spendwise.app.core
 
+import org.json.JSONObject
+import retrofit2.Response
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
+
+/**
+ * Reads the error detail from a failed Retrofit [Response].
+ *
+ * For non-2xx responses Retrofit sets [Response.body] to null; the actual
+ * server payload is in [Response.errorBody]. This extension reads that body,
+ * parses the `"error"` field from JSON (matching our ApiResponse envelope),
+ * and falls back to "HTTP <code>" so callers always get a meaningful string.
+ */
+fun <T> Response<T>.apiErrorMessage(): String =
+    try {
+        val raw = errorBody()?.string()
+        if (!raw.isNullOrBlank()) {
+            JSONObject(raw).optString("error", "").ifBlank { "Server error (${code()})" }
+        } else "Server error (${code()})"
+    } catch (_: Exception) {
+        "Server error (${code()})"
+    }
 
 fun Double.formatCurrency(currencyCode: String = "INR"): String {
     return when (currencyCode) {

@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.report
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.IntelligenceApi
 import com.spendwise.app.data.remote.dto.MonthlyReportDto
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -38,7 +39,7 @@ class MonthlyReportViewModel @Inject constructor(
                 if (resp.isSuccessful && resp.body()?.success == true) {
                     _state.value = _state.value.copy(report = resp.body()!!.data, isLoading = false)
                 } else {
-                    _state.value = _state.value.copy(isLoading = false, error = resp.body()?.error ?: "Failed to load report")
+                    _state.value = _state.value.copy(isLoading = false, error = resp.apiErrorMessage())
                 }
             } catch (e: Exception) {
                 _state.value = _state.value.copy(isLoading = false, error = e.message ?: "Network error")

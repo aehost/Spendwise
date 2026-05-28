@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.coach
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.FinancialAdvisorApi
 import com.spendwise.app.data.remote.dto.AdvisorInsightDto
 import com.spendwise.app.data.remote.dto.AdvisorContextDto
@@ -44,7 +45,7 @@ class AiCoachViewModel @Inject constructor(
                         generatedAt   = data?.generatedAt ?: ""
                     )
                 } else {
-                    _state.value = AdvisorState(isLoading = false, error = r.body()?.error ?: "Failed to load")
+                    _state.value = AdvisorState(isLoading = false, error = r.apiErrorMessage())
                 }
             } catch (e: Exception) {
                 _state.value = AdvisorState(isLoading = false, error = e.message ?: "Network error")

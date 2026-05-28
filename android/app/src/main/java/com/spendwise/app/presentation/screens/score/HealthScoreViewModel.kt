@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.score
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.HealthScoreApi
 import com.spendwise.app.data.remote.dto.HealthScoreDto
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,7 +24,7 @@ class HealthScoreViewModel @Inject constructor(private val api: HealthScoreApi) 
             try {
                 val r = api.getHealthScore()
                 if (r.isSuccessful) _state.value = HealthScoreState(isLoading = false, score = r.body()?.data)
-                else _state.value = HealthScoreState(isLoading = false, error = r.body()?.error ?: "Failed")
+                else _state.value = HealthScoreState(isLoading = false, error = r.apiErrorMessage())
             } catch (e: Exception) { _state.value = HealthScoreState(isLoading = false, error = e.message) }
         }
     }

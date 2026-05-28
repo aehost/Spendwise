@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.debt
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.apiErrorMessage
 import com.spendwise.app.data.remote.api.DebtPayoffApi
 import com.spendwise.app.data.remote.dto.DebtPayoffDto
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,7 +24,7 @@ class DebtPayoffViewModel @Inject constructor(private val api: DebtPayoffApi) : 
             try {
                 val r = api.getDebtPayoff()
                 if (r.isSuccessful) _state.value = DebtPayoffState(isLoading = false, data = r.body()?.data)
-                else _state.value = DebtPayoffState(isLoading = false, error = r.body()?.error ?: "Failed")
+                else _state.value = DebtPayoffState(isLoading = false, error = r.apiErrorMessage())
             } catch (e: Exception) { _state.value = DebtPayoffState(isLoading = false, error = e.message) }
         }
     }
