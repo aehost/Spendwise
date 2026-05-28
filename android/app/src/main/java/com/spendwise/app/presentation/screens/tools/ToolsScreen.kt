@@ -41,18 +41,22 @@ fun ToolsScreen(
     onLoans: () -> Unit,
     onReport: () -> Unit,
     onGoals: () -> Unit,
+    onBudget: () -> Unit,
+    onNetWorth: () -> Unit,
     onSettings: () -> Unit
 ) {
     val tools = listOf(
         ToolCard("Financial Advisor", "Personalised algorithm-powered insights", Icons.Filled.AutoAwesome, GradientPurple, "SMART", onAiCoach),
         ToolCard("Goals Planner", "Track & achieve short + long-term goals", Icons.Filled.Star, GradientGold, "NEW", onGoals),
+        ToolCard("Budget Planner", "Set & track monthly spending limits", Icons.Filled.PieChart, GradientAmber, "SMART", onBudget),
+        ToolCard("Net Worth", "Your total assets vs liabilities", Icons.Filled.AccountBalanceWallet, GradientGreen, null, onNetWorth),
         ToolCard("Health Score", "Your financial fitness score", Icons.Filled.Favorite, GradientGreen, null, onHealthScore),
         ToolCard("Cash Flow Forecast", "See your next 90 days cash flow", Icons.Filled.DateRange, GradientTeal, null, onCashFlow),
         ToolCard("Debt Payoff Planner", "Snowball vs Avalanche strategy", Icons.Filled.AccountBalance, GradientPink, null, onDebtPayoff),
         ToolCard("Tax Planning", "Old vs New regime comparison", Icons.Filled.Calculate, GradientAmber, "FY 24-25", onTax),
         ToolCard("IOU Tracker", "Track money lent and borrowed", Icons.Filled.People, listOf(Color(0xFF4FACFE), Color(0xFF00F2FE)), null, onIou),
         ToolCard("Monthly Report", "Detailed spending analysis", Icons.Filled.Assessment, listOf(Color(0xFFFA709A), Color(0xFFFEE140)), null, onReport),
-        ToolCard("Loan Manager", "Track all your EMIs", Icons.Filled.AccountBalanceWallet, listOf(Color(0xFF43E97B), Color(0xFF38F9D7)), null, onLoans),
+        ToolCard("Loan Manager", "Track all your EMIs", Icons.Filled.Money, listOf(Color(0xFF43E97B), Color(0xFF38F9D7)), null, onLoans),
         ToolCard("Settings", "Profile, Gmail, salary & more", Icons.Filled.Settings, listOf(Color(0xFF667EEA), Color(0xFF764BA2)), null, onSettings),
     )
 

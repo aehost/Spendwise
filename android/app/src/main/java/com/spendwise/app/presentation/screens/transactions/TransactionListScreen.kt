@@ -1,5 +1,6 @@
 package com.spendwise.app.presentation.screens.transactions
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -10,11 +11,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -29,7 +32,8 @@ import java.time.LocalDate
 
 @Composable
 fun TransactionListScreen(vm: TransactionViewModel = hiltViewModel()) {
-    val state by vm.state.collectAsState()
+    val state   by vm.state.collectAsState()
+    val context = LocalContext.current
     var showAddSheet by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize().background(Background)) {
@@ -37,10 +41,31 @@ fun TransactionListScreen(vm: TransactionViewModel = hiltViewModel()) {
             // Header
             Row(Modifier.fillMaxWidth().padding(20.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("Transactions", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                Text(
-                    "${state.transactions.size} total",
-                    fontSize = 13.sp, color = TextSecondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        "${state.transactions.size} total",
+                        fontSize = 13.sp, color = TextSecondary
+                    )
+                    IconButton(
+                        onClick = {
+                            val csvText = buildString {
+                                appendLine("Date,Merchant,Amount,Type,Category,Note")
+                                state.transactions.forEach { tx ->
+                                    appendLine("${tx.transactionDate},\"${tx.merchant}\",${tx.amount},${if (tx.isCredit) "Credit" else "Debit"},${tx.categorySlug},\"${tx.note}\"")
+                                }
+                            }
+                            val intent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, csvText)
+                                putExtra(Intent.EXTRA_SUBJECT, "SpendWise Transactions Export")
+                            }
+                            context.startActivity(Intent.createChooser(intent, "Export Transactions"))
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(Icons.Filled.Share, "Export CSV", tint = TextSecondary)
+                    }
+                }
             }
 
             // Filter chips

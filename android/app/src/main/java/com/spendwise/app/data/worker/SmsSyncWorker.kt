@@ -1,9 +1,14 @@
 package com.spendwise.app.data.worker
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.Context
+import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import com.spendwise.app.data.local.preferences.TokenManager
+import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.TransactionApi
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.BatchTransactionRequest
@@ -37,8 +42,32 @@ class SmsSyncWorker @AssistedInject constructor(
     private val parseSmsUseCase: ParseSmsUseCase,
     private val transactionApi: TransactionApi,
     private val userApi: UserApi,
+    private val analyticsApi: AnalyticsApi,
     private val tokenManager: TokenManager
 ) : CoroutineWorker(appContext, workerParams) {
+
+    private fun showBudgetAlert(categorySlug: String, spent: Double, budget: Double, pct: Int) {
+        try {
+            val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            val channelId = "budget_alerts"
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                nm.createNotificationChannel(
+                    NotificationChannel(channelId, "Budget Alerts", NotificationManager.IMPORTANCE_DEFAULT)
+                )
+            }
+            val label = categorySlug.replaceFirstChar { it.uppercase() }
+            val title = if (pct >= 100) "🚨 $label budget exceeded!" else "⚠️ $label budget at $pct%"
+            val text  = "Spent ₹${"%,.0f".format(spent)} of ₹${"%,.0f".format(budget)} budget"
+            val notif = NotificationCompat.Builder(appContext, channelId)
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle(title)
+                .setContentText(text)
+                .setPriority(if (pct >= 100) NotificationCompat.PRIORITY_HIGH else NotificationCompat.PRIORITY_DEFAULT)
+                .setAutoCancel(true)
+                .build()
+            nm.notify(6000 + categorySlug.hashCode(), notif)
+        } catch (_: Exception) {}
+    }
 
     /**
      * When a credit-card bill-due SMS is detected:
@@ -156,9 +185,30 @@ class SmsSyncWorker @AssistedInject constructor(
                 )
             }
 
-            if (transactions.isNotEmpty()) {
-                val resp = transactionApi.batchCreate(BatchTransactionRequest(transactions))
+            // A. Duplicate detection: deduplicate by smsId
+            val deduped = transactions.distinctBy { it.smsId ?: it.hashCode().toString() }
+
+            if (deduped.isNotEmpty()) {
+                val resp = transactionApi.batchCreate(BatchTransactionRequest(deduped))
                 if (!resp.isSuccessful) return Result.retry()
+
+                // B. Budget alert notifications after successful import
+                try {
+                    val dash = analyticsApi.getDashboard().body()?.data
+                    dash?.budgetAlerts?.filter { it.pct >= 80 }?.forEach { alert ->
+                        showBudgetAlert(alert.categorySlug, alert.spent, alert.budget, alert.pct)
+                    }
+                } catch (_: Exception) {}
+
+                // C. Round-up tracking: compute round-up to nearest ₹50 for debit transactions
+                val roundUpTotal = deduped.filter { !it.isCredit }.sumOf { tx ->
+                    val next50 = Math.ceil(tx.amount / 50.0) * 50.0
+                    next50 - tx.amount
+                }
+                if (roundUpTotal > 0) {
+                    val current = tokenManager.roundUpSavings
+                    tokenManager.roundUpSavings = current + roundUpTotal
+                }
             }
 
             // Advance the cursor so we don't re-import the same messages next run

@@ -2,6 +2,7 @@ package com.spendwise.app.presentation.screens.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.spendwise.app.core.formatCurrency
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.FinancialAdvisorApi
@@ -18,6 +19,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import java.time.LocalDate
 import javax.inject.Inject
 
 data class HomeUiState(
@@ -30,7 +32,15 @@ data class HomeUiState(
     val userName: String? = null,
     // Individual section errors — don't fail whole screen for one bad call
     val dashboardError: String? = null,
-    val isRefreshing: Boolean = false
+    val isRefreshing: Boolean = false,
+    // Salary-day smart card
+    val isSalaryDay: Boolean = false,
+    val salaryDayAmount: Double = 0.0,
+    val salaryDaySuggestions: List<String> = emptyList(),
+    // Spending streak
+    val spendingStreak: Int = 0,
+    // Round-up savings
+    val roundUpSavings: Double = 0.0
 )
 
 @HiltViewModel
@@ -65,20 +75,59 @@ class HomeViewModel @Inject constructor(
             val goalsR   = goalsD.await()
             val advR     = advD.await()
 
+            val dash = dashR.getOrNull()?.body()?.data
+            val transactions = txR.getOrNull()?.body()?.data?.transactions ?: emptyList()
+
+            // Salary-day detection
+            val today         = LocalDate.now()
+            val salary        = dash?.salary?.amount ?: 0.0
+            val isSalaryDay   = dash?.salary?.expectedDay != null && today.dayOfMonth == dash.salary.expectedDay
+            val salaryDaySuggestions = if (isSalaryDay && salary > 0) listOf(
+                "💰 Save ${(salary * 0.20).formatCurrency()} (20% rule)",
+                "💳 Pay CC bill: ${dash?.ccOutstanding?.formatCurrency() ?: "₹0"}",
+                "📊 EMI due: ${dash?.emiTotal?.formatCurrency() ?: "₹0"}"
+            ) else emptyList()
+
+            // Spending streak logic
+            val nonEssentialCategories = setOf("bills", "emi", "investment", "savings", "income", "salary", "transfer")
+            val todayStr = today.toString()
+            val todayDebits = transactions.filter { tx ->
+                !tx.isCredit && tx.transactionDate == todayStr && tx.categorySlug !in nonEssentialCategories
+            }
+            val todayNonEssentialSpend = todayDebits.sumOf { it.amount }
+            val lastCheckDate = tokenManager.lastSpendStreakCheckDate
+            if (lastCheckDate != todayStr) {
+                if (todayNonEssentialSpend < 500.0 || todayDebits.isEmpty()) {
+                    tokenManager.spendingStreak = tokenManager.spendingStreak + 1
+                } else {
+                    tokenManager.spendingStreak = 0
+                }
+                tokenManager.lastSpendStreakCheckDate = todayStr
+            }
+            val streak = tokenManager.spendingStreak
+
+            // Round-up savings from local storage
+            val roundUpSavings = tokenManager.roundUpSavings
+
             _state.value = HomeUiState(
-                isLoading          = false,
-                userName           = tokenManager.userName,
-                dashboard          = dashR.getOrNull()?.body()?.data,
-                dashboardError     = if (dashR.isFailure || dashR.getOrNull()?.isSuccessful == false)
+                isLoading             = false,
+                userName              = tokenManager.userName,
+                dashboard             = dash,
+                dashboardError        = if (dashR.isFailure || dashR.getOrNull()?.isSuccessful == false)
                     "Could not load dashboard" else null,
-                recentTransactions = txR.getOrNull()?.body()?.data?.transactions ?: emptyList(),
-                bills              = billsR.getOrNull()?.body()?.data ?: emptyList(),
-                goals              = goalsR.getOrNull()?.body()?.data ?: emptyList(),
+                recentTransactions    = transactions,
+                bills                 = billsR.getOrNull()?.body()?.data ?: emptyList(),
+                goals                 = goalsR.getOrNull()?.body()?.data ?: emptyList(),
                 // Show only critical + high priority insights on home screen
-                topInsights        = advR.getOrNull()?.body()?.data?.insights
+                topInsights           = advR.getOrNull()?.body()?.data?.insights
                     ?.filter { it.priority in listOf("critical", "high") }
                     ?.take(3)
                     ?: emptyList(),
+                isSalaryDay           = isSalaryDay,
+                salaryDayAmount       = salary,
+                salaryDaySuggestions  = salaryDaySuggestions,
+                spendingStreak        = streak,
+                roundUpSavings        = roundUpSavings
             )
         }
     }

@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.spendwise.app.data.local.preferences.TokenManager
+import com.spendwise.app.data.worker.BillReminderWorker
 import com.spendwise.app.presentation.navigation.Screen
 import com.spendwise.app.presentation.navigation.SpendWiseNavGraph
 import com.spendwise.app.presentation.theme.Background
@@ -41,6 +42,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         requestPermissions()
+        BillReminderWorker.schedule(this)
         authenticateThenLaunch()
     }
 

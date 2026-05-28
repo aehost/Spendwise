@@ -56,6 +56,18 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
         get() = prefs.getLong(Constants.SMS_SCAN_FROM_MS, 0L)
         set(v) = prefs.edit().putLong(Constants.SMS_SCAN_FROM_MS, v).apply()
 
+    var roundUpSavings: Double
+        get() = Double.fromBits(prefs.getLong("round_up_savings", 0L))
+        set(v) = prefs.edit().putLong("round_up_savings", v.toBits()).apply()
+
+    var lastSpendStreakCheckDate: String
+        get() = prefs.getString("streak_check_date", "") ?: ""
+        set(v) = prefs.edit().putString("streak_check_date", v).apply()
+
+    var spendingStreak: Int
+        get() = prefs.getInt("spending_streak", 0)
+        set(v) = prefs.edit().putInt("spending_streak", v).apply()
+
     fun isLoggedIn(): Boolean = accessToken != null && userId != null
 
     fun clearAuth() {

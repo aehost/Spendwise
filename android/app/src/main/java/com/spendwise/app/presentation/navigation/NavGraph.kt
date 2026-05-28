@@ -13,6 +13,7 @@ import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.spendwise.app.presentation.screens.auth.AuthScreen
+import com.spendwise.app.presentation.screens.budget.BudgetScreen
 import com.spendwise.app.presentation.screens.cards.CardsScreen
 import com.spendwise.app.presentation.screens.cashflow.CashFlowScreen
 import com.spendwise.app.presentation.screens.coach.AiCoachScreen
@@ -22,6 +23,7 @@ import com.spendwise.app.presentation.screens.home.HomeScreen
 import com.spendwise.app.presentation.screens.iou.IouScreen
 import com.spendwise.app.presentation.screens.loans.LoansScreen
 import com.spendwise.app.presentation.screens.money.MoneyScreen
+import com.spendwise.app.presentation.screens.networth.NetWorthScreen
 import com.spendwise.app.presentation.screens.report.MonthlyReportScreen
 import com.spendwise.app.presentation.screens.score.HealthScoreScreen
 import com.spendwise.app.presentation.screens.settings.SettingsScreen
@@ -51,6 +53,8 @@ sealed class Screen(val route: String) {
     object TaxPlanning   : Screen("tax_planning")
     object Iou           : Screen("iou")
     object Goals         : Screen("goals")
+    object Budget        : Screen("budget")
+    object NetWorth      : Screen("net_worth")
 }
 
 data class NavItem(val route: String, val label: String, val icon: ImageVector)
@@ -126,6 +130,8 @@ fun SpendWiseNavGraph(startRoute: String) {
                         onLoans      = { navController.navigate(Screen.Loans.route) },
                         onReport     = { navController.navigate(Screen.MonthlyReport.route) },
                         onGoals      = { navController.navigate(Screen.Goals.route) },
+                        onBudget     = { navController.navigate(Screen.Budget.route) },
+                        onNetWorth   = { navController.navigate(Screen.NetWorth.route) },
                         onSettings   = { navController.navigate(Screen.Settings.route) }
                     )
                 }
@@ -158,6 +164,12 @@ fun SpendWiseNavGraph(startRoute: String) {
                 }
                 composable(Screen.Iou.route) {
                     IouScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.Budget.route) {
+                    BudgetScreen(onBack = { navController.popBackStack() })
+                }
+                composable(Screen.NetWorth.route) {
+                    NetWorthScreen(onBack = { navController.popBackStack() })
                 }
             }
         }

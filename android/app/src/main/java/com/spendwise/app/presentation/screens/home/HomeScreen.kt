@@ -152,6 +152,27 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
             MotivationalBanner(savingsRate, state.goals.filter { !it.isCompleted }.size, modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
         }
 
+        // ── Salary Day Card ───────────────────────────────────────
+        if (state.isSalaryDay) {
+            item {
+                SalaryDayCard(
+                    amount      = state.salaryDayAmount,
+                    suggestions = state.salaryDaySuggestions,
+                    modifier    = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                )
+            }
+        }
+
+        // ── Spending Streak Card ──────────────────────────────────
+        if (state.spendingStreak >= 3) {
+            item {
+                SpendingStreakCard(
+                    streak   = state.spendingStreak,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+        }
+
         // ── Hero Balance Card ─────────────────────────────────────
         item {
             HeroBalanceCard(
@@ -194,6 +215,9 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
                 item { QuickStat("EMI Burden", "$emiBurden% of salary", Icons.Filled.Money, if (emiBurden > 40) GradientRose else if (emiBurden > 30) GradientAmber else GradientGreen) }
                 item { QuickStat("Burn Rate", "${dash?.burnRate?.formatCurrency() ?: "₹0"}/day", Icons.Filled.Whatshot, GradientOrange) }
                 item { QuickStat("Pending TXNs", "${dash?.pendingCount ?: 0} items", Icons.Filled.HourglassEmpty, GradientPurple) }
+                if (state.roundUpSavings > 0) {
+                    item { QuickStat("Round-Up Saved", state.roundUpSavings.formatCurrency(), Icons.Filled.AccountBalance, GradientGold) }
+                }
             }
         }
 
@@ -965,6 +989,90 @@ fun TransactionRow(tx: TransactionDto) {
                 Box(Modifier.background(WarningColor.copy(0.15f), RoundedCornerShape(6.dp)).padding(horizontal = 5.dp, vertical = 2.dp)) {
                     Text("Pending", fontSize = 9.sp, color = WarningColor)
                 }
+            }
+        }
+    }
+}
+
+// ── Salary Day Card ───────────────────────────────────────────
+
+@Composable
+private fun SalaryDayCard(amount: Double, suggestions: List<String>, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth()
+            .background(Brush.linearGradient(GradientGold), RoundedCornerShape(20.dp))
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🎉", fontSize = 22.sp)
+                Spacer(Modifier.width(8.dp))
+                Column {
+                    Text(
+                        "Salary Day!",
+                        fontSize    = 16.sp,
+                        fontWeight  = FontWeight.ExtraBold,
+                        color       = Color.White
+                    )
+                    Text(
+                        amount.formatCurrency() + " credited",
+                        fontSize = 12.sp,
+                        color    = Color.White.copy(0.8f)
+                    )
+                }
+            }
+            if (suggestions.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "Smart allocation tips:",
+                    fontSize   = 11.sp,
+                    color      = Color.White.copy(0.7f),
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(Modifier.height(6.dp))
+                suggestions.forEach { suggestion ->
+                    Row(Modifier.padding(vertical = 2.dp)) {
+                        Text(suggestion, fontSize = 12.sp, color = Color.White.copy(0.9f), lineHeight = 17.sp)
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── Spending Streak Card ──────────────────────────────────────
+
+@Composable
+private fun SpendingStreakCard(streak: Int, modifier: Modifier = Modifier) {
+    Box(
+        modifier.fillMaxWidth()
+            .background(Brush.linearGradient(GradientOrange.map { it.copy(0.85f) }), RoundedCornerShape(16.dp))
+            .border(0.5.dp, Color(0xFFFF9800).copy(0.4f), RoundedCornerShape(16.dp))
+    ) {
+        Row(
+            Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("🔥", fontSize = 26.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "$streak-day spending streak!",
+                    fontSize   = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color      = Color.White
+                )
+                Text(
+                    "Under ₹500 in non-essential spending — keep it up!",
+                    fontSize    = 11.sp,
+                    color       = Color.White.copy(0.8f),
+                    lineHeight  = 15.sp
+                )
+            }
+            Box(
+                Modifier.background(Color.White.copy(0.15f), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 10.dp, vertical = 5.dp)
+            ) {
+                Text("$streak days", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
     }
