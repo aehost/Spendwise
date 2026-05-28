@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.core.formatCurrency
+import com.spendwise.app.core.toFriendlyDate
 import com.spendwise.app.data.remote.dto.*
 import com.spendwise.app.presentation.theme.*
 import java.time.LocalDate
@@ -765,7 +766,7 @@ fun TransactionRow(tx: TransactionDto) {
         Column(Modifier.weight(1f)) {
             Text(tx.merchant, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(buildString {
-                append(tx.transactionDate)
+                append(tx.transactionDate.toFriendlyDate())
                 if (tx.note.isNotBlank()) append(" · ${tx.note.take(25)}")
             }, fontSize = 11.sp, color = TextMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

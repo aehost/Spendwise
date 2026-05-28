@@ -3,6 +3,7 @@ package com.spendwise.app.core
 import java.text.NumberFormat
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import java.time.format.TextStyle
 import java.util.Locale
 
 fun Double.formatCurrency(currencyCode: String = "INR"): String {
@@ -45,3 +46,20 @@ fun LocalDate.toApiString(): String =
 
 fun today(): LocalDate = LocalDate.now()
 fun todayString(): String = today().toApiString()
+
+/**
+ * Converts an ISO date string ("2026-05-28") to a human-friendly label:
+ *   "Today", "Yesterday", "28 May", or "28 May 2026" for older dates.
+ */
+fun String.toFriendlyDate(): String = try {
+    val date  = LocalDate.parse(this)
+    val now   = LocalDate.now()
+    when {
+        date == now               -> "Today"
+        date == now.minusDays(1)  -> "Yesterday"
+        date.year == now.year     ->
+            "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())}"
+        else                      ->
+            "${date.dayOfMonth} ${date.month.getDisplayName(TextStyle.SHORT, Locale.getDefault())} ${date.year}"
+    }
+} catch (_: Exception) { this }

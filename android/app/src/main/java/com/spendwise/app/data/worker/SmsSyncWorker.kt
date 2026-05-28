@@ -9,6 +9,7 @@ import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.BatchTransactionRequest
 import com.spendwise.app.data.remote.dto.CreateTransactionRequest
 import com.spendwise.app.data.remote.dto.SmsScanTsRequest
+import com.spendwise.app.domain.usecase.ParsedBillDue
 import com.spendwise.app.domain.usecase.ParseSmsUseCase
 import com.spendwise.app.sms.SmsScanner
 import dagger.assisted.Assisted
@@ -37,6 +38,26 @@ class SmsSyncWorker @AssistedInject constructor(
     private val tokenManager: TokenManager
 ) : CoroutineWorker(appContext, workerParams) {
 
+    /**
+     * When a credit-card bill-due SMS is detected, find the matching credit card
+     * by last-4 digits and update its outstanding balance and minimum due.
+     */
+    private suspend fun updateCreditCardOutstanding(due: ParsedBillDue) {
+        try {
+            val last4 = due.cardLast4 ?: return
+            val resp  = userApi.getCreditCards()
+            val card  = resp.body()?.data?.firstOrNull { card ->
+                card.lastFour?.takeLast(4) == last4.takeLast(4)
+            } ?: return
+
+            val updates = mutableMapOf<String, Any?>(
+                "outstanding" to due.outstandingAmount
+            )
+            due.minDueAmount?.let { updates["min_due"] = it }
+            userApi.updateCreditCard(card.id, updates)
+        } catch (_: Exception) {}
+    }
+
     companion object {
         const val WORK_NAME = "sms_sync_immediate"
 
@@ -63,7 +84,13 @@ class SmsSyncWorker @AssistedInject constructor(
             if (rawMessages.isEmpty()) return Result.success()
 
             val transactions = rawMessages.mapNotNull { raw ->
-                val parsed = parseSmsUseCase.parse(raw.body) ?: return@mapNotNull null
+                val parsed = parseSmsUseCase.parse(raw.body) ?: run {
+                    // Not a regular transaction — check if it's a CC bill-due reminder
+                    // and update the credit card's outstanding balance automatically.
+                    val billDue = parseSmsUseCase.parseBillDue(raw.body)
+                    if (billDue != null) updateCreditCardOutstanding(billDue)
+                    return@mapNotNull null
+                }
                 CreateTransactionRequest(
                     amount          = parsed.amount,
                     merchant        = parsed.merchant.ifBlank { "Bank Transaction" },

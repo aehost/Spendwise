@@ -40,7 +40,12 @@ class SmsScanner @Inject constructor(
                     val id      = cursor.getString(0)  ?: continue
                     val address = cursor.getString(1)  ?: ""
                     val body    = cursor.getString(2)  ?: continue
-                    val date    = cursor.getLong(3)
+                    // Telephony.Sms.DATE is documented as milliseconds.
+                    // A small number of legacy/OEM ROMs store it in seconds;
+                    // guard by checking whether the value is plausibly a year ≥ 2000
+                    // in ms (> 946684800000 ms = Jan 1 2000).
+                    val rawDate = cursor.getLong(3)
+                    val date    = if (rawDate < 946_684_800_000L) rawDate * 1_000L else rawDate
 
                     if (Constants.BANK_PATTERN.containsMatchIn(body)) {
                         results.add(RawSms(id, address, body, date))

@@ -2,7 +2,21 @@ package com.spendwise.app.domain.usecase
 
 import com.spendwise.app.core.Constants
 import com.spendwise.app.domain.merchant.MerchantMatcher
+import java.time.LocalDate
 import javax.inject.Inject
+
+/**
+ * Parsed result for a credit-card bill-due / payment-due reminder SMS.
+ * These are NOT transactions — they are reminders to pay your CC bill.
+ * We use them to update the credit card's outstanding balance in the app.
+ */
+data class ParsedBillDue(
+    val cardLast4: String?,
+    val outstandingAmount: Double,   // total amount due (the statement balance)
+    val minDueAmount: Double?,       // minimum amount due
+    val dueDate: String?,            // ISO format "YYYY-MM-DD", if parseable
+    val bankName: String?
+)
 
 /**
  * Extended parsed SMS result.
@@ -32,9 +46,69 @@ data class ParsedSms(
 
 class ParseSmsUseCase @Inject constructor() {
 
+    /**
+     * Returns true if this SMS is a credit-card bill-due / payment-due reminder.
+     * Such messages contain the outstanding balance but are NOT actual debit/credit
+     * transactions — they should be filtered from the transaction pipeline.
+     */
+    fun isBillDueReminder(body: String): Boolean {
+        val duePat = Regex(
+            """\b(?:is\s+due|due\s+on|due\s+date|payment\s+due|bill\s+due|""" +
+            """minimum\s+(?:amount\s+)?due|min(?:imum)?\s+due|total\s+outstanding|""" +
+            """outstanding\s+amount|overdue|amount\s+due|total\s+due)\b""",
+            RegexOption.IGNORE_CASE
+        )
+        return duePat.containsMatchIn(body)
+    }
+
+    /**
+     * Parses a credit-card bill-due reminder SMS.
+     * Returns null if the SMS is not a bill-due reminder.
+     */
+    fun parseBillDue(body: String): ParsedBillDue? {
+        if (!isBankSms(body) || !isBillDueReminder(body)) return null
+        val outstanding = extractAmount(body) ?: return null
+
+        // Minimum due: "minimum amount due of INR 206" or "min due Rs.200"
+        val minDuePat = Regex(
+            """(?:minimum\s+(?:amount\s+)?due|min(?:imum)?\s+due)\s+(?:of\s+)?(?:INR|Rs\.?|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
+            RegexOption.IGNORE_CASE
+        )
+        val minDue = minDuePat.find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+
+        // Due date: "due on 01-06-26", "due by 2026-06-01", "due date: 01/06/2026"
+        val dueDatePat = Regex(
+            """(?:due\s+(?:on|by|date)?[:\s]*)\s*(\d{1,2}[-/]\d{1,2}[-/]\d{2,4})""",
+            RegexOption.IGNORE_CASE
+        )
+        val rawDate = dueDatePat.find(body)?.groupValues?.get(1)
+        val dueDate = rawDate?.let { parseBillDate(it) }
+
+        return ParsedBillDue(
+            cardLast4         = extractCardLast4(body),
+            outstandingAmount = outstanding,
+            minDueAmount      = minDue,
+            dueDate           = dueDate,
+            bankName          = extractBankName(body)
+        )
+    }
+
+    /** Converts DD-MM-YY / DD-MM-YYYY / DD/MM/YY / DD/MM/YYYY to ISO "YYYY-MM-DD". */
+    private fun parseBillDate(raw: String): String? {
+        val parts = raw.split(Regex("[-/]"))
+        if (parts.size != 3) return null
+        val day   = parts[0].toIntOrNull() ?: return null
+        val month = parts[1].toIntOrNull() ?: return null
+        var year  = parts[2].toIntOrNull() ?: return null
+        if (year < 100) year += 2000
+        return runCatching { LocalDate.of(year, month, day).toString() }.getOrNull()
+    }
+
     /** Returns null if this is not a bank transaction SMS. */
     fun parse(body: String): ParsedSms? {
         if (!isBankSms(body)) return null
+        // Bill-due reminders look like transactions but are not — filter them out.
+        if (isBillDueReminder(body)) return null
         val amount = extractAmount(body) ?: return null
         val isCredit   = detectIsCredit(body)
         val isCcTx     = detectCreditCard(body)
