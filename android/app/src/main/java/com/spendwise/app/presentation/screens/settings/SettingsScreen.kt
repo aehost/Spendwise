@@ -1,9 +1,14 @@
 package com.spendwise.app.presentation.screens.settings
 
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -12,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -38,6 +44,22 @@ fun SettingsScreen(
 
     var salaryInput    by remember { mutableStateOf("") }
     var salaryDayInput by remember { mutableStateOf("1") }
+
+    // Gmail auth launcher — handles UserRecoverableAuthException from AccountManager
+    val gmailAuthLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            vm.retryConnectAfterGmailAuth()
+        }
+    }
+
+    // Collect auth intents emitted by ViewModel
+    LaunchedEffect(Unit) {
+        vm.gmailAuthIntent.collect { intent ->
+            gmailAuthLauncher.launch(intent)
+        }
+    }
 
     LaunchedEffect(state.passwordChangeSuccess) {
         if (state.passwordChangeSuccess) { showPasswordDialog = false; vm.clearPasswordState() }
@@ -78,51 +100,80 @@ fun SettingsScreen(
             // ── Gmail Sync ───────────────────────────────────────
             item {
                 SettingsSection("Gmail Sync") {
-                    // Info banner if no accounts
+                    // Connection banner if no accounts
                     if (state.gmailAccounts.isEmpty() && !state.gmailLoading) {
                         Column(Modifier.padding(14.dp)) {
-                            Text("Scan financial emails automatically",
-                                fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
-                            Text(
-                                "SpendWise reads your Gmail to auto-detect salary credits, CC statements, " +
-                                "IMPS/NEFT transfers and bill amounts — no passwords shared.",
-                                fontSize = 12.sp, color = TextSecondary, lineHeight = 17.sp
-                            )
-                            Spacer(Modifier.height(8.dp))
+                            // Promo card
+                            Box(
+                                Modifier.fillMaxWidth()
+                                    .background(Brush.linearGradient(GradientPurple.map { it.copy(0.12f) }), RoundedCornerShape(14.dp))
+                                    .border(0.5.dp, Primary.copy(0.25f), RoundedCornerShape(14.dp))
+                                    .padding(14.dp)
+                            ) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Box(
+                                            Modifier.size(32.dp).background(Primary.copy(0.15f), RoundedCornerShape(8.dp)),
+                                            contentAlignment = Alignment.Center
+                                        ) { Icon(Icons.Filled.Email, "", tint = Primary, modifier = Modifier.size(16.dp)) }
+                                        Text("Auto-detect financial emails", fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+                                    }
+                                    Text(
+                                        "SpendWise scans Gmail for salary credits, CC statements, IMPS/NEFT transfers and bill amounts — read-only, no passwords stored.",
+                                        fontSize = 12.sp, color = TextSecondary, lineHeight = 17.sp
+                                    )
+                                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        listOf("🔒 Read-only", "🚫 No passwords", "⚡ Auto-sync").forEach {
+                                            Box(
+                                                Modifier.background(Primary.copy(0.1f), RoundedCornerShape(20.dp)).padding(horizontal = 8.dp, vertical = 4.dp)
+                                            ) { Text(it, fontSize = 10.sp, color = Primary) }
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(10.dp))
                             Button(
                                 onClick = { showGmailDialog = true },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().height(48.dp),
                                 colors = ButtonDefaults.buttonColors(containerColor = Primary),
                                 shape = RoundedCornerShape(12.dp)
-                            ) { Text("Connect Gmail Account") }
+                            ) {
+                                Icon(Icons.Filled.Email, "", modifier = Modifier.size(16.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text("Connect Gmail Account", fontWeight = FontWeight.SemiBold)
+                            }
                         }
                     }
 
-                    // Connected accounts
+                    // Connected accounts list
                     state.gmailAccounts.forEach { account ->
                         Row(
                             Modifier.padding(horizontal = 14.dp, vertical = 10.dp).fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Box(
-                                Modifier.size(36.dp).background(SuccessColor.copy(0.12f), RoundedCornerShape(10.dp)),
+                                Modifier.size(40.dp).background(SuccessColor.copy(0.12f), RoundedCornerShape(12.dp)),
                                 contentAlignment = Alignment.Center
                             ) { Icon(Icons.Filled.Email, "Gmail", tint = SuccessColor, modifier = Modifier.size(18.dp)) }
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(account.gmailEmail, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
-                                val sync = account.lastSyncedAt?.take(10)?.let { "Synced $it" } ?: "Not synced yet"
-                                Text(sync, fontSize = 11.sp, color = TextMuted)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Box(Modifier.size(6.dp).background(SuccessColor, CircleShape))
+                                    Text(
+                                        account.lastSyncedAt?.take(10)?.let { "Synced $it" } ?: "Awaiting first sync",
+                                        fontSize = 11.sp, color = TextMuted
+                                    )
+                                }
                             }
                             IconButton(onClick = { vm.removeGmailAccount(account.id) }, modifier = Modifier.size(32.dp)) {
-                                Icon(Icons.Filled.Close, "Remove", tint = TextMuted, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Close, "Remove", tint = TextMuted, modifier = Modifier.size(15.dp))
                             }
                         }
-                        HorizontalDivider(color = BorderColor.copy(0.3f), thickness = 0.5.dp,
-                            modifier = Modifier.padding(horizontal = 14.dp))
+                        HorizontalDivider(color = BorderColor.copy(0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
                     }
 
-                    // Add / Sync Now row (when accounts exist)
+                    // Add / Sync Now row
                     if (state.gmailAccounts.isNotEmpty()) {
                         Row(
                             Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth(),
@@ -130,7 +181,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             TextButton(onClick = { showGmailDialog = true }) {
-                                Icon(Icons.Filled.Add, "", tint = Primary, modifier = Modifier.size(16.dp))
+                                Icon(Icons.Filled.Add, "", tint = Primary, modifier = Modifier.size(15.dp))
                                 Spacer(Modifier.width(4.dp))
                                 Text("Add Account", color = Primary, fontSize = 13.sp)
                             }
@@ -145,18 +196,25 @@ fun SettingsScreen(
                     }
 
                     if (state.gmailLoading) {
-                        Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(Modifier.size(20.dp), color = Primary, strokeWidth = 2.dp)
+                        Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CircularProgressIndicator(Modifier.size(16.dp), color = Primary, strokeWidth = 2.dp)
+                            Text("Connecting Gmail…", fontSize = 12.sp, color = TextSecondary)
                         }
                     }
-                    state.gmailError?.let {
+                    state.gmailError?.let { errMsg ->
                         Row(
-                            Modifier.padding(horizontal = 14.dp, vertical = 4.dp).fillMaxWidth().clickable { vm.clearGmailError() },
+                            Modifier.padding(horizontal = 14.dp, vertical = 6.dp).fillMaxWidth()
+                                .background(ErrorColor.copy(0.08f), RoundedCornerShape(10.dp))
+                                .padding(10.dp)
+                                .clickable { vm.clearGmailError() },
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(Icons.Filled.ErrorOutline, "", tint = ErrorColor, modifier = Modifier.size(14.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(it, color = ErrorColor, fontSize = 12.sp, modifier = Modifier.weight(1f))
+                            Spacer(Modifier.width(8.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(errMsg, color = ErrorColor, fontSize = 12.sp)
+                                Text("Tap to dismiss", fontSize = 10.sp, color = TextMuted)
+                            }
                         }
                     }
                 }
@@ -265,55 +323,85 @@ private fun GmailConnectDialog(
     val available = deviceAccounts.filter { it !in alreadyAdded }
 
     AlertDialog(
-        onDismissRequest = onDismiss, containerColor = CardBg,
-        title = { Text("Connect Gmail", color = TextPrimary) },
+        onDismissRequest = onDismiss,
+        containerColor = CardBg,
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    Modifier.size(36.dp).background(Primary.copy(0.15f), RoundedCornerShape(10.dp)),
+                    contentAlignment = Alignment.Center
+                ) { Icon(Icons.Filled.Email, "", tint = Primary, modifier = Modifier.size(18.dp)) }
+                Text("Connect Gmail", color = TextPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Select a Google account signed into this device, or enter your Gmail address manually.",
+                    "Select a Google account on this device or enter your Gmail address to enable financial email scanning.",
                     fontSize = 13.sp, color = TextSecondary, lineHeight = 18.sp
                 )
-                // Device accounts as tappable chips
+
+                // Device accounts
                 if (available.isNotEmpty()) {
-                    Text("On this device:", fontSize = 12.sp, color = TextMuted)
+                    Text("ACCOUNTS ON THIS DEVICE", fontSize = 10.sp, color = TextMuted, letterSpacing = 1.sp)
                     available.forEach { email ->
                         Row(
                             Modifier.fillMaxWidth()
-                                .background(Primary.copy(0.08f), RoundedCornerShape(10.dp))
+                                .background(Brush.linearGradient(GradientPurple.map { it.copy(0.1f) }), RoundedCornerShape(12.dp))
+                                .border(0.5.dp, Primary.copy(0.2f), RoundedCornerShape(12.dp))
                                 .clickable { onConnect(email) }
-                                .padding(12.dp, 10.dp),
+                                .padding(12.dp, 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Filled.Email, "", tint = Primary, modifier = Modifier.size(16.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text(email, fontSize = 13.sp, color = TextPrimary, modifier = Modifier.weight(1f))
-                            Icon(Icons.Filled.ChevronRight, "", tint = TextMuted, modifier = Modifier.size(16.dp))
+                            Box(
+                                Modifier.size(32.dp).background(Primary.copy(0.15f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) { Text(email.first().uppercase(), fontSize = 14.sp, color = Primary, fontWeight = FontWeight.Bold) }
+                            Spacer(Modifier.width(10.dp))
+                            Column(Modifier.weight(1f)) {
+                                Text(email, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
+                                Text("Tap to connect", fontSize = 10.sp, color = TextMuted)
+                            }
+                            Icon(Icons.Filled.ChevronRight, "", tint = Primary, modifier = Modifier.size(16.dp))
                         }
                     }
-                    HorizontalDivider(color = BorderColor, thickness = 0.5.dp)
-                    Text("Or enter manually:", fontSize = 12.sp, color = TextMuted)
+                    HorizontalDivider(color = BorderColor.copy(0.5f), thickness = 0.5.dp)
                 }
+
+                Text(if (available.isEmpty()) "ENTER YOUR GMAIL ADDRESS" else "OR ENTER MANUALLY", fontSize = 10.sp, color = TextMuted, letterSpacing = 1.sp)
+
                 OutlinedTextField(
                     value = manualEmail, onValueChange = { manualEmail = it },
-                    label = { Text("Gmail address", color = TextSecondary) },
+                    label = { Text("Gmail address") },
                     placeholder = { Text("you@gmail.com", color = TextMuted) },
                     singleLine = true, modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Primary, unfocusedBorderColor = BorderColor,
-                        focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary)
+                    leadingIcon = { Icon(Icons.Filled.Email, "", tint = TextMuted, modifier = Modifier.size(16.dp)) },
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary, unfocusedBorderColor = BorderColor,
+                        focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                        cursorColor = Primary, focusedLabelColor = Primary, unfocusedLabelColor = TextMuted
+                    )
                 )
-                Text(
-                    "Make sure this Gmail account is already signed into your device.",
-                    fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp
-                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Icon(Icons.Filled.Info, "", tint = TextMuted, modifier = Modifier.size(12.dp))
+                    Text("Account must be signed into this device for token-based sync.", fontSize = 10.sp, color = TextMuted, lineHeight = 14.sp)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = { if (manualEmail.isNotBlank()) onConnect(manualEmail.trim()) },
                 enabled = manualEmail.isNotBlank() && manualEmail.contains("@"),
-                colors  = ButtonDefaults.buttonColors(containerColor = Primary)
-            ) { Text("Connect") }
+                colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(Icons.Filled.Email, "", modifier = Modifier.size(14.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Connect")
+            }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", color = TextSecondary) } }
     )

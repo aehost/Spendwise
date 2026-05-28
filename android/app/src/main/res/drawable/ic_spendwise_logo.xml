@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="96dp"
+    android:height="96dp"
+    android:viewportWidth="96"
+    android:viewportHeight="96">
+
+    <!-- Outer glow ring -->
+    <path
+        android:pathData="M48,4 A44,44 0 1,1 47.99,4 Z"
+        android:strokeWidth="0.8"
+        android:strokeColor="#4D7C6BFF"
+        android:fillColor="#00000000" />
+
+    <!-- Main circle background -->
+    <path
+        android:pathData="M48,8 A40,40 0 1,1 47.99,8 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="8" android:startY="8"
+                android:endX="88" android:endY="88">
+                <item android:offset="0" android:color="#FF2D1B8E" />
+                <item android:offset="0.5" android:color="#FF4A35C8" />
+                <item android:offset="1" android:color="#FF7C6BFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Inner highlight arc (top-left) -->
+    <path
+        android:pathData="M22,28 Q28,16 42,14"
+        android:strokeWidth="2"
+        android:strokeColor="#33FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round" />
+
+    <!-- Upward trend bars (chart symbol) -->
+    <!-- Bar 1 (shortest, left) -->
+    <path
+        android:pathData="M28,62 L28,52 Q28,50 30,50 L34,50 Q36,50 36,52 L36,62 Z"
+        android:fillColor="#B3FFFFFF" />
+
+    <!-- Bar 2 (medium, center) -->
+    <path
+        android:pathData="M40,62 L40,44 Q40,42 42,42 L46,42 Q48,42 48,44 L48,62 Z"
+        android:fillColor="#D9FFFFFF" />
+
+    <!-- Bar 3 (tall, right) -->
+    <path
+        android:pathData="M52,62 L52,32 Q52,30 54,30 L58,30 Q60,30 60,32 L60,62 Z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- Upward arrow on tallest bar -->
+    <path
+        android:pathData="M56,26 L52,33 L55,33 L55,30 L57,30 L57,33 L60,33 Z"
+        android:fillColor="#FFFFFFFF" />
+
+    <!-- "S" rupee line strike-through on bar 2 -->
+    <path
+        android:pathData="M40,53 L48,53"
+        android:strokeWidth="1.5"
+        android:strokeColor="#66FFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round" />
+
+    <!-- Sparkle dots -->
+    <path
+        android:pathData="M68,22 A2,2 0 1,1 67.99,22 Z"
+        android:fillColor="#FFFFD700" />
+    <path
+        android:pathData="M24,40 A1.5,1.5 0 1,1 23.99,40 Z"
+        android:fillColor="#80FFD700" />
+    <path
+        android:pathData="M72,50 A1.5,1.5 0 1,1 71.99,50 Z"
+        android:fillColor="#66FFFFFF" />
+
+    <!-- Bottom "pulse" line -->
+    <path
+        android:pathData="M26,66 L70,66"
+        android:strokeWidth="1.5"
+        android:strokeColor="#4DFFFFFF"
+        android:fillColor="#00000000"
+        android:strokeLineCap="round" />
+
+</vector>

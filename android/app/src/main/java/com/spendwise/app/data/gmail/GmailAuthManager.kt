@@ -77,6 +77,27 @@ class GmailAuthManager @Inject constructor(
     }
 
     /**
+     * Gets a token but propagates [UserRecoverableAuthException] so the caller
+     * (Settings screen) can launch the permission-grant intent in an Activity context.
+     * Returns null for non-recoverable errors (account not on device, etc.).
+     */
+    @Throws(UserRecoverableAuthException::class)
+    fun getTokenOrThrow(gmailEmail: String): String? {
+        return try {
+            GoogleAuthUtil.getToken(
+                context,
+                Account(gmailEmail, "com.google"),
+                OAUTH_SCOPE
+            )
+        } catch (e: UserRecoverableAuthException) {
+            throw e  // caller must launch e.intent from an Activity
+        } catch (e: Exception) {
+            Log.w(TAG, "Non-recoverable token error for $gmailEmail: ${e.message}")
+            null
+        }
+    }
+
+    /**
      * Invalidates a cached token so the next call to getToken returns a fresh one.
      */
     fun invalidateToken(gmailEmail: String, token: String) {

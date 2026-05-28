@@ -8,13 +8,13 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.spendwise.app.presentation.screens.auth.SpendWiseLogoComposable
 import com.spendwise.app.presentation.theme.*
 
 @Composable
@@ -33,11 +33,12 @@ fun SetupScreen(
         verticalArrangement = Arrangement.Center
     ) {
         // Logo
-        Text("₹", fontSize = 64.sp, color = Primary)
+        SpendWiseLogoComposable(iconSize = 80)
+        Spacer(Modifier.height(12.dp))
         Text(
             "SpendWise",
             fontSize = 30.sp, fontWeight = FontWeight.Black,
-            color = Primary
+            color = TextPrimary, letterSpacing = (-0.5).sp
         )
         Spacer(Modifier.height(8.dp))
 
