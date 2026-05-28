@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -79,9 +80,7 @@ fun ToolsScreen(
             }
 
             // 2-column grid for remaining tools
-            val remaining = tools.drop(1)
-            items(remaining.chunked(2).size) { rowIdx ->
-                val row = remaining.chunked(2)[rowIdx]
+            items(tools.drop(1).chunked(2)) { row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     row.forEach { tool ->
                         SmallToolCard(tool, Modifier.weight(1f))
