@@ -1,0 +1,30 @@
+app = "spendwise-api-gateway"
+primary_region = "sin"
+
+[build]
+  image = "ghcr.io/aehost/spendwise-api-gateway:latest"
+
+[env]
+  PORT = "3000"
+  NODE_ENV = "production"
+  # Internal Fly.io hostnames — services reach each other via .internal DNS
+  AUTH_SERVICE_URL        = "http://spendwise-auth-service.internal:3001"
+  TRANSACTION_SERVICE_URL = "http://spendwise-transaction-service.internal:3002"
+  USER_SERVICE_URL        = "http://spendwise-user-service.internal:3003"
+  ANALYTICS_SERVICE_URL   = "http://spendwise-analytics-service.internal:3004"
+
+[http_service]
+  internal_port = 3000
+  force_https = true
+  auto_stop_machines = false    # Gateway stays up always
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 200
+    soft_limit = 150
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

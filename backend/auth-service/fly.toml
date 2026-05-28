@@ -1,0 +1,25 @@
+app = "spendwise-auth-service"
+primary_region = "sin"   # Singapore — closest to India, Supabase ap-south-1
+
+[build]
+  image = "ghcr.io/aehost/spendwise-auth-service:latest"
+
+[env]
+  PORT = "3001"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "connections"
+    hard_limit = 100
+    soft_limit = 80
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
