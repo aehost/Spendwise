@@ -127,7 +127,7 @@ class SettingsViewModel @Inject constructor(
             try {
                 val req = GmailConnectRequest(
                     gmailEmail   = account.email ?: "",
-                    accessToken  = account.serverAuthCode ?: account.idToken ?: "",
+                    accessToken  = "",   // token obtained at sync time via GoogleAuthUtil.getToken
                     refreshToken = null,
                     tokenExpiry  = null
                 )
