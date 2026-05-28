@@ -18,7 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.spendwise.app.data.remote.dto.HealthFactorDto
+import com.spendwise.app.data.remote.dto.ScoreFactorDto
 import com.spendwise.app.presentation.theme.*
 
 @Composable
@@ -90,7 +90,7 @@ fun HealthScoreScreen(onBack: () -> Unit, vm: HealthScoreViewModel = hiltViewMod
 }
 
 @Composable
-private fun FactorCard(factor: HealthFactorDto) {
+private fun FactorCard(factor: ScoreFactorDto) {
     val color = when (factor.status) {
         "good"    -> SuccessColor
         "neutral" -> WarningColor

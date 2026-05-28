@@ -550,7 +550,7 @@ data class FinancialAdvisorDto(
 )
 
 // ── Financial Health Score ────────────────────────────────────
-data class HealthFactorDto(
+data class ScoreFactorDto(
     @SerializedName("name")   val name: String,
     @SerializedName("score")  val score: Int,
     @SerializedName("max")    val max: Int,
@@ -563,7 +563,7 @@ data class HealthScoreDto(
     @SerializedName("score")   val score: Int,
     @SerializedName("grade")   val grade: String,
     @SerializedName("level")   val level: String,
-    @SerializedName("factors") val factors: List<HealthFactorDto>
+    @SerializedName("factors") val factors: List<ScoreFactorDto>
 )
 
 // ── Cash Flow Calendar ────────────────────────────────────────
