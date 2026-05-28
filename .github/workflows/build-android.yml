@@ -56,6 +56,11 @@ jobs:
             echo "available=false" >> $GITHUB_OUTPUT
           fi
 
+      # Clean stale KAPT stubs before building to prevent duplicate-class errors
+      - name: Clean build
+        working-directory: android
+        run: ./gradlew clean --no-daemon
+
       # Always build debug APK (no keystore needed)
       - name: Build Debug APK
         working-directory: android

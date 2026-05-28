@@ -60,6 +60,10 @@ class GmailSyncWorker @AssistedInject constructor(
         private const val TAG = "GmailSyncWorker"
         private const val GMAIL_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
         private const val OAUTH_SCOPE = "oauth2:${GmailAuthManager.GMAIL_SCOPE}"
+        private val CREDIT_TYPES = setOf(
+            EmailType.SALARY_CREDIT, EmailType.IMPS_CREDIT,
+            EmailType.NEFT_CREDIT, EmailType.UPI_CREDIT
+        )
 
         fun schedule(context: Context) {
             val req = PeriodicWorkRequestBuilder<GmailSyncWorker>(1, TimeUnit.DAYS)
@@ -265,12 +269,6 @@ class GmailSyncWorker @AssistedInject constructor(
         }
     }
 
-    companion object {
-        private val CREDIT_TYPES = setOf(
-            EmailType.SALARY_CREDIT, EmailType.IMPS_CREDIT,
-            EmailType.NEFT_CREDIT, EmailType.UPI_CREDIT
-        )
-    }
 }
 
 private data class TxMeta(val categorySlug: String, val merchant: String, val note: String)
