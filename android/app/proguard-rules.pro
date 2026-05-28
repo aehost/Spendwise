@@ -1,28 +1,36 @@
-# ── Gson / Retrofit ─────────────────────────────────────────────────────────
-# R8 obfuscates field names by default. Without explicit keep rules Gson
-# serialises request bodies as {} (empty) and the server returns 400
-# "email and password required" because it can't find the JSON keys.
+# ── Gson + Retrofit + R8 ─────────────────────────────────────────────────────
 #
-# Keep all declared fields on every DTO class so Gson can map them.
--keepclassmembers class com.spendwise.app.data.remote.dto.** {
-    <fields>;
-    <init>(...);
-}
--keepclassmembers class com.spendwise.app.domain.model.** {
-    <fields>;
-    <init>(...);
-}
+# Three things must be preserved for Retrofit + Gson to work under R8:
+#
+#  1. DTO class NAMES (not just members) — Gson does reflection-based casts
+#     using the fully-qualified class name. If the name is obfuscated the cast
+#     throws ClassCastException (e.g. "h2.o cannot be cast to T2.b").
+#
+#  2. Field NAMES inside DTOs — Gson maps JSON keys to field names (or
+#     @SerializedName). Obfuscated field names produce empty {} bodies so the
+#     server returns "email and password required".
+#
+#  3. Generic type SIGNATURES — Retrofit reads the return type of each API
+#     interface method (e.g. Response<ApiResponse<AuthResponse>>) to build the
+#     Gson TypeAdapter. Without Signature attributes the type parameter T is
+#     erased to Object and Gson falls back to LinkedTreeMap.
 
-# Preserve generic type signatures (used by Retrofit + Gson TypeToken)
+# Keep full DTO classes: class name + all fields + constructors
+-keep class com.spendwise.app.data.remote.dto.** { *; }
+-keep class com.spendwise.app.domain.model.** { *; }
+
+# Keep Retrofit API interfaces and all their method signatures
+-keep interface com.spendwise.app.data.remote.api.** { *; }
+
+# Keep Gson TypeToken hierarchy (required for generic response deserialization)
+-keep,allowobfuscation,allowshrinking class com.google.gson.reflect.TypeToken
+-keep,allowobfuscation,allowshrinking class * extends com.google.gson.reflect.TypeToken
+
+# Preserve generic signatures, annotations, and inner-class metadata
 -keepattributes Signature
-
-# Preserve all annotations (needed for @SerializedName, @Body, @GET, etc.)
 -keepattributes *Annotation*
-
-# Keep Retrofit API interface methods (annotated with @GET, @POST, etc.)
--keepclassmembers,allowshrinking,allowobfuscation interface * {
-    @retrofit2.http.* <methods>;
-}
+-keepattributes EnclosingMethod
+-keepattributes InnerClasses
 
 # ── Keep JavaScript bridge methods (called via reflection from WebView) ────────
 -keepclassmembers class com.spendwise.app.SMSBridge {
