@@ -71,7 +71,11 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
     val dash       = state.dashboard
     val today      = LocalDate.now()
     val hourNow    = LocalTime.now().hour
-    val greeting   = when { hourNow < 12 -> "Good morning" hourNow < 17 -> "Good afternoon" else -> "Good evening" }
+    val greeting   = when {
+        hourNow < 12 -> "Good morning"
+        hourNow < 17 -> "Good afternoon"
+        else         -> "Good evening"
+    }
     val firstName  = state.userName?.split(" ")?.firstOrNull() ?: "there"
     val monthName  = Month.of(dash?.month ?: today.monthValue).name
         .lowercase().replaceFirstChar { it.uppercase() }
