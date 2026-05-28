@@ -520,19 +520,33 @@ data class EmailBillDetectionDto(
     @SerializedName("is_minimum_due")   val isMinimumDue: Boolean = false
 )
 
-// ── AI Finance Coach ──────────────────────────────────────────
-data class AiCoachMessage(
-    @SerializedName("role")    val role: String,
-    @SerializedName("content") val content: String
+// ── Financial Advisor (Algorithm Engine) ──────────────────────
+data class AdvisorInsightDto(
+    @SerializedName("id")           val id: String,
+    @SerializedName("category")     val category: String,
+    @SerializedName("priority")     val priority: String,   // critical | high | medium | low
+    @SerializedName("icon")         val icon: String,
+    @SerializedName("title")        val title: String,
+    @SerializedName("detail")       val detail: String,
+    @SerializedName("metric")       val metric: String,
+    @SerializedName("metric_label") val metricLabel: String,
+    @SerializedName("action")       val action: String,
+    @SerializedName("action_label") val actionLabel: String
 )
-data class AiCoachRequest(
-    @SerializedName("message") val message: String,
-    @SerializedName("history") val history: List<AiCoachMessage> = emptyList()
+data class AdvisorContextDto(
+    @SerializedName("salary")           val salary: Double,
+    @SerializedName("spent")            val spent: Double,
+    @SerializedName("savings_rate")     val savingsRate: Int,
+    @SerializedName("emi_burden")       val emiBurden: Int,
+    @SerializedName("emergency_months") val emergencyMonths: Double,
+    @SerializedName("days_left")        val daysLeft: Int,
+    @SerializedName("projected_spend")  val projectedSpend: Double
 )
-data class AiCoachResponse(
-    @SerializedName("reply")          val reply: String,
-    @SerializedName("input_tokens")   val inputTokens: Int = 0,
-    @SerializedName("output_tokens")  val outputTokens: Int = 0
+data class FinancialAdvisorDto(
+    @SerializedName("insights")        val insights: List<AdvisorInsightDto>,
+    @SerializedName("generated_at")    val generatedAt: String,
+    @SerializedName("engine_version")  val engineVersion: String,
+    @SerializedName("context")         val context: AdvisorContextDto
 )
 
 // ── Financial Health Score ────────────────────────────────────

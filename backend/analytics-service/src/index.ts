@@ -1,5 +1,4 @@
 import 'dotenv/config';
-import Anthropic from '@anthropic-ai/sdk';
 import { setDefaultResultOrder } from 'node:dns';
 setDefaultResultOrder('ipv4first'); // Railway/Node 18+ prefers IPv6; force IPv4 for Supabase
 import express from 'express';
@@ -861,96 +860,254 @@ app.get('/analytics/monthly-report', async (req, res) => {
   }
 });
 
-// ── POST /analytics/ai-coach ──────────────────────────────────
-// Claude-powered financial coach with user's full financial context
-app.post('/analytics/ai-coach', async (req, res) => {
+// ── GET /analytics/financial-advisor ─────────────────────────
+// Zero-cost algorithm engine — all logic lives here, updated server-side
+// without any app reinstall. Returns prioritised insight cards.
+app.get('/analytics/financial-advisor', async (req, res) => {
   try {
     const userId = uid(req);
-    const { message, history = [] } = req.body as {
-      message: string;
-      history: Array<{ role: 'user' | 'assistant'; content: string }>;
-    };
-    if (!message?.trim()) return fail(res, 'message required');
+    const now    = new Date();
+    const month  = now.getMonth() + 1;
+    const year   = now.getFullYear();
+    const day    = now.getDate();
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const start  = `${year}-${String(month).padStart(2,'0')}-01`;
+    const end    = new Date(year, month, 0).toISOString().split('T')[0];
+    const prevM  = month === 1 ? 12 : month - 1;
+    const prevY  = month === 1 ? year - 1 : year;
+    const prevS  = `${prevY}-${String(prevM).padStart(2,'0')}-01`;
+    const prevE  = new Date(prevY, prevM, 0).toISOString().split('T')[0];
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
-    if (!apiKey) return fail(res, 'AI coach not configured', 503);
-
-    const now   = new Date();
-    const month = now.getMonth() + 1;
-    const year  = now.getFullYear();
-    const start = `${year}-${String(month).padStart(2,'0')}-01`;
-    const end   = new Date(year, month, 0).toISOString().split('T')[0];
-
-    const [salary, spending, bankBal, loans, bills, goals, topCats, ccTotal] = await Promise.all([
+    const [salary, spending, prevSpending, bankBal, loans, creditCards, bills,
+           goals, budgets, byCategory, topMerchants, investments] = await Promise.all([
       dbOne<any>('SELECT amount,expected_day FROM salary_config WHERE user_id=$1', [userId]),
       dbOne<any>(`SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent,
-        COALESCE(SUM(CASE WHEN is_credit=TRUE THEN amount ELSE 0 END),0) as income
+        COALESCE(SUM(CASE WHEN is_credit=TRUE  THEN amount ELSE 0 END),0) as income,
+        COUNT(*) FILTER (WHERE is_pending=TRUE) as pending_count
         FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`, [userId,start,end]),
+      dbOne<any>(`SELECT COALESCE(SUM(CASE WHEN is_credit=FALSE THEN amount ELSE 0 END),0) as spent
+        FROM transactions WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3`, [userId,prevS,prevE]),
       dbOne<any>('SELECT COALESCE(SUM(balance),0) as total FROM bank_accounts WHERE user_id=$1 AND is_active=TRUE', [userId]),
-      db<any>('SELECT name,emi_amount,interest_rate,outstanding,months_remaining FROM loans WHERE user_id=$1 AND is_active=TRUE', [userId]),
-      db<any>('SELECT name,amount,due_day,is_paid_this_month FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE', [userId]),
-      db<any>('SELECT title,target_amount,current_amount,deadline FROM financial_goals WHERE user_id=$1 AND is_completed=FALSE', [userId]),
+      db<any>('SELECT name,emi_amount,interest_rate,outstanding FROM loans WHERE user_id=$1 AND is_active=TRUE ORDER BY interest_rate DESC', [userId]),
+      db<any>('SELECT name,outstanding,min_due FROM credit_cards WHERE user_id=$1 AND is_active=TRUE AND outstanding>0', [userId]),
+      db<any>('SELECT name,amount,due_day,is_paid_this_month,icon FROM mandatory_bills WHERE user_id=$1 AND is_active=TRUE ORDER BY due_day', [userId]),
+      db<any>('SELECT title,target_amount,current_amount,deadline FROM financial_goals WHERE user_id=$1 AND is_completed=FALSE ORDER BY created_at', [userId]),
+      db<any>('SELECT category_slug,amount FROM monthly_budgets WHERE user_id=$1 AND month=$2 AND year=$3', [userId,month,year]),
       db<any>(`SELECT category_slug,SUM(amount) as total FROM transactions WHERE user_id=$1
         AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE
-        GROUP BY category_slug ORDER BY total DESC LIMIT 5`, [userId,start,end]),
-      dbOne<any>('SELECT COALESCE(SUM(outstanding),0) as total FROM credit_cards WHERE user_id=$1 AND is_active=TRUE', [userId]),
+        GROUP BY category_slug ORDER BY total DESC`, [userId,start,end]),
+      db<any>(`SELECT merchant,COUNT(*) as visits,SUM(amount) as total FROM transactions
+        WHERE user_id=$1 AND transaction_date BETWEEN $2 AND $3 AND is_credit=FALSE AND amount>500
+        GROUP BY merchant ORDER BY total DESC LIMIT 5`, [userId,start,end]),
+      db<any>('SELECT monthly_amount FROM investments WHERE user_id=$1 AND is_active=TRUE', [userId]),
     ]);
 
-    const salaryAmt = parseFloat(salary?.amount || 0);
-    const spent     = parseFloat(spending?.spent || 0);
-    const savingsRate = salaryAmt > 0 ? Math.round(((salaryAmt - spent) / salaryAmt) * 100) : 0;
-    const emiTotal  = loans.reduce((s: number, l: any) => s + parseFloat(l.emi_amount || 0), 0);
+    const salaryAmt   = parseFloat(salary?.amount || 0);
+    const spent       = parseFloat(spending?.spent || 0);
+    const prevSpent   = parseFloat(prevSpending?.spent || 0);
+    const bankBal$    = parseFloat(bankBal?.total || 0);
+    const emiTotal    = loans.reduce((s:number,l:any) => s+parseFloat(l.emi_amount||0),0);
+    const ccTotal     = creditCards.reduce((s:number,c:any) => s+parseFloat(c.outstanding||0),0);
+    const savingsRate = salaryAmt>0 ? Math.round(((salaryAmt-spent)/salaryAmt)*100) : 0;
+    const emiBurden   = salaryAmt>0 ? Math.round((emiTotal/salaryAmt)*100) : 0;
+    const burnRate    = day>0 ? spent/day : 0;
+    const projected   = Math.round(burnRate*daysInMonth);
+    const daysLeft    = daysInMonth - day;
+    const remaining   = Math.max(0, salaryAmt - spent);
+    const monthlyExpenses = spent + emiTotal;
+    const emergencyMonths = monthlyExpenses>0 ? bankBal$/monthlyExpenses : 0;
+    const unpaidBills = bills.filter((b:any)=>!b.is_paid_this_month);
+    const dueSoon     = unpaidBills.filter((b:any)=>{ const d=b.due_day-day; return d>=0&&d<=7; });
+    const investTotal = investments.reduce((s:number,i:any)=>s+parseFloat(i.monthly_amount||0),0);
+    const spendChange = prevSpent>0 ? Math.round(((spent-prevSpent)/prevSpent)*100) : 0;
 
-    const systemPrompt = `You are SpendWise AI Coach, a friendly and knowledgeable personal finance advisor for Indian users.
-You have access to the user's real financial data for ${now.toLocaleString('default',{month:'long'})} ${year}:
+    type Priority = 'critical' | 'high' | 'medium' | 'low';
+    interface Insight {
+      id: string; category: string; priority: Priority;
+      icon: string; title: string; detail: string;
+      metric: string; metric_label: string;
+      action: string; action_label: string;
+    }
+    const insights: Insight[] = [];
 
-FINANCIAL SNAPSHOT:
-- Monthly Salary: ₹${salaryAmt.toLocaleString('en-IN')}
-- Spent this month: ₹${spent.toLocaleString('en-IN')} (${savingsRate}% savings rate)
-- Bank Balance: ₹${parseFloat(bankBal?.total||0).toLocaleString('en-IN')}
-- CC Outstanding: ₹${parseFloat(ccTotal?.total||0).toLocaleString('en-IN')}
-- Total EMI/month: ₹${emiTotal.toLocaleString('en-IN')} (${salaryAmt>0?Math.round((emiTotal/salaryAmt)*100):0}% of income)
+    // ── RULE 1: Overspend alert ───────────────────────────────
+    if (projected > salaryAmt && salaryAmt>0) {
+      const overspend = projected - salaryAmt;
+      insights.push({
+        id: 'overspend_alert', category: 'spending', priority: 'critical',
+        icon: '🚨', title: 'Overspend Warning',
+        detail: `At current pace (₹${Math.round(burnRate).toLocaleString('en-IN')}/day) you'll overspend by ₹${Math.round(overspend).toLocaleString('en-IN')} this month. Reduce daily spend to ₹${Math.round(remaining/daysLeft).toLocaleString('en-IN')} to break even.`,
+        metric: `₹${Math.round(overspend).toLocaleString('en-IN')}`, metric_label: 'projected overspend',
+        action: 'view_spending', action_label: 'Review Transactions',
+      });
+    }
 
-TOP SPENDING CATEGORIES:
-${topCats.map((c:any) => `- ${c.category_slug}: ₹${parseFloat(c.total).toLocaleString('en-IN')}`).join('\n')}
+    // ── RULE 2: Bills due soon ─────────────────────────────────
+    if (dueSoon.length > 0) {
+      const billTotal = dueSoon.reduce((s:number,b:any)=>s+parseFloat(b.amount),0);
+      insights.push({
+        id: 'bills_due', category: 'bills', priority: 'critical',
+        icon: '📅', title: `${dueSoon.length} Bill${dueSoon.length>1?'s':''} Due Within 7 Days`,
+        detail: `${dueSoon.map((b:any)=>`${b.icon||'📄'} ${b.name} ₹${parseFloat(b.amount).toLocaleString('en-IN')} (due ${b.due_day}th)`).join(' • ')}`,
+        metric: `₹${Math.round(billTotal).toLocaleString('en-IN')}`, metric_label: 'total due',
+        action: 'view_bills', action_label: 'View Bills',
+      });
+    }
 
-LOANS: ${loans.length === 0 ? 'None' : loans.map((l:any) =>
-  `${l.name} (₹${parseFloat(l.emi_amount).toLocaleString('en-IN')}/mo, ${l.interest_rate}% rate, ₹${parseFloat(l.outstanding).toLocaleString('en-IN')} outstanding, ${l.months_remaining} months left)`
-).join('; ')}
+    // ── RULE 3: High EMI burden ────────────────────────────────
+    if (emiBurden > 40) {
+      const highestRate = loans[0];
+      insights.push({
+        id: 'emi_burden', category: 'debt', priority: 'high',
+        icon: '⚠️', title: 'EMI Load is High',
+        detail: `Your EMIs (₹${Math.round(emiTotal).toLocaleString('en-IN')}/mo) consume ${emiBurden}% of income — ideal is under 30%. ${highestRate ? `Focus on clearing ${highestRate.name} first (${highestRate.interest_rate}% rate).` : ''}`,
+        metric: `${emiBurden}%`, metric_label: 'of income in EMIs',
+        action: 'view_debt_payoff', action_label: 'See Payoff Plan',
+      });
+    }
 
-BILLS: ${bills.length === 0 ? 'None' : bills.map((b:any) =>
-  `${b.name} ₹${parseFloat(b.amount).toLocaleString('en-IN')} due ${b.due_day}th ${b.is_paid_this_month ? '(✓ paid)' : '(unpaid)'}`
-).join('; ')}
+    // ── RULE 4: Emergency fund gap ─────────────────────────────
+    if (emergencyMonths < 3) {
+      const targetFund = monthlyExpenses * 6;
+      const gap = Math.max(0, targetFund - bankBal$);
+      const monthsToFill = salaryAmt>0&&(salaryAmt*0.15)>0 ? Math.ceil(gap/(salaryAmt*0.15)) : 0;
+      insights.push({
+        id: 'emergency_fund', category: 'savings', priority: 'high',
+        icon: '🛡️', title: 'Emergency Fund is Thin',
+        detail: `Your bank balance covers only ${emergencyMonths.toFixed(1)} months of expenses. Target: 6 months (₹${Math.round(targetFund).toLocaleString('en-IN')}). Gap: ₹${Math.round(gap).toLocaleString('en-IN')}. Saving 15% of salary fills this in ~${monthsToFill} months.`,
+        metric: `${emergencyMonths.toFixed(1)} months`, metric_label: 'of expenses covered',
+        action: 'view_goals', action_label: 'Set Savings Goal',
+      });
+    }
 
-ACTIVE GOALS: ${goals.length === 0 ? 'None' : goals.map((g:any) =>
-  `${g.title}: ₹${parseFloat(g.current_amount).toLocaleString('en-IN')} / ₹${parseFloat(g.target_amount).toLocaleString('en-IN')}`
-).join('; ')}
+    // ── RULE 5: Low savings rate ───────────────────────────────
+    if (savingsRate < 20 && salaryAmt > 0 && savingsRate >= 0) {
+      const extra = Math.round((salaryAmt*0.20) - (salaryAmt - spent));
+      insights.push({
+        id: 'low_savings', category: 'savings', priority: 'high',
+        icon: '💰', title: 'Savings Rate Below Target',
+        detail: `You're saving ${savingsRate}% — financial advisors recommend 20-30% for Indian earners. To reach 20%, cut ₹${Math.max(0,extra).toLocaleString('en-IN')}/month from discretionary spend. Top area: ${byCategory[0]?.category_slug || 'food'}.`,
+        metric: `${savingsRate}%`, metric_label: 'current savings rate',
+        action: 'view_spending', action_label: 'Find Savings',
+      });
+    }
 
-Guidelines:
-- Give specific, actionable advice using the user's real numbers
-- Use ₹ currency and Indian financial context (UPI, NEFT, Section 80C, etc.)
-- Be concise: 2-4 sentences per response unless detail is requested
-- Use emojis sparingly to make responses feel friendly
-- If you suggest saving a specific amount, make it realistic based on their data`;
+    // ── RULE 6: CC outstanding ─────────────────────────────────
+    if (ccTotal > salaryAmt*0.3 && salaryAmt>0) {
+      const monthlyInterest = Math.round(ccTotal*0.03);
+      insights.push({
+        id: 'cc_outstanding', category: 'debt', priority: 'high',
+        icon: '💳', title: 'Credit Card Balance is Growing',
+        detail: `₹${Math.round(ccTotal).toLocaleString('en-IN')} outstanding across ${creditCards.length} card${creditCards.length>1?'s':''}. At 36% annual interest this costs ~₹${monthlyInterest.toLocaleString('en-IN')}/month. Clear the highest-balance card first.`,
+        metric: `₹${Math.round(ccTotal).toLocaleString('en-IN')}`, metric_label: 'CC outstanding',
+        action: 'view_debt_payoff', action_label: 'View Strategy',
+      });
+    }
 
-    const anthropic = new Anthropic({ apiKey });
-    const msgs: Array<{role:'user'|'assistant';content:string}> = [
-      ...history.slice(-8), // keep last 8 turns for context
-      { role: 'user', content: message }
-    ];
+    // ── RULE 7: Spending up vs last month ──────────────────────
+    if (spendChange > 20 && prevSpent>0) {
+      const top = byCategory[0];
+      insights.push({
+        id: 'spend_spike', category: 'spending', priority: 'medium',
+        icon: '📈', title: `Spending Up ${spendChange}% vs Last Month`,
+        detail: `You spent ₹${Math.round(spent).toLocaleString('en-IN')} so far vs ₹${Math.round(prevSpent).toLocaleString('en-IN')} all of last month. Biggest driver: ${top?.category_slug||'unknown'} (₹${Math.round(parseFloat(top?.total||0)).toLocaleString('en-IN')}).`,
+        metric: `+${spendChange}%`, metric_label: 'vs last month',
+        action: 'view_spending', action_label: 'Review Spending',
+      });
+    }
 
-    const response = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 500,
-      system: systemPrompt,
-      messages: msgs,
+    // ── RULE 8: Budget breaches ────────────────────────────────
+    const overBudget = budgets.filter((b:any)=>{
+      const cat = byCategory.find((c:any)=>c.category_slug===b.category_slug);
+      return cat && parseFloat(cat.total)>parseFloat(b.amount);
     });
+    if (overBudget.length>0) {
+      const worst = overBudget.map((b:any)=>{
+        const cat = byCategory.find((c:any)=>c.category_slug===b.category_slug);
+        return { slug:b.category_slug, pct:Math.round((parseFloat(cat?.total||0)/parseFloat(b.amount))*100) };
+      }).sort((a:any,b:any)=>b.pct-a.pct)[0];
+      insights.push({
+        id: 'budget_breach', category: 'budgets', priority: 'medium',
+        icon: '📊', title: `${overBudget.length} Budget${overBudget.length>1?'s':''} Exceeded`,
+        detail: `${worst.slug} is at ${worst.pct}% of budget. ${overBudget.length>1?`Plus ${overBudget.length-1} more categor${overBudget.length>2?'ies':'y'}.`:''} Consider adjusting budgets or reducing spend in these areas.`,
+        metric: `${overBudget.length} categor${overBudget.length>1?'ies':'y'}`, metric_label: 'over budget',
+        action: 'view_spending', action_label: 'Review Budgets',
+      });
+    }
 
-    const reply = (response.content[0] as any).text || '';
-    return ok(res, { reply, input_tokens: response.usage.input_tokens, output_tokens: response.usage.output_tokens });
+    // ── RULE 9: Goal behind schedule ──────────────────────────
+    for (const g of goals) {
+      if (!g.deadline) continue;
+      const deadline = new Date(g.deadline);
+      const daysLeft2 = Math.round((deadline.getTime()-now.getTime())/86400000);
+      const pct = parseFloat(g.target_amount)>0 ? (parseFloat(g.current_amount)/parseFloat(g.target_amount))*100 : 0;
+      const daysTotal = 365; // approximate
+      const expectedPct = Math.min(100,(1-daysLeft2/daysTotal)*100);
+      if (pct < expectedPct - 15 && daysLeft2 > 0) {
+        const remaining2 = parseFloat(g.target_amount)-parseFloat(g.current_amount);
+        const monthsLeft = Math.max(1,Math.round(daysLeft2/30));
+        insights.push({
+          id: `goal_behind_${g.title}`, category: 'goals', priority: 'medium',
+          icon: '🎯', title: `Goal Behind Schedule: ${g.title}`,
+          detail: `${Math.round(pct)}% complete with ${daysLeft2} days left. Need ₹${Math.round(remaining2/monthsLeft).toLocaleString('en-IN')}/month to hit deadline.`,
+          metric: `${Math.round(pct)}%`, metric_label: 'goal progress',
+          action: 'view_goals', action_label: 'Update Goal',
+        });
+        break; // one goal insight at a time
+      }
+    }
+
+    // ── RULE 10: Zero investments ──────────────────────────────
+    if (investTotal === 0 && salaryAmt > 50000) {
+      const suggested = Math.round(salaryAmt * 0.10);
+      insights.push({
+        id: 'no_investments', category: 'investments', priority: 'medium',
+        icon: '📈', title: 'No SIP/Investment Detected',
+        detail: `You have no recurring investments set up. Starting a ₹${suggested.toLocaleString('en-IN')}/month SIP in an index fund now could grow to ₹${Math.round(suggested*12*15*2.5).toLocaleString('en-IN')} in 15 years (at 12% CAGR).`,
+        metric: '₹0', metric_label: 'monthly investment',
+        action: 'view_money', action_label: 'Add Investment',
+      });
+    }
+
+    // ── RULE 11: Good savings rate (positive reinforcement) ────
+    if (savingsRate >= 30 && salaryAmt > 0) {
+      insights.push({
+        id: 'great_savings', category: 'savings', priority: 'low',
+        icon: '🌟', title: 'Excellent Savings Rate!',
+        detail: `Saving ${savingsRate}% of income puts you in the top tier of Indian earners. Keep it up — consider channeling the surplus into equity mutual funds for long-term wealth.`,
+        metric: `${savingsRate}%`, metric_label: 'savings rate',
+        action: 'view_money', action_label: 'See Investments',
+      });
+    }
+
+    // ── RULE 12: Spending down (positive) ─────────────────────
+    if (spendChange < -10 && prevSpent > 0) {
+      insights.push({
+        id: 'spend_down', category: 'spending', priority: 'low',
+        icon: '✅', title: `Spending Down ${Math.abs(spendChange)}% vs Last Month`,
+        detail: `Great discipline! You've spent ₹${Math.round(prevSpent-spent).toLocaleString('en-IN')} less than last month. Consider directing these savings toward your highest-priority goal.`,
+        metric: `-${Math.abs(spendChange)}%`, metric_label: 'vs last month',
+        action: 'view_goals', action_label: 'Add to Goal',
+      });
+    }
+
+    // Sort: critical → high → medium → low
+    const order: Record<string,number> = { critical:0, high:1, medium:2, low:3 };
+    insights.sort((a,b) => order[a.priority]-order[b.priority]);
+
+    return ok(res, {
+      insights,
+      generated_at: now.toISOString(),
+      engine_version: '2.1',  // bump this when rules change — clients can show "Updated"
+      context: {
+        salary: salaryAmt, spent, savings_rate: savingsRate,
+        emi_burden: emiBurden, emergency_months: Math.round(emergencyMonths*10)/10,
+        days_left: daysLeft, projected_spend: projected,
+      },
+    });
   } catch (e: any) {
-    console.error('[ai-coach]', e.message);
-    return fail(res, 'AI coach error', 500);
+    console.error('[financial-advisor]', e.message);
+    return fail(res, 'Server error', 500);
   }
 });
 

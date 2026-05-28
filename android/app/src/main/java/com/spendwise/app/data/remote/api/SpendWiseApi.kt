@@ -217,9 +217,9 @@ interface GoalsApi {
     suspend fun deleteGoal(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
 }
 
-interface AiCoachApi {
-    @POST("analytics/ai-coach")
-    suspend fun chat(@Body req: AiCoachRequest): Response<ApiResponse<AiCoachResponse>>
+interface FinancialAdvisorApi {
+    @GET("analytics/financial-advisor")
+    suspend fun getInsights(): Response<ApiResponse<FinancialAdvisorDto>>
 }
 
 interface HealthScoreApi {

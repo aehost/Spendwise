@@ -153,8 +153,6 @@ private fun RegimeCard(name: String, tax: Double, rate: Double, monthlyTds: Doub
         Spacer(Modifier.height(6.dp))
         Text("${monthlyTds.formatCurrency()}/mo TDS", fontSize = 11.sp, color = TextSecondary)
         Text("${rate}% effective rate", fontSize = 10.sp, color = TextMuted)
-        Text("₹${deductions.toLong().toLocaleString()} deductions", fontSize = 10.sp, color = TextMuted)
+        Text("₹${String.format("%,d", deductions.toLong())} deductions", fontSize = 10.sp, color = TextMuted)
     }
 }
-
-private fun Long.toLocaleString(): String = String.format("%,d", this)

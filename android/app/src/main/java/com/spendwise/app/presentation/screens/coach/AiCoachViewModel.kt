@@ -2,53 +2,51 @@ package com.spendwise.app.presentation.screens.coach
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.spendwise.app.data.remote.api.AiCoachApi
-import com.spendwise.app.data.remote.dto.AiCoachMessage
-import com.spendwise.app.data.remote.dto.AiCoachRequest
+import com.spendwise.app.data.remote.api.FinancialAdvisorApi
+import com.spendwise.app.data.remote.dto.AdvisorInsightDto
+import com.spendwise.app.data.remote.dto.AdvisorContextDto
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-data class AiCoachState(
-    val messages: List<ChatMessage> = emptyList(),
-    val isTyping: Boolean = false,
+data class AdvisorState(
+    val isLoading: Boolean = true,
+    val insights: List<AdvisorInsightDto> = emptyList(),
+    val context: AdvisorContextDto? = null,
+    val engineVersion: String = "",
+    val generatedAt: String = "",
     val error: String? = null
 )
 
 @HiltViewModel
 class AiCoachViewModel @Inject constructor(
-    private val api: AiCoachApi
+    private val api: FinancialAdvisorApi
 ) : ViewModel() {
-    private val _state = MutableStateFlow(AiCoachState())
-    val state: StateFlow<AiCoachState> = _state
+    private val _state = MutableStateFlow(AdvisorState())
+    val state: StateFlow<AdvisorState> = _state
 
-    fun sendMessage(userText: String) {
-        val updated = _state.value.messages + ChatMessage("user", userText)
-        _state.value = _state.value.copy(messages = updated, isTyping = true, error = null)
+    init { load() }
 
+    fun load() {
         viewModelScope.launch {
+            _state.value = AdvisorState(isLoading = true)
             try {
-                val history = updated.dropLast(1).map { AiCoachMessage(it.role, it.content) }
-                val resp = api.chat(AiCoachRequest(message = userText, history = history))
-                if (resp.isSuccessful && resp.body()?.success == true) {
-                    val reply = resp.body()?.data?.reply ?: "I couldn't generate a response."
-                    _state.value = _state.value.copy(
-                        messages = updated + ChatMessage("assistant", reply),
-                        isTyping = false
+                val r = api.getInsights()
+                if (r.isSuccessful && r.body()?.success == true) {
+                    val data = r.body()?.data
+                    _state.value = AdvisorState(
+                        insights      = data?.insights ?: emptyList(),
+                        context       = data?.context,
+                        engineVersion = data?.engineVersion ?: "",
+                        generatedAt   = data?.generatedAt ?: ""
                     )
                 } else {
-                    _state.value = _state.value.copy(
-                        isTyping = false,
-                        error = resp.body()?.error ?: "Failed to get response. Is ANTHROPIC_API_KEY set?"
-                    )
+                    _state.value = AdvisorState(error = r.body()?.error ?: "Failed to load")
                 }
             } catch (e: Exception) {
-                _state.value = _state.value.copy(
-                    isTyping = false,
-                    error = "Network error: ${e.message}"
-                )
+                _state.value = AdvisorState(error = e.message ?: "Network error")
             }
         }
     }

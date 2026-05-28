@@ -42,7 +42,7 @@ fun ToolsScreen(
     onSettings: () -> Unit
 ) {
     val tools = listOf(
-        ToolCard("AI Finance Coach", "Ask Claude anything about your money", Icons.Filled.AutoAwesome, GradientPurple, "NEW", onAiCoach),
+        ToolCard("Financial Advisor", "Personalised algorithm-powered insights", Icons.Filled.AutoAwesome, GradientPurple, "SMART", onAiCoach),
         ToolCard("Health Score", "Your financial fitness score", Icons.Filled.Favorite, GradientGreen, null, onHealthScore),
         ToolCard("Cash Flow Forecast", "See your next 90 days cash flow", Icons.Filled.DateRange, GradientTeal, null, onCashFlow),
         ToolCard("Debt Payoff Planner", "Snowball vs Avalanche strategy", Icons.Filled.AccountBalance, GradientPink, null, onDebtPayoff),
@@ -108,7 +108,7 @@ private fun AiCoachHeroCard(onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("AI Finance Coach", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                        Text("Financial Advisor", fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.background(Color.White.copy(0.2f), RoundedCornerShape(20.dp)).padding(horizontal = 8.dp, vertical = 2.dp)) {
                             Text("NEW", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
@@ -116,7 +116,7 @@ private fun AiCoachHeroCard(onClick: () -> Unit) {
                     }
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "Ask Claude anything — \"Can I afford a vacation?\", \"Which loan to pay first?\"",
+                        "12 smart rules analyse your spending, debt, bills & goals — updated without reinstalling",
                         fontSize = 13.sp, color = Color.White.copy(0.85f), lineHeight = 18.sp
                     )
                     Spacer(Modifier.height(12.dp))
