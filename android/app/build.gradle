@@ -31,6 +31,9 @@ android {
         // Base URL comes from local.properties (real device) or falls back to emulator IP
         buildConfigField "String", "BASE_URL", "\"${devBaseUrl}\""
 
+        // Custom runner for Hilt injection in instrumented tests
+        testInstrumentationRunner "com.spendwise.app.runner.HiltTestRunner"
+
         kapt {
             arguments {
                 arg("room.schemaLocation", "$projectDir/schemas")
@@ -79,8 +82,25 @@ android {
         resources {
             excludes += ['/META-INF/{AL2.0,LGPL2.1}',
                          'META-INF/NOTICE.md', 'META-INF/LICENSE.md',
-                         'META-INF/NOTICE', 'META-INF/LICENSE']
+                         'META-INF/NOTICE', 'META-INF/LICENSE',
+                         'META-INF/LICENSE.txt', 'META-INF/NOTICE.txt']
         }
+    }
+
+    testOptions {
+        unitTests {
+            includeAndroidResources = true  // Required for Robolectric
+            returnDefaultValues     = true  // Prevent Log.d() etc. from throwing
+            all {
+                jvmArgs '-Xmx768m', '-XX:MaxMetaspaceSize=256m'
+                testLogging {
+                    events "passed", "failed", "skipped", "standardError"
+                    exceptionFormat "full"
+                    showStandardStreams true
+                }
+            }
+        }
+        animationsDisabled = true  // Disable animations during UI tests
     }
 }
 
@@ -152,6 +172,47 @@ dependencies {
     // ── Gmail IMAP via JavaMail for Android ────────────────────
     implementation 'com.sun.mail:android-mail:1.6.7'
     implementation 'com.sun.mail:android-activation:1.6.7'
+
+    // ═══════════════════════════════════════════════════════════
+    // TEST DEPENDENCIES
+    // ═══════════════════════════════════════════════════════════
+
+    // ── Unit tests (JVM — no device/emulator needed) ───────────
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'io.mockk:mockk:1.13.10'
+    testImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    testImplementation 'app.cash.turbine:turbine:1.1.0'
+    testImplementation 'androidx.arch.core:core-testing:2.2.0'
+    testImplementation 'org.robolectric:robolectric:4.12.1'
+    testImplementation 'com.google.truth:truth:1.4.2'
+    testImplementation 'androidx.test:core-ktx:1.5.0'
+    testImplementation 'androidx.test.ext:junit-ktx:1.1.5'
+
+    // WorkManager testing (unit)
+    testImplementation 'androidx.work:work-testing:2.9.0'
+
+    // Hilt testing (unit)
+    testImplementation 'com.google.dagger:hilt-android-testing:2.51'
+    kaptTest 'com.google.dagger:hilt-android-compiler:2.51'
+
+    // ── Instrumented / UI tests (requires device or emulator) ──
+    androidTestImplementation 'androidx.test.ext:junit:1.1.5'
+    androidTestImplementation 'androidx.test.ext:junit-ktx:1.1.5'
+    androidTestImplementation 'androidx.test.espresso:espresso-core:3.5.1'
+    androidTestImplementation 'androidx.test:runner:1.5.2'
+    androidTestImplementation 'androidx.test:rules:1.5.0'
+    androidTestImplementation 'androidx.compose.ui:ui-test-junit4'
+    androidTestImplementation 'com.google.truth:truth:1.4.2'
+    androidTestImplementation 'io.mockk:mockk-android:1.13.10'
+    androidTestImplementation 'org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3'
+    androidTestImplementation 'androidx.work:work-testing:2.9.0'
+
+    // Hilt testing (instrumented)
+    androidTestImplementation 'com.google.dagger:hilt-android-testing:2.51'
+    kaptAndroidTest 'com.google.dagger:hilt-android-compiler:2.51'
+
+    // Debug helpers for Compose UI tests
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
 
 }
 

@@ -22,12 +22,17 @@ object GmailImapClient {
     private const val IMAP_HOST = "imap.gmail.com"
     private const val IMAP_PORT = 993
 
-    // Known Indian bank email senders
+    // Known Indian bank email senders.
+    // BUG FIX: Use "@keyword" prefix for short/ambiguous names (kotak, hsbc, pnb)
+    // so "alerts@notakotak.io" does NOT match "@kotak".
+    // BUG FIX: Changed "sc.com" → "@sc.com" (prevents "disc.com" false positive).
     val BANK_SENDER_KEYWORDS = listOf(
         "hdfcbank", "icicibank", "axisbank", "sbicard", "sbi.co.in",
-        "kotak", "yesbank", "indusind", "federalbank", "paytmbank",
-        "canarabank", "unionbankofindia", "pnb", "bobcard", "idfcfirstbank",
-        "rblbank", "sc.com", "hsbc", "citibank"
+        "@kotak", "yesbank", "indusind", "federalbank", "paytmbank",
+        "canarabank", "unionbankofindia", "@pnb", "bobcard", "idfcfirstbank",
+        "rblbank", "@sc.com", "@hsbc", "citibank",
+        // Additional banks often missed
+        "amex", "americanexpress", "standardchartered", "aubank", "idbibank"
     )
 
     fun fetchBankEmailsSince(email: String, appPassword: String, sinceMs: Long): List<RawBankEmail> {

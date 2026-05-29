@@ -72,7 +72,12 @@ class WeeklyReviewWorker @AssistedInject constructor(
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_DEFAULT)
                 .setAutoCancel(true)
                 .build()
-            nm.notify(9002, notif)
+            // BUG FIX: Use week-of-year as notification ID so that each weekly
+            // notification replaces the previous one (same ID = update), rather
+            // than a hardcoded 9002 that conflicts if future changes add other
+            // 9002 notifications from another worker.
+            val weekNotifId = 9000 + today.get(java.time.temporal.WeekFields.ISO.weekOfWeekBasedYear())
+            nm.notify(weekNotifId, notif)
             tokenManager.lastWeeklyReviewDate = today.toString()
             Result.success()
         } catch (_: Exception) { Result.retry() }

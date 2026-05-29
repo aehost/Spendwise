@@ -40,6 +40,9 @@ import java.time.LocalTime
 import java.time.Month
 import kotlin.math.ceil
 import kotlinx.coroutines.delay
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -51,11 +54,18 @@ fun HomeScreen(onSettings: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
     var quickMerchant by remember { mutableStateOf("") }
     var quickCategory by remember { mutableStateOf("other") }
 
-    // Auto-refresh every 30 seconds to pick up new SMS-imported transactions
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(30_000L)
-            vm.refresh()
+    // Auto-refresh every 30 seconds to pick up new SMS-imported transactions.
+    // BUG FIX: Use androidx.compose.runtime.DisposableEffect-safe approach via
+    // lifecycle state so the loop stops when the screen leaves the Composition
+    // (e.g., user navigates to another tab) — prevents ghost refreshes that
+    // consume battery and network after the screen is gone.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            while (true) {
+                delay(30_000L)
+                vm.refresh()
+            }
         }
     }
 
