@@ -102,6 +102,42 @@ fun BudgetScreen(onBack: () -> Unit, vm: BudgetViewModel = hiltViewModel()) {
                         )
                     }
 
+                    // Recurring-budget carry-forward: offered when this month has
+                    // no limits yet but the previous month did.
+                    if (state.canCopyPrevious && state.items.none { it.budget > 0 }) {
+                        item {
+                            Card(
+                                Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = Primary.copy(0.1f))
+                            ) {
+                                Row(
+                                    Modifier.padding(14.dp).fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text("Reuse last month's budget", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                                        Text("Carry your category limits forward to this month", fontSize = 11.sp, color = TextSecondary)
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Button(
+                                        onClick = vm::copyPreviousMonthBudgets,
+                                        enabled = !state.isSaving,
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                                    ) {
+                                        if (state.isSaving) {
+                                            CircularProgressIndicator(Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                                        } else {
+                                            Text("Copy", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         Text(
                             "Tap any category to set a budget",

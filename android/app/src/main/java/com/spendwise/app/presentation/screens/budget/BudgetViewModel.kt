@@ -36,7 +36,10 @@ data class BudgetState(
     val editSlug: String? = null,
     val editAmount: String = "",
     val error: String? = null,
-    val isSaving: Boolean = false
+    val isSaving: Boolean = false,
+    // True when the viewed month has no budgets set but the previous month did,
+    // so we can offer to carry last month's limits forward (recurring budgets).
+    val canCopyPrevious: Boolean = false
 )
 
 @HiltViewModel
@@ -46,6 +49,9 @@ class BudgetViewModel @Inject constructor(
 ) : ViewModel() {
     private val _state = MutableStateFlow(BudgetState())
     val state: StateFlow<BudgetState> = _state
+
+    // Cached previous-month limits, used by copyPreviousMonthBudgets().
+    private var previousMonthBudgets: List<BudgetEntry> = emptyList()
 
     companion object {
         val CATEGORY_DISPLAY = mapOf(
@@ -97,12 +103,45 @@ class BudgetViewModel @Inject constructor(
             }.sortedWith(
                 compareByDescending<BudgetItem> { it.budget > 0 }.thenByDescending { it.spent }
             )
+
+            // Carry-forward availability: if this month has no limits set, look at
+            // the previous month so we can offer to reuse those limits.
+            var canCopy = false
+            if (budgets.isEmpty()) {
+                val prev = LocalDate.of(y, m, 1).minusMonths(1)
+                val prevRaw = runCatching { userApi.getBudgets(prev.monthValue, prev.year) }
+                    .getOrNull()?.body()?.data?.budgets ?: emptyList()
+                previousMonthBudgets = prevRaw
+                    .filter { it.amount > 0 }
+                    .map { BudgetEntry(it.categorySlug, it.amount) }
+                canCopy = previousMonthBudgets.isNotEmpty()
+            } else {
+                previousMonthBudgets = emptyList()
+            }
+
             _state.value = _state.value.copy(
-                isLoading   = false,
-                items       = items,
-                totalBudget = items.sumOf { it.budget },
-                totalSpent  = items.sumOf { it.spent }
+                isLoading       = false,
+                items           = items,
+                totalBudget     = items.sumOf { it.budget },
+                totalSpent      = items.sumOf { it.spent },
+                canCopyPrevious = canCopy
             )
+        }
+    }
+
+    /** Reuse the previous month's category limits for the month being viewed. */
+    fun copyPreviousMonthBudgets() {
+        val entries = previousMonthBudgets
+        if (entries.isEmpty()) return
+        val m = _state.value.month; val y = _state.value.year
+        viewModelScope.launch {
+            _state.value = _state.value.copy(isSaving = true)
+            try {
+                userApi.updateBudgets(UpdateBudgetsRequest(entries, m, y))
+                load()
+            } catch (e: Exception) {
+                _state.value = _state.value.copy(isSaving = false, error = e.message)
+            }
         }
     }
 
