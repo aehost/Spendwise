@@ -264,13 +264,15 @@ private fun CategoryRow(emoji: String, name: String, amount: Double, pct: Int, b
                 Text("$pct%", fontSize = 12.sp, color = TextMuted, modifier = Modifier.width(30.dp), textAlign = TextAlign.End)
             }
             if (budgetPct != null) {
-                Spacer(Modifier.height(4.dp))
-                LinearProgressIndicator(
-                    progress = { (budgetPct / 100f).coerceIn(0f, 1f) },
-                    modifier = Modifier.fillMaxWidth().height(4.dp),
-                    color = statusColor,
+                Spacer(Modifier.height(6.dp))
+                // Shared rounded bar — matches the bars used across Budget/Goals/Health.
+                com.spendwise.app.presentation.components.SwLinearProgress(
+                    progress   = (budgetPct / 100f).coerceIn(0f, 1f),
+                    height     = 5.dp,
+                    color      = statusColor,
                     trackColor = statusColor.copy(0.15f)
                 )
+                Spacer(Modifier.height(2.dp))
                 Text("${budgetPct}% of budget", fontSize = 10.sp, color = statusColor)
             }
         }
