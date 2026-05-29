@@ -1,15 +1,20 @@
 package com.spendwise.app.presentation.screens.goals
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendwise.app.core.apiErrorMessage
+import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.GoalsApi
+import com.spendwise.app.data.worker.GoalMilestoneWorker
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.ContributeGoalRequest
 import com.spendwise.app.data.remote.dto.CreateGoalRequest
 import com.spendwise.app.data.remote.dto.FinancialGoalDto
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -61,9 +66,11 @@ data class GoalsState(
 
 @HiltViewModel
 class GoalsViewModel @Inject constructor(
+    @ApplicationContext private val appContext: Context,
     private val goalsApi: GoalsApi,
     private val userApi: UserApi,
-    private val analyticsApi: AnalyticsApi
+    private val analyticsApi: AnalyticsApi,
+    private val tokenManager: TokenManager
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(GoalsState())
@@ -98,6 +105,7 @@ class GoalsViewModel @Inject constructor(
                     totalMonthlyNeeded     = totalNeeded,
                     availableMonthlySavings = available
                 )
+                checkGoalMilestones(goalsList)
             } catch (e: Exception) {
                 _state.value = _state.value.copy(isLoading = false, error = e.message ?: "Failed to load goals")
             }
@@ -142,7 +150,8 @@ class GoalsViewModel @Inject constructor(
                 val resp = goalsApi.contributeToGoal(goalId, ContributeGoalRequest(amount, note))
                 if (resp.isSuccessful && resp.body()?.success == true) {
                     _state.value = _state.value.copy(successMessage = "Contribution added!")
-                    load()
+                    load() // load() also calls checkGoalMilestones
+                    GoalMilestoneWorker.triggerCheck(appContext)
                 } else {
                     _state.value = _state.value.copy(error = resp.apiErrorMessage())
                 }
@@ -167,6 +176,51 @@ class GoalsViewModel @Inject constructor(
 
     fun clearMessages() {
         _state.value = _state.value.copy(successMessage = null, error = null)
+    }
+
+    private fun checkGoalMilestones(goals: List<FinancialGoalDto>) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val milestoneMap: MutableMap<String, Int> = try {
+                    com.google.gson.Gson().fromJson(
+                        tokenManager.goalMilestoneMapJson,
+                        object : com.google.gson.reflect.TypeToken<Map<String, Int>>() {}.type
+                    ) ?: mutableMapOf()
+                } catch (_: Exception) { mutableMapOf() }
+
+                val nm = appContext.getSystemService(android.content.Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    nm.createNotificationChannel(
+                        android.app.NotificationChannel(
+                            "goal_milestones", "Goal Milestones", android.app.NotificationManager.IMPORTANCE_HIGH
+                        )
+                    )
+                }
+
+                goals.forEach { goal ->
+                    if (goal.isCompleted || goal.targetAmount <= 0) return@forEach
+                    val pct = ((goal.currentAmount / goal.targetAmount) * 100).toInt()
+                    val lastPct = milestoneMap[goal.id] ?: 0
+                    val crossed = listOf(25, 50, 75, 100).firstOrNull { it in (lastPct + 1)..pct }
+                    if (crossed != null) {
+                        val emoji = when (crossed) { 25 -> "🌱"; 50 -> "🌿"; 75 -> "🌳"; else -> "🏆" }
+                        val body = "$emoji You've reached $crossed% of your '${goal.title}' goal! " +
+                            "₹${"%,.0f".format(goal.currentAmount)} of ₹${"%,.0f".format(goal.targetAmount)} saved."
+                        val notif = androidx.core.app.NotificationCompat.Builder(appContext, "goal_milestones")
+                            .setSmallIcon(android.R.drawable.star_big_on)
+                            .setContentTitle("Goal Milestone Reached!")
+                            .setContentText(body)
+                            .setStyle(androidx.core.app.NotificationCompat.BigTextStyle().bigText(body))
+                            .setPriority(androidx.core.app.NotificationCompat.PRIORITY_HIGH)
+                            .setAutoCancel(true)
+                            .build()
+                        nm.notify(9100 + goal.id.hashCode(), notif)
+                        milestoneMap[goal.id] = crossed
+                    }
+                }
+                tokenManager.goalMilestoneMapJson = com.google.gson.Gson().toJson(milestoneMap)
+            } catch (_: Exception) {}
+        }
     }
 
     /** Compute a personalised achievement plan for a single goal. */

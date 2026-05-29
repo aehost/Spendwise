@@ -77,7 +77,9 @@ android {
 
     packagingOptions {
         resources {
-            excludes += ['/META-INF/{AL2.0,LGPL2.1}']
+            excludes += ['/META-INF/{AL2.0,LGPL2.1}',
+                         'META-INF/NOTICE.md', 'META-INF/LICENSE.md',
+                         'META-INF/NOTICE', 'META-INF/LICENSE']
         }
     }
 }
@@ -146,6 +148,10 @@ dependencies {
 
     // ── Google Sign-In (Gmail OAuth) ──────────────────────────────
     implementation 'com.google.android.gms:play-services-auth:21.0.0'
+
+    // ── Gmail IMAP via JavaMail for Android ────────────────────
+    implementation 'com.sun.mail:android-mail:1.6.7'
+    implementation 'com.sun.mail:android-activation:1.6.7'
 
 }
 

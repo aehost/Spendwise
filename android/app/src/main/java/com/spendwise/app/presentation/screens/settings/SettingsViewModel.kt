@@ -1,33 +1,27 @@
 package com.spendwise.app.presentation.screens.settings
 
 import android.content.Context
-import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.*
-import com.google.android.gms.auth.UserRecoverableAuthException
-import com.spendwise.app.data.gmail.GmailAuthManager
+import com.spendwise.app.data.gmail.GmailImapClient
+import com.spendwise.app.data.local.preferences.GmailImapAccount
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.AuthApi
-import com.spendwise.app.data.remote.api.GmailApi
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.ChangePasswordRequest
 import com.spendwise.app.data.remote.dto.CreateSupportTicketRequest
 import com.spendwise.app.data.remote.dto.GmailAccountDto
-import com.spendwise.app.data.remote.dto.GmailConnectRequest
 import com.spendwise.app.data.remote.dto.LogoutRequest
 import com.spendwise.app.data.remote.dto.UpdateSalaryRequest
-import com.spendwise.app.data.worker.GmailSyncWorker
+import com.spendwise.app.data.worker.GmailImapWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 data class SettingsState(
@@ -36,9 +30,8 @@ data class SettingsState(
     val salaryAmount: Double? = null,
     val salaryDay: Int? = null,
     val smsScanFromMs: Long = 0L,
-    // Gmail — multi-account
+    // Gmail IMAP accounts
     val gmailAccounts: List<GmailAccountDto> = emptyList(),
-    val deviceGoogleAccounts: List<String> = emptyList(),
     val gmailLoading: Boolean = false,
     val gmailError: String? = null,
     val gmailSyncing: Boolean = false,
@@ -59,21 +52,11 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
     private val tokenManager: TokenManager,
     private val authApi: AuthApi,
-    private val userApi: UserApi,
-    private val gmailApi: GmailApi,
-    private val gmailAuthManager: GmailAuthManager
+    private val userApi: UserApi
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SettingsState())
     val state: StateFlow<SettingsState> = _state
-
-    // Emits a permission-grant Intent when Google needs user approval for Gmail scope.
-    // SettingsScreen must collect this and launch it via ActivityResultLauncher.
-    private val _gmailAuthIntent = MutableSharedFlow<Intent>(extraBufferCapacity = 1)
-    val gmailAuthIntent: SharedFlow<Intent> = _gmailAuthIntent
-
-    // Stores the email pending connection until the auth grant completes
-    private var pendingGmailEmail: String? = null
 
     init { load() }
 
@@ -93,152 +76,77 @@ class SettingsViewModel @Inject constructor(
                     )
                 } catch (_: Exception) {}
             }
-            launch { refreshGmailAccounts() }
-            launch { loadDeviceAccounts() }
-        }
-    }
-
-    private suspend fun refreshGmailAccounts() {
-        try {
-            val resp = gmailApi.getAccounts()
-            if (resp.isSuccessful) {
+            // Load IMAP accounts from local storage
+            launch {
+                val imapAccounts = GmailImapWorker.readAccounts(tokenManager)
                 _state.value = _state.value.copy(
-                    gmailAccounts = resp.body()?.data?.accounts?.filter { it.isActive } ?: emptyList()
+                    gmailAccounts = imapAccounts.map { GmailAccountDto(it.email, it.email, null, true) }
                 )
             }
-        } catch (_: Exception) {}
-    }
-
-    private suspend fun loadDeviceAccounts() {
-        val accounts = withContext(Dispatchers.IO) {
-            gmailAuthManager.getDeviceGoogleAccounts()
         }
-        _state.value = _state.value.copy(deviceGoogleAccounts = accounts)
     }
 
-    /** Called when user picks / types a Gmail address to connect. */
-    fun connectGmail(gmailEmail: String) {
-        if (gmailEmail.isBlank() || !gmailEmail.contains("@")) {
+    /** Connect a Gmail account via App Password IMAP. Tests the connection first. */
+    fun connectGmailManual(email: String, appPassword: String) {
+        if (email.isBlank() || !email.contains("@")) {
             _state.value = _state.value.copy(gmailError = "Enter a valid Gmail address")
             return
         }
-        val email = gmailEmail.trim().lowercase()
-        pendingGmailEmail = email
+        if (appPassword.isBlank() || appPassword.length < 8) {
+            _state.value = _state.value.copy(gmailError = "Enter a valid App Password (16 characters from Google Account settings)")
+            return
+        }
         viewModelScope.launch {
             _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
-
-            // Try to obtain a real OAuth token from the device account manager.
-            // NOTE: do NOT apply ?: "" here — a null return means the account is NOT
-            // on this device, which must be handled as an error, not as a success with
-            // an empty token (the old ?: "" bug allowed connecting with no credentials).
-            val tokenResult = withContext(Dispatchers.IO) {
-                runCatching { gmailAuthManager.getTokenOrThrow(email) }
-            }
-
-            when {
-                tokenResult.isSuccess -> {
-                    val token = tokenResult.getOrNull()
-                    if (!token.isNullOrBlank()) {
-                        // Valid token obtained — proceed with connection
-                        doConnectGmail(email, token)
-                    } else {
-                        // getTokenOrThrow() returned null — account not on this device
-                        _state.value = _state.value.copy(
-                            gmailLoading = false,
-                            gmailError   = "\"$email\" is not signed in on this device.\n" +
-                                "Go to Device Settings → Accounts → Add Account → Google, " +
-                                "sign in with that Gmail, then come back here to connect."
-                        )
+            withContext(Dispatchers.IO) {
+                try {
+                    // Test IMAP connection first
+                    GmailImapClient.fetchBankEmailsSince(
+                        email.trim(), appPassword.trim(),
+                        System.currentTimeMillis() - 3600_000L
+                    )
+                    val accounts = GmailImapWorker.readAccounts(tokenManager).toMutableList()
+                    if (accounts.none { it.email == email.trim().lowercase() }) {
+                        accounts.add(GmailImapAccount(email.trim().lowercase(), appPassword.trim(), 0L))
+                        GmailImapWorker.writeAccounts(tokenManager, accounts)
                     }
-                }
-                tokenResult.exceptionOrNull() is UserRecoverableAuthException -> {
-                    // User must grant Gmail read permission — launch the system consent dialog
-                    val authIntent = (tokenResult.exceptionOrNull() as UserRecoverableAuthException).intent
-                    if (authIntent != null) {
-                        _gmailAuthIntent.emit(authIntent)
-                        _state.value = _state.value.copy(gmailLoading = false)
-                    } else {
-                        // Permission exception but no intent — try connecting anyway (edge case)
-                        doConnectGmail(email, "")
-                    }
-                }
-                else -> {
-                    // Non-recoverable error (account removed, GMS unavailable, etc.)
                     _state.value = _state.value.copy(
                         gmailLoading = false,
-                        gmailError   = "\"$email\" is not signed in on this device.\n" +
-                            "Go to Device Settings → Accounts → Add Account → Google, " +
-                            "sign in with that Gmail, then come back here to connect."
+                        gmailAccounts = accounts.map { GmailAccountDto(it.email, it.email, null, true) }
                     )
+                    GmailImapWorker.triggerNow(appContext)
+                } catch (e: Exception) {
+                    val msg = when {
+                        e.message?.contains("Authentication failed", true) == true ->
+                            "Authentication failed. Make sure you're using an App Password (not your regular Gmail password).\nGenerate one at myaccount.google.com/apppasswords"
+                        e.message?.contains("Connection refused", true) == true ->
+                            "Could not connect. Check your internet connection."
+                        else -> "Connection failed: ${e.message}"
+                    }
+                    _state.value = _state.value.copy(gmailLoading = false, gmailError = msg)
                 }
             }
         }
     }
 
-    /** Called after the user grants Gmail scope via the system auth dialog. */
-    fun retryConnectAfterGmailAuth() {
-        val email = pendingGmailEmail ?: return
-        viewModelScope.launch {
-            _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
-            val token = withContext(Dispatchers.IO) { gmailAuthManager.getTokenBlocking(email) ?: "" }
-            doConnectGmail(email, token)
-        }
+    fun removeGmailImapAccount(email: String) {
+        val accounts = GmailImapWorker.readAccounts(tokenManager).filter { it.email != email }
+        GmailImapWorker.writeAccounts(tokenManager, accounts)
+        _state.value = _state.value.copy(
+            gmailAccounts = accounts.map { GmailAccountDto(it.email, it.email, null, true) }
+        )
     }
 
-    private suspend fun doConnectGmail(gmailEmail: String, oauthToken: String) {
-        try {
-            val resp = gmailApi.addAccount(
-                GmailConnectRequest(
-                    gmailEmail   = gmailEmail,
-                    accessToken  = oauthToken,
-                    refreshToken = null,
-                    tokenExpiry  = null
-                )
-            )
-            if (resp.isSuccessful && resp.body()?.success == true) {
-                refreshGmailAccounts()
-                _state.value = _state.value.copy(gmailLoading = false)
-                triggerImmediateSync()
-            } else {
-                val err = resp.body()?.error ?: "Failed to add Gmail account"
-                _state.value = _state.value.copy(gmailLoading = false, gmailError = err)
-            }
-        } catch (e: Exception) {
-            _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message ?: "Network error")
-        }
-    }
-
-    fun removeGmailAccount(accountId: String) {
-        viewModelScope.launch {
-            _state.value = _state.value.copy(gmailLoading = true)
-            try {
-                gmailApi.removeAccount(accountId)
-                _state.value = _state.value.copy(
-                    gmailAccounts = _state.value.gmailAccounts.filter { it.id != accountId },
-                    gmailLoading  = false
-                )
-            } catch (e: Exception) {
-                _state.value = _state.value.copy(gmailLoading = false, gmailError = e.message)
-            }
-        }
-    }
+    // Keep old removeGmailAccount API for UI compatibility
+    fun removeGmailAccount(accountId: String) = removeGmailImapAccount(accountId)
 
     fun syncGmailNow() {
         _state.value = _state.value.copy(gmailSyncing = true)
-        triggerImmediateSync()
+        GmailImapWorker.triggerNow(appContext)
         viewModelScope.launch {
             kotlinx.coroutines.delay(3_000)
-            refreshGmailAccounts()
             _state.value = _state.value.copy(gmailSyncing = false)
         }
-    }
-
-    private fun triggerImmediateSync() {
-        val req = OneTimeWorkRequestBuilder<GmailSyncWorker>()
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
-            .build()
-        WorkManager.getInstance(appContext)
-            .enqueueUniqueWork("gmail_sync_now", ExistingWorkPolicy.REPLACE, req)
     }
 
     fun clearGmailError() { _state.value = _state.value.copy(gmailError = null) }

@@ -15,6 +15,9 @@
     <!-- WorkManager: keep sync workers alive when device is idle -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Exact alarms for 8 AM Daily Pulse -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <!-- Biometric hardware is optional -->
     <uses-feature android:name="android.hardware.fingerprint" android:required="false" />
@@ -55,6 +58,18 @@
             <intent-filter android:priority="100">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
+        </receiver>
+
+        <!-- Home screen widget for budget overview -->
+        <receiver
+            android:name=".data.widget.BudgetWidget"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/budget_widget_info" />
         </receiver>
 
         <!--

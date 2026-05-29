@@ -3,6 +3,8 @@ package com.spendwise.app.presentation.screens.home
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.spendwise.app.core.formatCurrency
+import com.spendwise.app.data.challenge.DailyChallenge
+import com.spendwise.app.data.challenge.DailyChallengeManager
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.remote.api.AnalyticsApi
 import com.spendwise.app.data.remote.api.FinancialAdvisorApi
@@ -11,14 +13,17 @@ import com.spendwise.app.data.remote.api.TransactionApi
 import com.spendwise.app.data.remote.api.UserApi
 import com.spendwise.app.data.remote.dto.AdvisorInsightDto
 import com.spendwise.app.data.remote.dto.BillDto
+import com.spendwise.app.data.remote.dto.CreateTransactionRequest
 import com.spendwise.app.data.remote.dto.DashboardDto
 import com.spendwise.app.data.remote.dto.FinancialGoalDto
 import com.spendwise.app.data.remote.dto.TransactionDto
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import javax.inject.Inject
 
@@ -40,7 +45,17 @@ data class HomeUiState(
     // Spending streak
     val spendingStreak: Int = 0,
     // Round-up savings
-    val roundUpSavings: Double = 0.0
+    val roundUpSavings: Double = 0.0,
+    // Emergency Fund
+    val emergencyFundMonths: Double = 0.0,
+    val emergencyFundTarget: Double = 6.0,
+    // Daily Challenge & XP
+    val todayChallenge: DailyChallenge? = null,
+    val challengeAccepted: Boolean = false,
+    val challengeCompleted: Boolean = false,
+    val xp: Int = 0,
+    val levelName: String = "Saver",
+    val xpProgress: Float = 0f
 )
 
 @HiltViewModel
@@ -109,6 +124,19 @@ class HomeViewModel @Inject constructor(
             // Round-up savings from local storage
             val roundUpSavings = tokenManager.roundUpSavings
 
+            // Emergency fund calculation
+            val bankBalance = dash?.bankBalance ?: 0.0
+            val monthlyExpenses = dash?.totalSpent?.takeIf { it > 0 }
+                ?: (dash?.salary?.amount?.times(0.7) ?: 0.0)
+            val emergencyFundMonths = if (monthlyExpenses > 0) bankBalance / monthlyExpenses else 0.0
+
+            // Daily Challenge & XP
+            val challenge = DailyChallengeManager.getTodayChallenge(tokenManager)
+            val xp = tokenManager.userXp
+            val levelName = DailyChallengeManager.getLevelName(tokenManager)
+            val (xpInLevel, xpForLevel) = DailyChallengeManager.getXpToNextLevel(tokenManager)
+            val xpProgress = if (xpForLevel > 0) (xpInLevel.toFloat() / xpForLevel).coerceIn(0f, 1f) else 0f
+
             _state.value = HomeUiState(
                 isLoading             = false,
                 userName              = tokenManager.userName,
@@ -127,8 +155,63 @@ class HomeViewModel @Inject constructor(
                 salaryDayAmount       = salary,
                 salaryDaySuggestions  = salaryDaySuggestions,
                 spendingStreak        = streak,
-                roundUpSavings        = roundUpSavings
+                roundUpSavings        = roundUpSavings,
+                emergencyFundMonths   = emergencyFundMonths,
+                emergencyFundTarget   = 6.0,
+                todayChallenge        = challenge,
+                challengeAccepted     = tokenManager.dailyChallengeAccepted,
+                challengeCompleted    = tokenManager.dailyChallengeCompleted,
+                xp                    = xp,
+                levelName             = levelName,
+                xpProgress            = xpProgress
             )
+        }
+    }
+
+    fun acceptChallenge() {
+        tokenManager.dailyChallengeAccepted = true
+        DailyChallengeManager.awardXp(tokenManager, 5) // Small XP for accepting
+        val challenge = DailyChallengeManager.getTodayChallenge(tokenManager)
+        val xp = tokenManager.userXp
+        val levelName = DailyChallengeManager.getLevelName(tokenManager)
+        val (xpInLevel, xpForLevel) = DailyChallengeManager.getXpToNextLevel(tokenManager)
+        val xpProgress = if (xpForLevel > 0) (xpInLevel.toFloat() / xpForLevel).coerceIn(0f, 1f) else 0f
+        _state.value = _state.value.copy(
+            challengeAccepted = true,
+            todayChallenge = challenge,
+            xp = xp,
+            levelName = levelName,
+            xpProgress = xpProgress
+        )
+    }
+
+    fun completeChallenge() {
+        val challenge = DailyChallengeManager.getTodayChallenge(tokenManager)
+        if (!tokenManager.dailyChallengeCompleted) {
+            tokenManager.dailyChallengeCompleted = true
+            DailyChallengeManager.awardXp(tokenManager, challenge.xpReward)
+        }
+        load()
+    }
+
+    fun logQuickExpense(amount: Double, merchant: String, categorySlug: String) {
+        viewModelScope.launch {
+            try {
+                val today = LocalDate.now().toString()
+                withContext(Dispatchers.IO) {
+                    transactionApi.createTransaction(
+                        CreateTransactionRequest(
+                            amount          = amount,
+                            merchant        = merchant.ifBlank { "Quick Expense" },
+                            categorySlug    = categorySlug,
+                            transactionDate = today,
+                            isCredit        = false,
+                            isPending       = false
+                        )
+                    )
+                }
+                load()
+            } catch (_: Exception) {}
         }
     }
 

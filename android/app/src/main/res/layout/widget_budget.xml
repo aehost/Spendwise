@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_background"
+    android:padding="12dp"
+    android:gravity="center_vertical">
+
+    <TextView
+        android:id="@+id/widget_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="SpendWise"
+        android:textSize="11sp"
+        android:textColor="#AAAAAA" />
+
+    <TextView
+        android:id="@+id/widget_daily_budget"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="--"
+        android:textSize="26sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF"
+        android:layout_marginTop="4dp" />
+
+    <TextView
+        android:id="@+id/widget_label"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="left today"
+        android:textSize="11sp"
+        android:textColor="#AAAAAA" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_marginTop="8dp"
+        android:background="#33FFFFFF"
+        android:orientation="horizontal">
+        <View
+            android:id="@+id/widget_progress_bar"
+            android:layout_width="0dp"
+            android:layout_height="4dp"
+            android:layout_weight="0.5"
+            android:background="#00E5A0" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/widget_streak"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text=""
+        android:textSize="10sp"
+        android:textColor="#FFB547"
+        android:layout_marginTop="4dp" />
+</LinearLayout>

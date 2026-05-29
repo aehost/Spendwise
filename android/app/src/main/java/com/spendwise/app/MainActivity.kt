@@ -17,6 +17,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.spendwise.app.data.local.preferences.TokenManager
 import com.spendwise.app.data.worker.BillReminderWorker
+import com.spendwise.app.data.worker.DailyPulseWorker
+import com.spendwise.app.data.worker.GmailImapWorker
+import com.spendwise.app.data.worker.PredictiveAlertWorker
+import com.spendwise.app.data.worker.WeeklyReviewWorker
 import com.spendwise.app.presentation.navigation.Screen
 import com.spendwise.app.presentation.navigation.SpendWiseNavGraph
 import com.spendwise.app.presentation.theme.Background
@@ -43,6 +47,10 @@ class MainActivity : AppCompatActivity() {
 
         requestPermissions()
         BillReminderWorker.schedule(this)
+        DailyPulseWorker.schedule(this)
+        PredictiveAlertWorker.schedule(this)
+        WeeklyReviewWorker.schedule(this)
+        GmailImapWorker.schedule(this)
         authenticateThenLaunch()
     }
 

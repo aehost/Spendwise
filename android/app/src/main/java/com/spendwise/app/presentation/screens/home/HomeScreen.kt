@@ -3,12 +3,14 @@ package com.spendwise.app.presentation.screens.home
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -22,6 +24,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.core.formatCurrency
 import com.spendwise.app.core.toFriendlyDate
+import com.spendwise.app.data.challenge.DailyChallenge
 import com.spendwise.app.data.remote.dto.*
 import com.spendwise.app.presentation.theme.*
 import java.time.LocalDate
@@ -37,9 +41,15 @@ import java.time.Month
 import kotlin.math.ceil
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(onSettings: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
     val state by vm.state.collectAsState()
+
+    var showQuickAdd by remember { mutableStateOf(false) }
+    var quickAmount by remember { mutableStateOf("") }
+    var quickMerchant by remember { mutableStateOf("") }
+    var quickCategory by remember { mutableStateOf("other") }
 
     // Auto-refresh every 30 seconds to pick up new SMS-imported transactions
     LaunchedEffect(Unit) {
@@ -53,7 +63,114 @@ fun HomeScreen(onSettings: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
         when {
             state.isLoading -> LoadingState()
             state.dashboard == null && state.dashboardError != null -> ErrorState(state.dashboardError!!, vm::load)
-            else -> DashboardContent(state, onSettings, vm::refresh)
+            else -> DashboardContent(state, onSettings, vm::refresh, vm)
+        }
+
+        // Quick-add FAB
+        if (!state.isLoading) {
+            FloatingActionButton(
+                onClick = { showQuickAdd = true },
+                containerColor = Primary,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(Icons.Filled.Add, "Log Expense", tint = Color.White)
+            }
+        }
+    }
+
+    // Quick Expense Bottom Sheet
+    if (showQuickAdd) {
+        ModalBottomSheet(
+            onDismissRequest = {
+                showQuickAdd = false
+                quickAmount = ""
+                quickMerchant = ""
+                quickCategory = "other"
+            },
+            containerColor = CardBg,
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp)
+                    .padding(bottom = 32.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text("Quick Log Expense", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                OutlinedTextField(
+                    value = quickAmount,
+                    onValueChange = { quickAmount = it },
+                    label = { Text("Amount (₹)", color = TextSecondary) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Bold, color = TextPrimary),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary, unfocusedBorderColor = BorderColor,
+                        focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                        cursorColor = Primary, focusedLabelColor = Primary, unfocusedLabelColor = TextMuted
+                    )
+                )
+
+                // Category chips
+                Text("Category", fontSize = 12.sp, color = TextSecondary)
+                val cats = listOf("food" to "🍽️ Food", "transport" to "🚗 Transport",
+                    "shopping" to "🛒 Shopping", "bills" to "💡 Bills", "other" to "📦 Other")
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(cats) { (slug, label) ->
+                        val selected = quickCategory == slug
+                        Box(
+                            Modifier
+                                .background(
+                                    if (selected) Primary else CardBg2,
+                                    RoundedCornerShape(20.dp)
+                                )
+                                .border(1.dp, if (selected) Primary else BorderColor, RoundedCornerShape(20.dp))
+                                .clickable { quickCategory = slug }
+                                .padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text(label, fontSize = 12.sp, color = if (selected) Color.White else TextSecondary)
+                        }
+                    }
+                }
+
+                OutlinedTextField(
+                    value = quickMerchant,
+                    onValueChange = { quickMerchant = it },
+                    label = { Text("Merchant / Description (optional)", color = TextSecondary) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Primary, unfocusedBorderColor = BorderColor,
+                        focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+                        cursorColor = Primary, focusedLabelColor = Primary, unfocusedLabelColor = TextMuted
+                    )
+                )
+
+                Button(
+                    onClick = {
+                        val amt = quickAmount.toDoubleOrNull()
+                        if (amt != null && amt > 0) {
+                            vm.logQuickExpense(amt, quickMerchant, quickCategory)
+                            showQuickAdd = false
+                            quickAmount = ""
+                            quickMerchant = ""
+                            quickCategory = "other"
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                    shape = RoundedCornerShape(14.dp),
+                    enabled = quickAmount.toDoubleOrNull()?.let { it > 0 } == true
+                ) {
+                    Icon(Icons.Filled.Add, "", modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Add Expense", fontWeight = FontWeight.Bold)
+                }
+            }
         }
     }
 }
@@ -96,7 +213,7 @@ private fun ErrorState(error: String, onRetry: () -> Unit) {
 }
 
 @Composable
-private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefresh: () -> Unit) {
+private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefresh: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
     val dash       = state.dashboard
     val today      = LocalDate.now()
     val hourNow    = LocalTime.now().hour
@@ -114,7 +231,7 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
     val daysLeft    = dash?.daysLeft ?: 0
     val projected   = dash?.projectedSpend ?: 0.0
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 40.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 100.dp)) {
 
         // ── Header ───────────────────────────────────────────────
         item {
@@ -145,6 +262,16 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
                     }
                 }
             }
+        }
+
+        // ── XP Bar ────────────────────────────────────────────────
+        item {
+            XpBar(
+                xp = state.xp,
+                levelName = state.levelName,
+                progress = state.xpProgress,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
+            )
         }
 
         // ── Motivational Banner ───────────────────────────────────
@@ -204,6 +331,32 @@ private fun DashboardContent(state: HomeUiState, onSettings: () -> Unit, onRefre
                 ccOutstanding = dash?.ccOutstanding ?: 0.0,
                 salary = salary
             )
+        }
+
+        // ── Emergency Fund Meter ──────────────────────────────────
+        if (state.emergencyFundMonths < 6.0) {
+            item {
+                Spacer(Modifier.height(16.dp))
+                EmergencyFundCard(
+                    months = state.emergencyFundMonths,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        }
+
+        // ── Daily Challenge Card ──────────────────────────────────
+        state.todayChallenge?.let { challenge ->
+            item {
+                Spacer(Modifier.height(16.dp))
+                DailyChallengeCard(
+                    challenge = challenge,
+                    accepted = state.challengeAccepted,
+                    completed = state.challengeCompleted,
+                    onAccept = vm::acceptChallenge,
+                    onComplete = vm::completeChallenge,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
         }
 
         // ── Quick Stats Strip ─────────────────────────────────────
@@ -1075,6 +1228,166 @@ private fun SpendingStreakCard(streak: Int, modifier: Modifier = Modifier) {
                 Text("$streak days", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.Bold)
             }
         }
+    }
+}
+
+// ── Emergency Fund Card ───────────────────────────────────────
+
+@Composable
+private fun EmergencyFundCard(months: Double, modifier: Modifier = Modifier) {
+    val pct = (months / 6.0).coerceIn(0.0, 1.0).toFloat()
+    val color = when {
+        months >= 6 -> SuccessColor
+        months >= 3 -> WarningColor
+        else -> ErrorColor
+    }
+    val label = when {
+        months >= 6 -> "You're fully covered!"
+        months >= 3 -> "Getting there — target: 6 months"
+        else -> "Build your safety net"
+    }
+    Card(
+        Modifier.fillMaxWidth().then(modifier),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Shield  Emergency Fund", fontSize = 13.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Text("${String.format("%.1f", months)}/6 months", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = color)
+            }
+            Spacer(Modifier.height(8.dp))
+            Box(
+                Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)).background(BorderColor)
+            ) {
+                Box(
+                    Modifier.fillMaxWidth(pct).height(6.dp).clip(RoundedCornerShape(50)).background(color)
+                )
+            }
+            Spacer(Modifier.height(6.dp))
+            Text(label, fontSize = 11.sp, color = TextSecondary)
+        }
+    }
+}
+
+// ── Daily Challenge Card ──────────────────────────────────────
+
+@Composable
+private fun DailyChallengeCard(
+    challenge: DailyChallenge,
+    accepted: Boolean,
+    completed: Boolean,
+    onAccept: () -> Unit,
+    onComplete: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardBg)
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Daily Challenge", fontSize = 11.sp, color = TextMuted, letterSpacing = 1.sp)
+                Box(
+                    Modifier
+                        .background(Primary.copy(0.15f), RoundedCornerShape(20.dp))
+                        .padding(horizontal = 8.dp, vertical = 3.dp)
+                ) {
+                    Text("+${challenge.xpReward} XP", fontSize = 10.sp, color = Primary, fontWeight = FontWeight.Bold)
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(challenge.emoji, fontSize = 28.sp)
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text(challenge.title, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(challenge.description, fontSize = 11.sp, color = TextSecondary)
+                    Text(challenge.savingsEstimate, fontSize = 10.sp, color = SuccessColor)
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            when {
+                completed -> {
+                    Text(
+                        "Challenge completed! +${challenge.xpReward} XP earned",
+                        fontSize = 12.sp,
+                        color = SuccessColor,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                accepted -> {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            "Accepted! Mark done when complete",
+                            fontSize = 11.sp,
+                            color = TextSecondary,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Button(
+                            onClick = onComplete,
+                            colors = ButtonDefaults.buttonColors(containerColor = SuccessColor),
+                            shape = RoundedCornerShape(10.dp),
+                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Text("Done!", fontSize = 12.sp)
+                        }
+                    }
+                }
+                else -> {
+                    Button(
+                        onClick = onAccept,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Primary),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Accept Challenge")
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ── XP Bar ────────────────────────────────────────────────────
+
+@Composable
+private fun XpBar(xp: Int, levelName: String, progress: Float, modifier: Modifier = Modifier) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .background(Primary.copy(0.15f), RoundedCornerShape(20.dp))
+                .padding(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text("$levelName", fontSize = 11.sp, color = Primary, fontWeight = FontWeight.SemiBold)
+        }
+        Spacer(Modifier.width(8.dp))
+        Box(
+            Modifier
+                .weight(1f)
+                .height(6.dp)
+                .clip(RoundedCornerShape(50))
+                .background(BorderColor)
+        ) {
+            Box(
+                Modifier
+                    .fillMaxWidth(progress)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(50))
+                    .background(Brush.horizontalGradient(GradientGold))
+            )
+        }
+        Spacer(Modifier.width(8.dp))
+        Text("$xp XP", fontSize = 10.sp, color = TextMuted)
     }
 }
 
