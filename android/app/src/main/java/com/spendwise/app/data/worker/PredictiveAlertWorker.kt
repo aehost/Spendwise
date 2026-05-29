@@ -40,13 +40,17 @@ class PredictiveAlertWorker @AssistedInject constructor(
             val salary = dash.salary.amount
             if (salary <= 0) return Result.success()
 
+            // Use spendable budget = salary minus savings target, not raw salary
+            val savingsRate = dash.savingsRate.coerceIn(0, 100)
+            val spendBudget = salary * (1.0 - savingsRate / 100.0)
+
             val spent = dash.totalSpent
             val spendRate = spent / dayOfMonth.toDouble()
             val projectedMonthEnd = spendRate * daysInMonth
-            val overshootAmount = projectedMonthEnd - salary
+            val overshootAmount = projectedMonthEnd - spendBudget
 
-            if (overshootAmount > salary * 0.10) {
-                // Overshoot by more than 10% of salary — alert
+            if (overshootAmount > spendBudget * 0.10) {
+                // Overshoot projected spend by more than 10% of spendable budget — alert
                 val nm = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as android.app.NotificationManager
                 if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                     nm.createNotificationChannel(
@@ -56,9 +60,9 @@ class PredictiveAlertWorker @AssistedInject constructor(
                     )
                 }
                 val daysLeft = daysInMonth - dayOfMonth
-                val body = "At your current pace, you'll overshoot your budget by ₹${"%,.0f".format(overshootAmount)} by month-end. " +
-                    "You have ₹${"%,.0f".format((salary - spent).coerceAtLeast(0.0))} and $daysLeft days left. " +
-                    "Daily limit to stay on track: ₹${"%,.0f".format(((salary - spent) / daysLeft.coerceAtLeast(1)).coerceAtLeast(0.0))}"
+                val body = "At your current pace, you'll overshoot your spendable budget by ₹${"%,.0f".format(overshootAmount)} by month-end. " +
+                    "You have ₹${"%,.0f".format((spendBudget - spent).coerceAtLeast(0.0))} and $daysLeft days left. " +
+                    "Daily limit to stay on track: ₹${"%,.0f".format(((spendBudget - spent) / daysLeft.coerceAtLeast(1)).coerceAtLeast(0.0))}"
 
                 val notif = androidx.core.app.NotificationCompat.Builder(appContext, CHANNEL_ID)
                     .setSmallIcon(android.R.drawable.ic_dialog_alert)

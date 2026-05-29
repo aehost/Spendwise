@@ -282,6 +282,8 @@ fun SettingsScreen(
     }
 
     if (showGmailDialog) {
+        // Auto-close once loading finishes with no error and account was added
+        GmailDialogAutoClose(state) { showGmailDialog = false; vm.clearGmailError() }
         GmailImapConnectDialog(
             alreadyAdded = state.gmailAccounts.map { it.gmailEmail },
             isLoading    = state.gmailLoading,
@@ -289,17 +291,22 @@ fun SettingsScreen(
             onDismiss    = { showGmailDialog = false; vm.clearGmailError() },
             onConnect    = { email, appPassword ->
                 vm.connectGmailManual(email, appPassword)
-                if (!state.gmailLoading && state.gmailError == null) showGmailDialog = false
+                // Do NOT close here — GmailDialogAutoClose reacts to state and closes after success
             }
         )
     }
 }
 
-// Auto-close dialog on successful connection
+// Auto-close dialog only after a connection attempt finishes successfully
 @Composable
 private fun GmailDialogAutoClose(state: SettingsState, onClose: () -> Unit) {
-    LaunchedEffect(state.gmailLoading, state.gmailError) {
-        if (!state.gmailLoading && state.gmailError == null && state.gmailAccounts.isNotEmpty()) {
+    // Track whether loading was ever true (i.e., a connection attempt started)
+    var connectionStarted by remember { mutableStateOf(false) }
+    LaunchedEffect(state.gmailLoading) {
+        if (state.gmailLoading) {
+            connectionStarted = true
+        } else if (connectionStarted && state.gmailError == null) {
+            // Loading finished with no error after an attempt was made → success
             onClose()
         }
     }
