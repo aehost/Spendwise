@@ -33,19 +33,16 @@
         android:textSize="11sp"
         android:textColor="#AAAAAA" />
 
-    <LinearLayout
+    <ProgressBar
+        android:id="@+id/widget_progress_bar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
         android:layout_width="match_parent"
         android:layout_height="4dp"
         android:layout_marginTop="8dp"
-        android:background="#33FFFFFF"
-        android:orientation="horizontal">
-        <View
-            android:id="@+id/widget_progress_bar"
-            android:layout_width="0dp"
-            android:layout_height="4dp"
-            android:layout_weight="0.5"
-            android:background="#00E5A0" />
-    </LinearLayout>
+        android:max="100"
+        android:progress="0"
+        android:progressTint="#00E5A0"
+        android:progressBackgroundTint="#33FFFFFF" />
 
     <TextView
         android:id="@+id/widget_streak"

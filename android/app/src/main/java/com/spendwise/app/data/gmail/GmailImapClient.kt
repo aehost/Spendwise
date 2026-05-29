@@ -53,8 +53,10 @@ object GmailImapClient {
             val sinceDate = Date(sinceMs.coerceAtLeast(System.currentTimeMillis() - 7 * 24 * 3600_000L))
             val dateTerm = ReceivedDateTerm(ComparisonTerm.GE, sinceDate)
 
-            // Search by date first, then filter by sender in code (OR search over 15+ senders is slow)
-            val messages = try { inbox.search(dateTerm) } catch (_: Exception) { inbox.messages.takeLast(200).toTypedArray() }
+            // Search by date first, filter by sender in code (OR-search over 15+ senders is slow on IMAP).
+            // Cap at 300 to prevent OOM on inboxes with thousands of messages.
+            val rawMessages = try { inbox.search(dateTerm) } catch (_: Exception) { inbox.messages }
+            val messages = rawMessages.takeLast(300)
 
             for (msg in messages) {
                 try {

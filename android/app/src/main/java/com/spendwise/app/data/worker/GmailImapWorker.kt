@@ -61,6 +61,9 @@ class GmailImapWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result {
+        // Cap retries at 5 to avoid infinite retry loops for permanent failures (bad password, etc.)
+        if (runAttemptCount >= 5) return Result.success()
+
         val accounts = readAccounts(tokenManager).filter { it.isActive }
         if (accounts.isEmpty()) return Result.success()
 

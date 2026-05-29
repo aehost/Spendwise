@@ -26,9 +26,10 @@ class BudgetWidget : AppWidgetProvider() {
             val streak = tokenManager.spendingStreak
             val roundUp = tokenManager.roundUpSavings
 
-            // Read daily budget from cache written by DailyPulseWorker
+            // Read cached values written by DailyPulseWorker
             val widgetPrefs = context.getSharedPreferences("widget_cache", Context.MODE_PRIVATE)
             val dailyRemaining = widgetPrefs.getFloat("daily_remaining", 0f)
+            val spentToday     = widgetPrefs.getFloat("spent_today", 0f)
 
             // Main number — "₹1,234" or "--" if not yet computed
             views.setTextViewText(
@@ -36,6 +37,13 @@ class BudgetWidget : AppWidgetProvider() {
                 if (dailyRemaining > 0f) "₹${"%,.0f".format(dailyRemaining)}" else "--"
             )
             views.setTextViewText(R.id.widget_label, "left today")
+
+            // Progress bar: fraction of daily budget already spent (0–100)
+            val totalDaily = dailyRemaining + spentToday
+            val progressPct = if (totalDaily > 0f)
+                ((spentToday / totalDaily) * 100).toInt().coerceIn(0, 100)
+            else 0
+            views.setProgressBar(R.id.widget_progress_bar, 100, progressPct, false)
 
             views.setTextViewText(
                 R.id.widget_streak,

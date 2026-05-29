@@ -33,8 +33,14 @@ class WeeklyReviewWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         return try {
-            val today = java.time.LocalDate.now().toString()
-            if (tokenManager.lastWeeklyReviewDate == today) return Result.success()
+            // Guard: fire at most once per 7-day window (not once per day)
+            val today = java.time.LocalDate.now()
+            val lastDateStr = tokenManager.lastWeeklyReviewDate
+            val lastDate = runCatching { java.time.LocalDate.parse(lastDateStr) }.getOrNull()
+            val daysSinceLast = if (lastDate != null)
+                java.time.temporal.ChronoUnit.DAYS.between(lastDate, today)
+            else 8L
+            if (daysSinceLast < 7) return Result.success()
 
             val dash = analyticsApi.getDashboard().body()?.data ?: return Result.retry()
             val savingsRate = dash.savingsRate
@@ -67,7 +73,7 @@ class WeeklyReviewWorker @AssistedInject constructor(
                 .setAutoCancel(true)
                 .build()
             nm.notify(9002, notif)
-            tokenManager.lastWeeklyReviewDate = today
+            tokenManager.lastWeeklyReviewDate = today.toString()
             Result.success()
         } catch (_: Exception) { Result.retry() }
     }

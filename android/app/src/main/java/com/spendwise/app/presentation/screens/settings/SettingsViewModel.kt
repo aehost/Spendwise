@@ -98,9 +98,9 @@ class SettingsViewModel @Inject constructor(
         }
         viewModelScope.launch {
             _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
-            withContext(Dispatchers.IO) {
-                try {
-                    // Test IMAP connection first
+            // Run IMAP test on IO thread; update state back on Main thread
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
                     GmailImapClient.fetchBankEmailsSince(
                         email.trim(), appPassword.trim(),
                         System.currentTimeMillis() - 3600_000L
@@ -110,21 +110,25 @@ class SettingsViewModel @Inject constructor(
                         accounts.add(GmailImapAccount(email.trim().lowercase(), appPassword.trim(), 0L))
                         GmailImapWorker.writeAccounts(tokenManager, accounts)
                     }
-                    _state.value = _state.value.copy(
-                        gmailLoading = false,
-                        gmailAccounts = accounts.map { GmailAccountDto(it.email, it.email, null, true) }
-                    )
-                    GmailImapWorker.triggerNow(appContext)
-                } catch (e: Exception) {
-                    val msg = when {
-                        e.message?.contains("Authentication failed", true) == true ->
-                            "Authentication failed. Make sure you're using an App Password (not your regular Gmail password).\nGenerate one at myaccount.google.com/apppasswords"
-                        e.message?.contains("Connection refused", true) == true ->
-                            "Could not connect. Check your internet connection."
-                        else -> "Connection failed: ${e.message}"
-                    }
-                    _state.value = _state.value.copy(gmailLoading = false, gmailError = msg)
+                    accounts
                 }
+            }
+            // Back on Main thread — safe to update StateFlow
+            result.onSuccess { accounts ->
+                _state.value = _state.value.copy(
+                    gmailLoading = false,
+                    gmailAccounts = accounts.map { GmailAccountDto(it.email, it.email, null, true) }
+                )
+                GmailImapWorker.triggerNow(appContext)
+            }.onFailure { e ->
+                val msg = when {
+                    e.message?.contains("Authentication failed", true) == true ->
+                        "Authentication failed. Make sure you're using an App Password (not your regular Gmail password).\nGenerate one at myaccount.google.com/apppasswords"
+                    e.message?.contains("Connection refused", true) == true ->
+                        "Could not connect. Check your internet connection."
+                    else -> "Connection failed: ${e.message}"
+                }
+                _state.value = _state.value.copy(gmailLoading = false, gmailError = msg)
             }
         }
     }
@@ -143,8 +147,19 @@ class SettingsViewModel @Inject constructor(
     fun syncGmailNow() {
         _state.value = _state.value.copy(gmailSyncing = true)
         GmailImapWorker.triggerNow(appContext)
-        viewModelScope.launch {
-            kotlinx.coroutines.delay(3_000)
+        // Poll WorkManager until the one-shot sync finishes (max 90 seconds)
+        viewModelScope.launch(Dispatchers.IO) {
+            val wm = androidx.work.WorkManager.getInstance(appContext)
+            val uniqueName = "${GmailImapWorker.WORK_NAME}_now"
+            repeat(45) {
+                kotlinx.coroutines.delay(2_000)
+                val infos = wm.getWorkInfosForUniqueWork(uniqueName).get()
+                if (infos.isEmpty() || infos.all { it.state.isFinished }) {
+                    _state.value = _state.value.copy(gmailSyncing = false)
+                    return@launch
+                }
+            }
+            // Fallback: clear after 90s regardless
             _state.value = _state.value.copy(gmailSyncing = false)
         }
     }

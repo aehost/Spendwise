@@ -75,7 +75,11 @@ class HomeViewModel @Inject constructor(
 
     fun load() {
         viewModelScope.launch {
-            _state.value = _state.value.copy(isLoading = true, userName = tokenManager.userName)
+            // If called from refresh(), keep the spinner visible instead of showing a full loading screen
+            val isRefreshMode = _state.value.isRefreshing
+            if (!isRefreshMode) {
+                _state.value = _state.value.copy(isLoading = true, userName = tokenManager.userName)
+            }
 
             // All 5 calls run in parallel; each fails independently
             val dashD    = async { runCatching { analyticsApi.getDashboard() } }
@@ -137,8 +141,11 @@ class HomeViewModel @Inject constructor(
             val (xpInLevel, xpForLevel) = DailyChallengeManager.getXpToNextLevel(tokenManager)
             val xpProgress = if (xpForLevel > 0) (xpInLevel.toFloat() / xpForLevel).coerceIn(0f, 1f) else 0f
 
-            _state.value = HomeUiState(
+            // Use copy() so isRefreshing flows through cleanly; both loading flags
+            // are explicitly reset here so the spinner and loading screen both clear.
+            _state.value = _state.value.copy(
                 isLoading             = false,
+                isRefreshing          = false,
                 userName              = tokenManager.userName,
                 dashboard             = dash,
                 dashboardError        = if (dashR.isFailure || dashR.getOrNull()?.isSuccessful == false)
@@ -191,7 +198,17 @@ class HomeViewModel @Inject constructor(
             tokenManager.dailyChallengeCompleted = true
             DailyChallengeManager.awardXp(tokenManager, challenge.xpReward)
         }
-        load()
+        // Update only XP/challenge state — no network call, no loading screen flash
+        val xp = tokenManager.userXp
+        val levelName = DailyChallengeManager.getLevelName(tokenManager)
+        val (xpInLevel, xpForLevel) = DailyChallengeManager.getXpToNextLevel(tokenManager)
+        val xpProgress = if (xpForLevel > 0) (xpInLevel.toFloat() / xpForLevel).coerceIn(0f, 1f) else 0f
+        _state.value = _state.value.copy(
+            challengeCompleted = true,
+            xp = xp,
+            levelName = levelName,
+            xpProgress = xpProgress
+        )
     }
 
     fun logQuickExpense(amount: Double, merchant: String, categorySlug: String) {
@@ -216,10 +233,13 @@ class HomeViewModel @Inject constructor(
     }
 
     fun refresh() {
+        // Guard: don't stack refreshes on top of a load already in progress
+        if (_state.value.isLoading || _state.value.isRefreshing) return
         viewModelScope.launch {
             _state.value = _state.value.copy(isRefreshing = true)
+            // load() detects isRefreshing=true and skips the full-screen loader;
+            // it clears isRefreshing=false via copy() at the end — no need to reset here.
             load()
-            _state.value = _state.value.copy(isRefreshing = false)
         }
     }
 }
