@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.core.formatCurrency
+import com.spendwise.app.presentation.components.SwProgressRing
 import com.spendwise.app.presentation.theme.*
 import java.time.Month
 
@@ -340,10 +341,13 @@ private fun BudgetItemCard(item: BudgetItem, onClick: () -> Unit) {
                 Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Box(
-                    Modifier.size(40.dp)
-                        .background(Primary.copy(0.1f), RoundedCornerShape(12.dp)),
-                    contentAlignment = Alignment.Center
+                // Ring around the icon shows % used at a glance (matches Goals).
+                SwProgressRing(
+                    progress    = item.pct,
+                    size        = 44.dp,
+                    strokeWidth = 4.dp,
+                    ringColor   = barColor,
+                    trackColor  = barColor.copy(0.15f)
                 ) { Text(item.icon, fontSize = 18.sp) }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {

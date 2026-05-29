@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.data.remote.dto.ScoreFactorDto
+import com.spendwise.app.presentation.components.SwProgressRing
 import com.spendwise.app.presentation.theme.*
 
 @Composable
@@ -55,24 +56,37 @@ fun HealthScoreScreen(onBack: () -> Unit, vm: HealthScoreViewModel = hiltViewMod
                             Box(Modifier.fillMaxWidth().background(Brush.linearGradient(GradientPurple)).padding(24.dp)) {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
                                     Text("YOUR HEALTH SCORE", fontSize = 11.sp, color = Color.White.copy(0.7f), letterSpacing = 1.2.sp)
-                                    Spacer(Modifier.height(12.dp))
-                                    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.Center) {
-                                        Text(
-                                            "${score?.score ?: 0}",
-                                            fontSize = 72.sp, fontWeight = FontWeight.Black, color = Color.White
-                                        )
-                                        Text("/100", fontSize = 20.sp, color = Color.White.copy(0.7f), modifier = Modifier.padding(bottom = 10.dp))
+                                    Spacer(Modifier.height(18.dp))
+                                    val sc = score?.score ?: 0
+                                    // Color-banded gauge: red < 40, amber 40–69, green ≥ 70
+                                    val ringColor = when {
+                                        sc >= 70 -> SuccessColor
+                                        sc >= 40 -> Amber
+                                        else     -> ErrorColor
                                     }
-                                    Text(score?.grade ?: "—", fontSize = 28.sp, fontWeight = FontWeight.Bold, color = Amber)
+                                    SwProgressRing(
+                                        progress    = sc / 100f,
+                                        size        = 172.dp,
+                                        strokeWidth = 14.dp,
+                                        ringColor   = ringColor,
+                                        trackColor  = Color.White.copy(0.18f)
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Row(verticalAlignment = Alignment.Bottom) {
+                                                Text(
+                                                    "$sc",
+                                                    fontSize = 54.sp, fontWeight = FontWeight.Black, color = Color.White
+                                                )
+                                                Text(
+                                                    "/100", fontSize = 16.sp, color = Color.White.copy(0.7f),
+                                                    modifier = Modifier.padding(bottom = 8.dp)
+                                                )
+                                            }
+                                            Text(score?.grade ?: "—", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = ringColor)
+                                        }
+                                    }
+                                    Spacer(Modifier.height(14.dp))
                                     Text(score?.level ?: "", fontSize = 14.sp, color = Color.White.copy(0.85f))
-                                    Spacer(Modifier.height(16.dp))
-                                    // Score bar
-                                    Box(Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(50)).background(Color.White.copy(0.2f))) {
-                                        Box(
-                                            Modifier.fillMaxWidth((score?.score ?: 0) / 100f).height(8.dp)
-                                                .clip(RoundedCornerShape(50)).background(Color.White)
-                                        )
-                                    }
                                 }
                             }
                         }
