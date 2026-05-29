@@ -304,11 +304,20 @@ class ParseSmsUseCase @Inject constructor() {
 
     // ── Available balance ─────────────────────────────────────────
     private fun extractBalance(body: String): Double? {
-        val pat = Regex(
-            """(?:Avail\.?\s*Bal|Avl\.?\s*Bal|Available\s*(?:Balance|Bal)|Balance|Bal)\s*:?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
+        // BUG FIX: an SMS can list several "balance" figures (e.g. ledger balance
+        // AND available balance). A single broad regex returned whichever appeared
+        // first in the text. Prefer the explicit "Available Balance" wording, and
+        // only fall back to a bare "Balance" if no available-balance label exists.
+        val availablePat = Regex(
+            """(?:Avail\.?\s*Bal|Avl\.?\s*Bal|Available\s*(?:Balance|Bal))\s*:?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
             RegexOption.IGNORE_CASE
         )
-        return pat.find(body)?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
+        val genericPat = Regex(
+            """\b(?:Balance|Bal)\s*:?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)""",
+            RegexOption.IGNORE_CASE
+        )
+        val match = availablePat.find(body) ?: genericPat.find(body)
+        return match?.groupValues?.get(1)?.replace(",", "")?.toDoubleOrNull()
     }
 
     // ── Bank name detection ───────────────────────────────────────

@@ -135,7 +135,14 @@ class SmsSyncWorker @AssistedInject constructor(
                     )
                 )
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            // BUG FIX: previously swallowed silently — a failed CC sync left the
+            // user's outstanding balance stale with no trace. Log for support.
+            android.util.Log.w(
+                "SmsSyncWorker",
+                "Failed to update/create credit card for ${due.bankName ?: "unknown"}: ${e.message}"
+            )
+        }
     }
 
     companion object {

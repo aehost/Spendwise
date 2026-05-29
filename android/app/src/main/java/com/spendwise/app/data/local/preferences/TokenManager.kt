@@ -57,8 +57,17 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
         set(v) = prefs.edit().putLong(Constants.SMS_SCAN_FROM_MS, v).apply()
 
     var roundUpSavings: Double
-        get() = Double.fromBits(prefs.getLong("round_up_savings", 0L))
-        set(v) = prefs.edit().putLong("round_up_savings", v.toBits()).apply()
+        // BUG FIX: Double.fromBits can yield NaN/Infinity if the stored bits are
+        // corrupted (e.g. manual prefs edit, partial write). Coerce to a sane 0.0
+        // so the UI never renders "NaN" or a runaway value.
+        get() {
+            val v = Double.fromBits(prefs.getLong("round_up_savings", 0L))
+            return if (v.isNaN() || v.isInfinite() || v < 0.0) 0.0 else v
+        }
+        set(v) {
+            val safe = if (v.isNaN() || v.isInfinite() || v < 0.0) 0.0 else v
+            prefs.edit().putLong("round_up_savings", safe.toBits()).apply()
+        }
 
     var lastSpendStreakCheckDate: String
         get() = prefs.getString("streak_check_date", "") ?: ""

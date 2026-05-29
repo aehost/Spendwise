@@ -41,10 +41,18 @@ class CardsViewModel @Inject constructor(private val api: UserApi) : ViewModel()
                     name      = name,
                     creditLimit = limit,
                     dueDay    = dueDay,
-                    lastFour  = lastFour?.trimStart('X', 'x', '*', ' ')?.takeLast(4)?.takeIf { it.isNotBlank() && it.all { c -> c.isDigit() } }
+                    // BUG FIX: require EXACTLY 4 digits. Previously "12" was accepted
+                    // and stored as a 2-char "last four", breaking card matching.
+                    lastFour  = lastFour
+                        ?.filter { it.isDigit() }
+                        ?.takeLast(4)
+                        ?.takeIf { it.length == 4 }
                 ))
                 load()
-            } catch (_: Exception) {}
+            } catch (e: Exception) {
+                android.util.Log.w("CardsViewModel", "addCard failed: ${e.message}")
+                _state.value = _state.value.copy(isLoading = false)
+            }
         }
     }
 
@@ -54,7 +62,9 @@ class CardsViewModel @Inject constructor(private val api: UserApi) : ViewModel()
     fun delete(id: String) {
         viewModelScope.launch {
             try { api.deleteCreditCard(id); load() }
-            catch (_: Exception) {}
+            catch (e: Exception) {
+                android.util.Log.w("CardsViewModel", "delete failed: ${e.message}")
+            }
         }
     }
 }

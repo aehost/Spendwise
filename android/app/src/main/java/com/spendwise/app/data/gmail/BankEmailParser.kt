@@ -109,7 +109,11 @@ object BankEmailParser {
             lower.containsAny("emi", "loan repayment", "equated monthly")
                 -> "emi"
             lower.containsAny("neft", "imps", "rtgs")
-                -> if (text.lowercase().contains("credit")) "income" else "transfer"
+                // BUG FIX: bare contains("credit") also matched "credit card",
+                // "credited to payee", etc. — misclassifying outgoing transfers as
+                // income. Use the same direction detection as detectCredit() so a
+                // NEFT/IMPS row is only "income" when it is genuinely a credit.
+                -> if (detectCredit(text)) "income" else "transfer"
             else -> "other"
         }
     }

@@ -38,7 +38,12 @@ class SetupViewModel @Inject constructor(
 
     private fun parseToLocalMidnightMs(dateStr: String): Long {
         return try {
-            LocalDate.parse(dateStr).atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+            val parsed = LocalDate.parse(dateStr)
+            // BUG FIX: a future date would set smsScanFromMs ahead of "now",
+            // silently blocking ALL SMS import until that date arrives. Clamp any
+            // future selection back to today.
+            val safeDate = if (parsed.isAfter(LocalDate.now())) LocalDate.now() else parsed
+            safeDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
         } catch (e: Exception) {
             todayMidnightMs()
         }

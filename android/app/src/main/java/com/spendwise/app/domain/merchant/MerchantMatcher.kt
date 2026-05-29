@@ -41,7 +41,7 @@ object MerchantMatcher {
                 return MerchantTag(slug, slug, null, 1.0f, MatchType.EXACT)
             }
             for ((key, slug) in userCorrections) {
-                if (normalized.contains(key) || key.contains(normalized)) {
+                if (partialMatch(normalized, key)) {
                     return MerchantTag(slug, slug, null, 0.95f, MatchType.EXACT)
                 }
             }
@@ -52,7 +52,7 @@ object MerchantMatcher {
 
         // Try partial exact matches (e.g. "SWIGGY ORDER" → "swiggy")
         for ((key, tag) in MerchantDatabase.EXACT_MAP) {
-            if (normalized.contains(key) || key.contains(normalized)) return tag
+            if (partialMatch(normalized, key)) return tag
         }
 
         // ── Tier 2: UPI domain ────────────────────────────────────
@@ -86,6 +86,21 @@ object MerchantMatcher {
 
         // ── Tier 5: Default ───────────────────────────────────────
         return MerchantDatabase.DEFAULT_TAG
+    }
+
+    /**
+     * Substring match guarded by a minimum length on the *contained* token.
+     * BUG FIX: the previous `a.contains(b) || b.contains(a)` matched far too
+     * eagerly — a 2-char query like "ub" matched "uber", and a 3-char key like
+     * "ola" matched inside unrelated words ("chocolate", "gorakhpur"). Requiring
+     * the shorter token to be ≥ 4 chars eliminates these false positives while
+     * still catching real cases like "SWIGGY ORDER" ⊃ "swiggy".
+     */
+    private fun partialMatch(normalized: String, key: String): Boolean {
+        if (normalized == key) return true
+        if (normalized.contains(key) && key.length >= 4) return true
+        if (key.contains(normalized) && normalized.length >= 4) return true
+        return false
     }
 
     // ── UPI VPA extractor ─────────────────────────────────────────

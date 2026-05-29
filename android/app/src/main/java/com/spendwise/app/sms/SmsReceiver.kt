@@ -1,31 +1,53 @@
 package com.spendwise.app.sms
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.Build
 import android.provider.Telephony
 import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
 import com.spendwise.app.MainActivity
 import com.spendwise.app.R
 import com.spendwise.app.core.Constants
 import com.spendwise.app.data.worker.SmsSyncWorker
 import com.spendwise.app.domain.usecase.ParseSmsUseCase
+import java.util.concurrent.atomic.AtomicInteger
 
 class SmsReceiver : BroadcastReceiver() {
 
     companion object {
         const val CHANNEL_ID = "spendwise_sms"
+
+        // BUG FIX: System.currentTimeMillis().toInt() truncates to 32 bits and
+        // two SMS arriving in the same millisecond collide (the 2nd overwrites
+        // the 1st). A process-wide atomic counter guarantees distinct IDs.
+        private val notifIdSeq = AtomicInteger(8000)
+
+        // Single shared parser — BUG FIX: previously a new ParseSmsUseCase() was
+        // allocated for every incoming SMS inside the loop.
+        private val parser = ParseSmsUseCase()
     }
 
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
-        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-        val parser = ParseSmsUseCase()
+        // BUG FIX: defensively confirm we still hold an SMS permission before
+        // touching message content. Receiver registration does not guarantee the
+        // runtime grant is still present (user can revoke it any time).
+        val hasSmsPermission =
+            ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) ==
+                PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) ==
+                PackageManager.PERMISSION_GRANTED
+        if (!hasSmsPermission) return
+
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent) ?: return
 
         messages.forEach { msg ->
             val body   = msg.messageBody ?: return@forEach
@@ -81,7 +103,7 @@ class SmsReceiver : BroadcastReceiver() {
             .setContentIntent(mainActivityPendingIntent(ctx))
             .setAutoCancel(true)
             .build()
-        nm.notify(System.currentTimeMillis().toInt(), notif)
+        nm.notify(notifIdSeq.incrementAndGet(), notif)
     }
 
     private fun showBillDueNotification(ctx: Context, outstanding: Double, bankName: String) {
@@ -99,6 +121,6 @@ class SmsReceiver : BroadcastReceiver() {
             .setContentIntent(mainActivityPendingIntent(ctx))
             .setAutoCancel(true)
             .build()
-        nm.notify(System.currentTimeMillis().toInt(), notif)
+        nm.notify(notifIdSeq.incrementAndGet(), notif)
     }
 }

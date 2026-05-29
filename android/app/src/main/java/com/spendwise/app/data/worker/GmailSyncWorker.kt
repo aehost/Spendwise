@@ -85,18 +85,26 @@ class GmailSyncWorker @AssistedInject constructor(
             ?.filter { it.isActive }
             ?: run { Log.d(TAG, "No Gmail accounts connected"); return Result.success() }
 
-        var anySuccess = false
+        var anyFailure = false
         for (account in accounts) {
             val gmailEmail = account.gmailEmail
             val accountId  = account.id
             try {
                 syncAccount(gmailEmail, accountId)
-                anySuccess = true
             } catch (e: Exception) {
+                anyFailure = true
                 Log.e(TAG, "Sync failed for $gmailEmail", e)
             }
         }
-        return if (anySuccess || accounts.isEmpty()) Result.success() else Result.retry()
+        // BUG FIX: a partial failure (e.g. 1 of 3 accounts errored) was previously
+        // reported as overall success, so the failed account never got retried.
+        // Now retry when ANY account failed — but cap at 3 attempts so a single
+        // permanently-broken account can't loop the worker forever.
+        return when {
+            !anyFailure              -> Result.success()
+            runAttemptCount >= 3     -> Result.success()  // give up; logged above
+            else                     -> Result.retry()
+        }
     }
 
     private suspend fun syncAccount(gmailEmail: String, accountId: String) {

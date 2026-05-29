@@ -1,7 +1,11 @@
 package com.spendwise.app.sms
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
 import android.provider.Telephony
+import android.util.Log
+import androidx.core.content.ContextCompat
 import com.spendwise.app.core.Constants
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
@@ -17,6 +21,16 @@ class SmsScanner @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     fun scanSince(lastScanMs: Long, lookbackDays: Int = 2): List<RawSms> {
+        // BUG FIX: explicitly verify READ_SMS before querying the content
+        // provider. Without the grant the query throws SecurityException which
+        // was previously swallowed silently — now we short-circuit cleanly so
+        // the caller (worker) treats it as "no new messages" rather than retry.
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)
+                != PackageManager.PERMISSION_GRANTED) {
+            Log.w("SmsScanner", "READ_SMS not granted — skipping inbox scan")
+            return emptyList()
+        }
+
         val cutoff = if (lastScanMs > 0) lastScanMs
                      else System.currentTimeMillis() - lookbackDays * 24 * 60 * 60 * 1000L
 
@@ -54,7 +68,9 @@ class SmsScanner @Inject constructor(
                 }
             }
         } catch (e: Exception) {
-            // Permission not granted or query failed
+            // Query failed (revoked mid-scan, provider error) — log and return
+            // whatever we collected so far rather than failing silently.
+            Log.w("SmsScanner", "SMS inbox query failed: ${e.message}")
         }
 
         return results
