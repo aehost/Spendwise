@@ -638,12 +638,13 @@ private fun SavingsRateRing(savingsRate: Int) {
         savingsRate >= 10 -> WarningColor
         else              -> ErrorColor
     }
-    Box(Modifier.size(64.dp), contentAlignment = Alignment.Center) {
-        androidx.compose.foundation.Canvas(Modifier.size(64.dp)) {
-            val stroke = Stroke(width = 6.dp.toPx(), cap = StrokeCap.Round)
-            drawArc(color = Color.White.copy(0.12f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = stroke)
-            drawArc(color = ringColor, startAngle = -90f, sweepAngle = 360f * pct, useCenter = false, style = stroke)
-        }
+    com.spendwise.app.presentation.components.SwProgressRing(
+        progress    = pct,
+        size        = 64.dp,
+        strokeWidth = 6.dp,
+        ringColor   = ringColor,
+        trackColor  = Color.White.copy(0.12f)
+    ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text("$savingsRate%", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
             Text("saved", fontSize = 8.sp, color = Color.White.copy(0.55f))
@@ -724,12 +725,13 @@ private fun FinancialHealthStrip(savingsRate: Int, emiBurden: Int, ccOutstanding
     ) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             // Health score circle
-            Box(Modifier.size(52.dp), contentAlignment = Alignment.Center) {
-                androidx.compose.foundation.Canvas(Modifier.size(52.dp)) {
-                    val s = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
-                    drawArc(color = healthColor.copy(0.15f), startAngle = -90f, sweepAngle = 360f, useCenter = false, style = s)
-                    drawArc(color = healthColor, startAngle = -90f, sweepAngle = 360f * (healthScore / 100f), useCenter = false, style = s)
-                }
+            com.spendwise.app.presentation.components.SwProgressRing(
+                progress    = healthScore / 100f,
+                size        = 52.dp,
+                strokeWidth = 5.dp,
+                ringColor   = healthColor,
+                trackColor  = healthColor.copy(0.15f)
+            ) {
                 Text("$healthScore", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold, color = healthColor)
             }
             Spacer(Modifier.width(14.dp))
@@ -940,13 +942,14 @@ private fun EnhancedGoalCard(
                         }
                     }
                 }
-                // Percentage ring
-                Box(Modifier.size(48.dp), contentAlignment = Alignment.Center) {
-                    androidx.compose.foundation.Canvas(Modifier.size(48.dp)) {
-                        val s = Stroke(width = 4.dp.toPx(), cap = StrokeCap.Round)
-                        drawArc(color = BorderColor, startAngle = -90f, sweepAngle = 360f, useCenter = false, style = s)
-                        drawArc(color = statusColor, startAngle = -90f, sweepAngle = 360f * pct, useCenter = false, style = s)
-                    }
+                // Percentage ring — shared, animated component (de-dupes the
+                // hand-rolled Canvas arc that used to live here).
+                com.spendwise.app.presentation.components.SwProgressRing(
+                    progress    = pct,
+                    size        = 48.dp,
+                    strokeWidth = 4.dp,
+                    ringColor   = statusColor
+                ) {
                     Text("${(pct * 100).toInt()}%", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, color = statusColor)
                 }
             }
