@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.spendwise.app.core.formatCurrency
 import com.spendwise.app.data.remote.dto.FinancialGoalDto
+import com.spendwise.app.presentation.components.SwProgressRing
 import com.spendwise.app.presentation.theme.*
 import java.time.LocalDate
 import kotlin.math.roundToInt
@@ -286,14 +287,17 @@ private fun GoalCard(
         colors = CardDefaults.cardColors(containerColor = CardBg)
     ) {
         Column(Modifier.padding(16.dp)) {
-            // Top row: icon + title + status badge + delete
+            // Top row: progress-ring icon + title + status badge + delete
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    Modifier.size(44.dp)
-                        .background(Brush.linearGradient(GradientPurple), CircleShape),
-                    contentAlignment = Alignment.Center
+                // Ring around the icon instantly communicates % complete.
+                SwProgressRing(
+                    progress    = plan.percentComplete,
+                    size        = 48.dp,
+                    strokeWidth = 4.dp,
+                    ringColor   = statusColor,
+                    trackColor  = statusColor.copy(0.15f)
                 ) {
-                    Text(goal.icon, fontSize = 20.sp)
+                    Text(goal.icon, fontSize = 18.sp)
                 }
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
