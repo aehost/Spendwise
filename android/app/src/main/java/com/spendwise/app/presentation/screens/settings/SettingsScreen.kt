@@ -860,15 +860,20 @@ private fun SheetStepPassword(
         ) {
             Column(Modifier.padding(14.dp)) {
                 Text(
-                    "HOW TO GET YOUR APP PASSWORD",
+                    "GET YOUR 16-DIGIT APP PASSWORD",
                     fontSize = 10.sp, color = TextMuted, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Your normal Gmail password will NOT work — Gmail requires a one-time App Password.",
+                    fontSize = 11.sp, color = WarningColor, lineHeight = 15.sp
                 )
                 Spacer(Modifier.height(12.dp))
                 val guideSteps = listOf(
-                    Icons.Filled.AccountCircle to "Open myaccount.google.com",
-                    Icons.Filled.Security      to "Security  →  2-Step Verification",
-                    Icons.Filled.VpnKey        to "Scroll down  →  App Passwords",
-                    Icons.Filled.ContentCopy   to "Create  →  copy the 16-char code"
+                    Icons.Filled.Security      to "Turn ON 2-Step Verification (required first)",
+                    Icons.Filled.AccountCircle to "Open myaccount.google.com/apppasswords",
+                    Icons.Filled.VpnKey        to "Create a password for \"Mail\"",
+                    Icons.Filled.ContentCopy   to "Paste the 16 letters below (spaces are fine)"
                 )
                 guideSteps.forEachIndexed { i, (icon, text) ->
                     Row(

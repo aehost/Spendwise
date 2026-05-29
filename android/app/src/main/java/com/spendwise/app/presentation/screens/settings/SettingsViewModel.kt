@@ -121,12 +121,18 @@ class SettingsViewModel @Inject constructor(
                 )
                 GmailImapWorker.triggerNow(appContext)
             }.onFailure { e ->
+                val raw = e.message ?: ""
                 val msg = when {
-                    e.message?.contains("Authentication failed", true) == true ->
-                        "Authentication failed. Make sure you're using an App Password (not your regular Gmail password).\nGenerate one at myaccount.google.com/apppasswords"
-                    e.message?.contains("Connection refused", true) == true ->
-                        "Could not connect. Check your internet connection."
-                    else -> "Connection failed: ${e.message}"
+                    raw.contains("Authentication", true) || raw.contains("AUTHENTICATE", true) ||
+                        raw.contains("login", true) || raw.contains("credential", true) || raw.contains("invalid", true) ->
+                        "Sign-in failed. Gmail needs a 16-character App Password — not your normal password.\n\n" +
+                        "1. Turn ON 2-Step Verification in your Google Account (required)\n" +
+                        "2. Open myaccount.google.com/apppasswords\n" +
+                        "3. Create one for \"Mail\" and paste the 16 letters here (spaces are fine)."
+                    raw.contains("Connection refused", true) || raw.contains("timed out", true) ||
+                        raw.contains("timeout", true) || raw.contains("UnknownHost", true) || raw.contains("resolve", true) ->
+                        "Couldn't reach Gmail. Check your internet connection and try again."
+                    else -> "Connection failed: ${raw.ifBlank { "unknown error" }}"
                 }
                 _state.value = _state.value.copy(gmailLoading = false, gmailError = msg)
             }
