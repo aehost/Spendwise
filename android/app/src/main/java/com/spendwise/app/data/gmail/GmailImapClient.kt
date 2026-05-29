@@ -55,7 +55,15 @@ object GmailImapClient {
             inbox = store.getFolder("INBOX")
             inbox.open(Folder.READ_ONLY)
 
-            val sinceDate = Date(sinceMs.coerceAtLeast(System.currentTimeMillis() - 7 * 24 * 3600_000L))
+            // Lookback window. Bound it so we never scan an entire mailbox, but
+            // keep it generous: a first-time connect (sinceMs <= 0) imports the
+            // last 30 days of bank history, and short offline gaps are covered.
+            //   - first sync  → 30 days ago
+            //   - normal sync → emails newer than lastSync
+            //   - long gap    → capped at 30 days ago (bounded fetch)
+            val maxLookbackMs = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000L
+            val effectiveSince = if (sinceMs <= 0L) maxLookbackMs else maxOf(sinceMs, maxLookbackMs)
+            val sinceDate = Date(effectiveSince)
             val dateTerm = ReceivedDateTerm(ComparisonTerm.GE, sinceDate)
 
             // Search by date first, filter by sender in code (OR-search over 15+ senders is slow on IMAP).
