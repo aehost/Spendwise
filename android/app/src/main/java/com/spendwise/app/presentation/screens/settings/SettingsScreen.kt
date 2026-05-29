@@ -892,10 +892,40 @@ private fun SheetStepPassword(
                         HorizontalDivider(color = BorderColor.copy(0.3f), modifier = Modifier.padding(start = 38.dp))
                     }
                 }
+
+                Spacer(Modifier.height(12.dp))
+                // One-tap: jump straight to Google's App Passwords page.
+                val ctx = androidx.compose.ui.platform.LocalContext.current
+                OutlinedButton(
+                    onClick = {
+                        runCatching {
+                            ctx.startActivity(
+                                android.content.Intent(
+                                    android.content.Intent.ACTION_VIEW,
+                                    android.net.Uri.parse("https://myaccount.google.com/apppasswords")
+                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary)
+                ) {
+                    Icon(Icons.Filled.OpenInNew, null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Open Google App Passwords", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
             }
         }
 
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Tip: also enable IMAP in Gmail → Settings → Forwarding and POP/IMAP (on by default for most accounts).",
+            fontSize = 11.sp, color = TextMuted, lineHeight = 15.sp
+        )
+
+        Spacer(Modifier.height(16.dp))
 
         // App password field
         OutlinedTextField(
