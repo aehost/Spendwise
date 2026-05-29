@@ -262,29 +262,6 @@ interface IouApi {
     suspend fun delete(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
 }
 
-interface GmailApi {
-    @GET("user/gmail/status")
-    suspend fun getStatus(): Response<ApiResponse<GmailStatusDto>>
-
-    @POST("user/gmail/connect")
-    suspend fun connect(@Body req: GmailConnectRequest): Response<ApiResponse<GmailStatusDto>>
-
-    @POST("user/gmail/disconnect")
-    suspend fun disconnect(): Response<ApiResponse<Map<String, Boolean>>>
-
-    @PUT("user/gmail/sync-timestamp")
-    suspend fun updateSyncTimestamp(): Response<ApiResponse<Map<String, String>>>
-
-    // ── Multi-account endpoints ────────────────────────────────
-    @GET("user/gmail/accounts")
-    suspend fun getAccounts(): Response<ApiResponse<GmailAccountsData>>
-
-    @POST("user/gmail/accounts")
-    suspend fun addAccount(@Body req: GmailConnectRequest): Response<ApiResponse<GmailAccountDto>>
-
-    @DELETE("user/gmail/accounts/{id}")
-    suspend fun removeAccount(@Path("id") id: String): Response<ApiResponse<Map<String, Boolean>>>
-
-    @PUT("user/gmail/accounts/{id}/sync-timestamp")
-    suspend fun updateAccountSyncTimestamp(@Path("id") accountId: String): Response<ApiResponse<Map<String, String>>>
-}
+// NOTE: The server-side OAuth GmailApi was removed along with the dead
+// OAuth sync path. Gmail integration now runs entirely on-device via
+// GmailImapWorker (App Password IMAP) — no backend Gmail endpoints needed.
