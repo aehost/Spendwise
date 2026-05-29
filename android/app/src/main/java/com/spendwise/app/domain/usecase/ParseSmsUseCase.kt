@@ -1,6 +1,7 @@
 package com.spendwise.app.domain.usecase
 
 import com.spendwise.app.core.Constants
+import com.spendwise.app.core.FinancialTextHeuristics
 import com.spendwise.app.domain.merchant.MerchantMatcher
 import java.time.LocalDate
 import javax.inject.Inject
@@ -109,6 +110,10 @@ class ParseSmsUseCase @Inject constructor() {
         if (!isBankSms(body)) return null
         // Bill-due reminders look like transactions but are not — filter them out.
         if (isBillDueReminder(body)) return null
+        // Future-dated / scheduled / reminder messages (e.g. "your SIP will be
+        // debited on the 5th", "EMI is due", "autopay scheduled") are NOT
+        // completed transactions and must never enter the debit/credit ledger.
+        if (FinancialTextHeuristics.isReminderOrFuture(body)) return null
         val amount = extractAmount(body) ?: return null
         val isCredit   = detectIsCredit(body)
         val isCcTx     = detectCreditCard(body)
@@ -126,8 +131,15 @@ class ParseSmsUseCase @Inject constructor() {
             merchant.ifBlank { upiVpa?.substringBefore('@') ?: "" },
             body
         )
-        // For credit transactions, override category
-        val finalCategory = if (isCredit && matchedTag.categorySlug == "other") "income" else matchedTag.categorySlug
+        // Category resolution:
+        //  - a debit that mentions an investment instrument → "investment"
+        //  - an unclassified credit → "income"
+        //  - otherwise trust the merchant matcher
+        val finalCategory = when {
+            !isCredit && FinancialTextHeuristics.isInvestment(body) -> "investment"
+            isCredit && matchedTag.categorySlug == "other"          -> "income"
+            else                                                    -> matchedTag.categorySlug
+        }
 
         return ParsedSms(
             amount            = amount,

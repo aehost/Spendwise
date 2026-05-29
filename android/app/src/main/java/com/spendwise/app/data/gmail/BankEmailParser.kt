@@ -39,10 +39,17 @@ object BankEmailParser {
     fun parse(email: RawBankEmail): ParsedEmailTransaction? {
         val text = "${email.subject} ${email.body}"
 
+        // Reminders / statements / scheduled notices (EMI due, "SIP will be
+        // debited", credit-card statement, autopay reminder) are NOT completed
+        // transactions — never book them into the ledger.
+        if (com.spendwise.app.core.FinancialTextHeuristics.isReminderOrFuture(text)) return null
+
         val amount = extractAmount(text) ?: return null
         val isCredit = detectCredit(text)
         val merchant = extractMerchant(text).ifBlank { "Bank Email" }
-        val categorySlug = inferCategory(merchant, text)
+        val categorySlug =
+            if (!isCredit && com.spendwise.app.core.FinancialTextHeuristics.isInvestment(text)) "investment"
+            else inferCategory(merchant, text)
 
         // Use received date as transaction date
         val date = java.time.Instant.ofEpochMilli(email.receivedMs)
