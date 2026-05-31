@@ -55,6 +55,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun authenticateThenLaunch() {
+        // Seed reactive session state from storage before composing the UI.
+        tokenManager.syncLoggedInState()
+
+        // Biometric only guards an EXISTING logged-in session. If the user isn't
+        // logged in (or setup isn't done), go straight to the normal start screen.
+        if (!tokenManager.isLoggedIn()) {
+            launchApp(forceLogin = false)
+            return
+        }
+
         val bm = BiometricManager.from(this)
         val canAuth = bm.canAuthenticate(
             BiometricManager.Authenticators.BIOMETRIC_STRONG or
@@ -65,32 +75,36 @@ class MainActivity : AppCompatActivity() {
             val executor = ContextCompat.getMainExecutor(this)
             val prompt = BiometricPrompt(this, executor, object : BiometricPrompt.AuthenticationCallback() {
                 override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                    launchApp()
+                    // Fingerprint OK → skip login, straight to the app.
+                    launchApp(forceLogin = false)
                 }
                 override fun onAuthenticationError(code: Int, err: CharSequence) {
-                    finish()
+                    // Cancelled / locked-out / failed → show Login (do NOT close app).
+                    launchApp(forceLogin = true)
                 }
-                override fun onAuthenticationFailed() {}
+                override fun onAuthenticationFailed() { /* wrong finger — allow retry */ }
             })
             prompt.authenticate(
                 BiometricPrompt.PromptInfo.Builder()
-                    .setTitle("SpendWise")
-                    .setSubtitle("Authenticate to access your finances")
+                    .setTitle("Unlock SpendWise")
+                    .setSubtitle("Use your fingerprint to continue")
                     .setAllowedAuthenticators(
                         BiometricManager.Authenticators.BIOMETRIC_STRONG or
                         BiometricManager.Authenticators.DEVICE_CREDENTIAL
                     ).build()
             )
         } else {
-            launchApp()
+            // No biometric available — proceed (the session is already valid).
+            launchApp(forceLogin = false)
         }
     }
 
-    private fun launchApp() {
+    private fun launchApp(forceLogin: Boolean) {
         val startRoute = when {
-            !tokenManager.setupDone -> Screen.Setup.route
+            !tokenManager.setupDone   -> Screen.Setup.route
+            forceLogin                -> Screen.Auth.route
             tokenManager.isLoggedIn() -> Screen.Home.route
-            else -> Screen.Auth.route
+            else                      -> Screen.Auth.route
         }
 
         setContent {

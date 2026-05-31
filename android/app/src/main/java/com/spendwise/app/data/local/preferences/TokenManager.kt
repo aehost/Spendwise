@@ -6,11 +6,19 @@ import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import com.spendwise.app.core.Constants
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class TokenManager @Inject constructor(@ApplicationContext private val ctx: Context) {
+
+    // Reactive session state. Flips to false the moment auth is cleared — e.g.
+    // when TokenAuthenticator can't refresh an expired token — so the UI can
+    // redirect to Login instead of getting stuck on a "couldn't connect" error.
+    private val _loggedIn = MutableStateFlow(false)
+    val loggedIn: StateFlow<Boolean> = _loggedIn
 
     private val prefs: SharedPreferences by lazy {
         val masterKey = MasterKey.Builder(ctx)
@@ -30,7 +38,10 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
 
     var accessToken: String?
         get() = prefs.getString(Constants.TOKEN_KEY, null)
-        set(v) = prefs.edit().putString(Constants.TOKEN_KEY, v).apply()
+        set(v) {
+            prefs.edit().putString(Constants.TOKEN_KEY, v).apply()
+            _loggedIn.value = (v != null && userId != null)
+        }
 
     var refreshToken: String?
         get() = prefs.getString(Constants.REFRESH_KEY, null)
@@ -38,7 +49,10 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
 
     var userId: String?
         get() = prefs.getString(Constants.USER_ID_KEY, null)
-        set(v) = prefs.edit().putString(Constants.USER_ID_KEY, v).apply()
+        set(v) {
+            prefs.edit().putString(Constants.USER_ID_KEY, v).apply()
+            _loggedIn.value = (accessToken != null && v != null)
+        }
 
     var userEmail: String?
         get() = prefs.getString(Constants.USER_EMAIL_KEY, null)
@@ -140,6 +154,9 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
 
     fun isLoggedIn(): Boolean = accessToken != null && userId != null
 
+    /** Call once at startup to seed the reactive session state from storage. */
+    fun syncLoggedInState() { _loggedIn.value = isLoggedIn() }
+
     fun clearAuth() {
         prefs.edit()
             .remove(Constants.TOKEN_KEY)
@@ -148,6 +165,7 @@ class TokenManager @Inject constructor(@ApplicationContext private val ctx: Cont
             .remove(Constants.USER_EMAIL_KEY)
             .remove(Constants.USER_NAME_KEY)
             .apply()
+        _loggedIn.value = false
     }
 
     fun clearAll() {

@@ -6,9 +6,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
@@ -74,6 +80,20 @@ fun SpendWiseNavGraph(startRoute: String) {
     val currentDest = currentBackStack?.destination
     val showBottomBar = BOTTOM_NAV_ITEMS.any { it.route == currentDest?.route }
 
+    // Auto-redirect to Login when the session is cleared (e.g. expired refresh
+    // token). Fixes the "couldn't connect" dead-end that needed a manual logout.
+    val session: SessionViewModel = hiltViewModel()
+    val loggedIn by session.loggedIn.collectAsState()
+    LaunchedEffect(loggedIn, currentDest?.route) {
+        val route = currentDest?.route
+        if (!loggedIn && route != null && route != Screen.Auth.route && route != Screen.Setup.route) {
+            navController.navigate(Screen.Auth.route) {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     Scaffold(
         bottomBar = {
             if (showBottomBar) {
@@ -105,7 +125,14 @@ fun SpendWiseNavGraph(startRoute: String) {
         }
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            NavHost(navController = navController, startDestination = startRoute) {
+            NavHost(
+                navController = navController,
+                startDestination = startRoute,
+                enterTransition = { fadeIn(tween(220)) + slideInHorizontally(tween(220)) { it / 14 } },
+                exitTransition = { fadeOut(tween(160)) },
+                popEnterTransition = { fadeIn(tween(220)) },
+                popExitTransition = { fadeOut(tween(160)) + slideOutHorizontally(tween(160)) { it / 14 } }
+            ) {
                 composable(Screen.Setup.route) {
                     SetupScreen(onDone = { navController.navigate(Screen.Auth.route) { popUpTo(Screen.Setup.route) { inclusive = true } } })
                 }
