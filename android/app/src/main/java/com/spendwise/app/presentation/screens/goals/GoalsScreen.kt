@@ -55,7 +55,7 @@ fun GoalsScreen(
         snackbarHost = { SnackbarHost(snackbarState) },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = com.spendwise.app.presentation.components.hapticClick { showAddDialog = true },
                 containerColor = Primary,
                 contentColor = Color.White,
                 shape = CircleShape

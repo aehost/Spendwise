@@ -79,7 +79,7 @@ fun CardsScreen(vm: CardsViewModel = hiltViewModel()) {
             }
         }
 
-        FloatingActionButton(onClick = vm::showAddDialog, modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp), containerColor = Primary) {
+        FloatingActionButton(onClick = com.spendwise.app.presentation.components.hapticClick(vm::showAddDialog), modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp), containerColor = Primary) {
             Icon(Icons.Filled.Add, "Add Card")
         }
 

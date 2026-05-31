@@ -79,7 +79,7 @@ fun HomeScreen(onSettings: () -> Unit, vm: HomeViewModel = hiltViewModel()) {
         // Quick-add FAB
         if (!state.isLoading) {
             FloatingActionButton(
-                onClick = { showQuickAdd = true },
+                onClick = com.spendwise.app.presentation.components.hapticClick { showQuickAdd = true },
                 containerColor = Primary,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)

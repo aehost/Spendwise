@@ -219,7 +219,7 @@ fun TransactionListScreen(vm: TransactionViewModel = hiltViewModel()) {
 
         // ── FAB ───────────────────────────────────────────────────
         FloatingActionButton(
-            onClick = { showAddSheet = true },
+            onClick = com.spendwise.app.presentation.components.hapticClick { showAddSheet = true },
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp),
             containerColor = Primary,
             contentColor = Color.White

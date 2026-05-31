@@ -24,6 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -217,6 +219,24 @@ fun SwLinearProgress(
                 .clip(RoundedCornerShape(height))
                 .background(color)
         )
+    }
+}
+
+// ── Haptic click ──────────────────────────────────────────────────
+/**
+ * Wraps an onClick with a subtle haptic tick. Permission-free and respects the
+ * user's system haptic setting. We use HAPTICS, not audio: click sounds are
+ * intrusive in a finance app used in public, whereas a tactile tick feels
+ * premium and private.
+ *
+ *   FloatingActionButton(onClick = hapticClick { showSheet = true }) { ... }
+ */
+@Composable
+fun hapticClick(onClick: () -> Unit): () -> Unit {
+    val haptics = LocalHapticFeedback.current
+    return {
+        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+        onClick()
     }
 }
 
