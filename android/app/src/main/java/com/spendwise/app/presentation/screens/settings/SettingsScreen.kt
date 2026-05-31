@@ -821,6 +821,43 @@ private fun SheetStepPassword(
     onConnect: () -> Unit
 ) {
     val isReady = appPassword.length == 16
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
+    val pwState = rememberUpdatedState(appPassword)
+
+    // Pull a 16-char App Password off the clipboard (Google shows it spaced).
+    fun clipCode(): String? {
+        val t = clipboard.getText()?.text?.replace(Regex("\\s"), "") ?: return null
+        return if (t.length == 16 && t.all { c -> c.isLetterOrDigit() }) t else null
+    }
+
+    // Open Google's App Passwords page in an in-app Chrome Custom Tab (falls
+    // back to the default browser if no Custom Tabs provider is available).
+    fun openAppPasswords() {
+        val uri = android.net.Uri.parse("https://myaccount.google.com/apppasswords")
+        runCatching {
+            androidx.browser.customtabs.CustomTabsIntent.Builder().build().launchUrl(ctx, uri)
+        }.onFailure {
+            runCatching {
+                ctx.startActivity(
+                    android.content.Intent(android.content.Intent.ACTION_VIEW, uri)
+                        .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+        }
+    }
+
+    // When the user returns from the tab with the code copied, auto-paste it.
+    DisposableEffect(lifecycleOwner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME && pwState.value.isEmpty()) {
+                clipCode()?.let { onPasswordChange(it) }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(obs)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
+    }
 
     Column(
         Modifier
@@ -894,27 +931,29 @@ private fun SheetStepPassword(
                 }
 
                 Spacer(Modifier.height(12.dp))
-                // One-tap: jump straight to Google's App Passwords page.
-                val ctx = androidx.compose.ui.platform.LocalContext.current
-                OutlinedButton(
-                    onClick = {
-                        runCatching {
-                            ctx.startActivity(
-                                android.content.Intent(
-                                    android.content.Intent.ACTION_VIEW,
-                                    android.net.Uri.parse("https://myaccount.google.com/apppasswords")
-                                ).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().height(44.dp),
+                // 1) Open Google's App Passwords page inside the app (Custom Tab).
+                Button(
+                    onClick = { openAppPasswords() },
+                    modifier = Modifier.fillMaxWidth().height(46.dp),
                     shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Primary.copy(0.5f)),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Primary)
+                    colors = ButtonDefaults.buttonColors(containerColor = Primary)
                 ) {
                     Icon(Icons.Filled.OpenInNew, null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Open Google App Passwords", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text("Open Google to create the code", fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(8.dp))
+                // 2) Paste the copied 16-char code straight into the field.
+                OutlinedButton(
+                    onClick = { clipCode()?.let { onPasswordChange(it) } },
+                    modifier = Modifier.fillMaxWidth().height(42.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+                ) {
+                    Icon(Icons.Filled.ContentPaste, null, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("Paste copied code", fontSize = 12.sp)
                 }
             }
         }
