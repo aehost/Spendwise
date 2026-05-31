@@ -1,18 +1,22 @@
 package com.spendwise.app.presentation.screens.cards
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -86,39 +90,97 @@ fun CardsScreen(vm: CardsViewModel = hiltViewModel()) {
 
 @Composable
 fun CreditCardItem(card: CreditCardDto, onDelete: (String) -> Unit) {
-    val utilPct = if (card.creditLimit > 0) (card.outstanding / card.creditLimit * 100).toInt() else 0
+    val utilPct   = if (card.creditLimit > 0) (card.outstanding / card.creditLimit * 100).toInt() else 0
     val utilColor = when { utilPct >= 80 -> ErrorColor; utilPct >= 50 -> WarningColor; else -> SuccessColor }
+    val brand     = com.spendwise.app.presentation.components.BankBrands.of(card.name)
+    var confirmDelete by remember { mutableStateOf(false) }
 
-    Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = CardBg), shape = RoundedCornerShape(16.dp)) {
-        Column(Modifier.padding(16.dp)) {
-            Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(card.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
-                    if (card.lastFour != null) {
-                        Text("•••• ${card.lastFour}", fontSize = 11.sp, color = TextMuted)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+
+        // ── The virtual card ─────────────────────────────────────
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(196.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(Brush.linearGradient(brand.gradient))
+                .border(0.5.dp, Color.White.copy(0.18f), RoundedCornerShape(20.dp))
+                .padding(20.dp)
+        ) {
+            // subtle decorative arc
+            Box(
+                Modifier.size(150.dp).align(Alignment.TopEnd)
+                    .background(Color.White.copy(0.06f), RoundedCornerShape(75.dp))
+            )
+            Column(Modifier.fillMaxSize()) {
+                // Top: bank brand + delete
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                    Column {
+                        Text(brand.label, fontSize = 18.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                        Text("CREDIT CARD", fontSize = 8.sp, color = Color.White.copy(0.65f), letterSpacing = 2.sp)
+                    }
+                    IconButton(onClick = { confirmDelete = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Filled.DeleteOutline, "Remove card", tint = Color.White.copy(0.7f), modifier = Modifier.size(18.dp))
                     }
                 }
-                Text("Due: ${card.dueDay}", fontSize = 12.sp, color = TextMuted)
-            }
-            Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Column {
-                    Text("Outstanding", fontSize = 11.sp, color = TextMuted)
-                    Text(card.outstanding.formatCurrency(), fontSize = 14.sp, fontWeight = FontWeight.Bold, color = ErrorColor)
+
+                Spacer(Modifier.height(14.dp))
+                // EMV chip
+                Box(
+                    Modifier.size(width = 42.dp, height = 30.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(Brush.linearGradient(listOf(Color(0xFFF4D67E), Color(0xFFC9A227))))
+                )
+
+                Spacer(Modifier.weight(1f))
+                // Masked number
+                Text(
+                    "••••  ••••  ••••  ${card.lastFour ?: "••••"}",
+                    fontSize = 17.sp, fontWeight = FontWeight.SemiBold, color = Color.White, letterSpacing = 2.sp
+                )
+                Spacer(Modifier.height(12.dp))
+                // Bottom: outstanding + due
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
+                    Column {
+                        Text("OUTSTANDING", fontSize = 8.sp, color = Color.White.copy(0.6f), letterSpacing = 1.sp)
+                        Text(card.outstanding.formatCurrency(), fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("DUE DAY", fontSize = 8.sp, color = Color.White.copy(0.6f), letterSpacing = 1.sp)
+                        Text("${card.dueDay}", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("Limit", fontSize = 11.sp, color = TextMuted)
-                    Text(card.creditLimit.formatCurrency(), fontSize = 14.sp, color = TextSecondary)
-                }
             }
-            Spacer(Modifier.height(8.dp))
-            LinearProgressIndicator(
-                progress = { (utilPct / 100f).coerceIn(0f, 1f) },
-                modifier = Modifier.fillMaxWidth().height(6.dp),
-                color = utilColor, trackColor = BorderColor
-            )
-            Text("$utilPct% utilized  •  Available: ${(card.creditLimit - card.outstanding).formatCurrency()}", fontSize = 11.sp, color = TextMuted, modifier = Modifier.padding(top = 4.dp))
         }
+
+        // ── Utilization strip below the card ─────────────────────
+        Spacer(Modifier.height(10.dp))
+        com.spendwise.app.presentation.components.SwLinearProgress(
+            progress   = (utilPct / 100f).coerceIn(0f, 1f),
+            height     = 6.dp,
+            color      = utilColor,
+            trackColor = BorderColor
+        )
+        Spacer(Modifier.height(4.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("$utilPct% utilized", fontSize = 11.sp, color = utilColor, fontWeight = FontWeight.Medium)
+            Text("Available ${(card.creditLimit - card.outstanding).coerceAtLeast(0.0).formatCurrency()}", fontSize = 11.sp, color = TextMuted)
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            containerColor = CardBg,
+            shape = RoundedCornerShape(20.dp),
+            title = { Text("Remove ${brand.label} card?", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp) },
+            text = { Text("This only removes it from SpendWise tracking.", color = TextSecondary, fontSize = 13.sp) },
+            confirmButton = {
+                Button(onClick = { onDelete(card.id); confirmDelete = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = ErrorColor)) { Text("Remove") }
+            },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = TextSecondary) } }
+        )
     }
 }
 
