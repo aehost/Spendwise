@@ -1131,12 +1131,28 @@ private fun BillRow(bill: BillDto) {
 @Composable
 fun TransactionRow(tx: TransactionDto) {
     val meta = CATEGORY_META[tx.categorySlug]
+    // If the merchant/payee references a known bank (salary, EMI, transfers),
+    // show that bank's brand-coloured tile + mark; otherwise the category emoji.
+    val brand = com.spendwise.app.presentation.components.BankBrands.find(tx.merchant)
     Row(Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
-                .background(if (tx.isCredit) SuccessColor.copy(0.12f) else Primary.copy(0.1f)),
-            contentAlignment = Alignment.Center
-        ) { Text(meta?.first ?: "📦", fontSize = 16.sp) }
+        if (brand != null) {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                    .background(Brush.linearGradient(brand.gradient)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    brand.mark, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold,
+                    color = Color.White, maxLines = 1
+                )
+            }
+        } else {
+            Box(
+                Modifier.size(40.dp).clip(RoundedCornerShape(12.dp))
+                    .background(if (tx.isCredit) SuccessColor.copy(0.12f) else Primary.copy(0.1f)),
+                contentAlignment = Alignment.Center
+            ) { Text(meta?.first ?: "📦", fontSize = 16.sp) }
+        }
         Spacer(Modifier.width(12.dp))
         Column(Modifier.weight(1f)) {
             Text(tx.merchant, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)

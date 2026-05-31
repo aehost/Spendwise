@@ -44,12 +44,16 @@ object BankBrands {
     // Fallback gradient for unknown banks (neutral premium slate).
     private val default = BankBrand("Card", "CARD", listOf(Color(0xFF334155), Color(0xFF1E293B)))
 
-    fun of(name: String?): BankBrand {
-        val n = name?.lowercase()?.trim() ?: return default
-        if (n.isEmpty()) return default
+    /** Always returns a brand (falls back to a neutral slate card). */
+    fun of(name: String?): BankBrand = find(name) ?: default
+
+    /** Returns a brand only when [name] references a known bank, else null. */
+    fun find(name: String?): BankBrand? {
+        val n = name?.lowercase()?.trim() ?: return null
+        if (n.isEmpty()) return null
         for ((keys, brand) in table) {
             if (keys.any { n.contains(it) }) return brand
         }
-        return default
+        return null
     }
 }
