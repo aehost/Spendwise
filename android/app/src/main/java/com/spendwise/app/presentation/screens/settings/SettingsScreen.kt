@@ -62,19 +62,19 @@ fun SettingsScreen(
     Column(Modifier.fillMaxSize().background(Background)) {
         Text(
             "Settings", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary,
-            modifier = Modifier.padding(20.dp)
+            modifier = Modifier.padding(start = 20.dp, top = 20.dp, bottom = 10.dp)
         )
 
         LazyColumn(contentPadding = PaddingValues(bottom = 40.dp)) {
 
-            // ── Profile ──────────────────────────────────────────
+            // ── Profile hero ─────────────────────────────────────
             item {
-                SettingsSection("Profile") {
-                    SettingsRow(Icons.Filled.Person, "Account", state.email ?: "Not logged in")
-                    HorizontalDivider(color = BorderColor.copy(0.3f), thickness = 0.5.dp, modifier = Modifier.padding(horizontal = 14.dp))
-                    SettingsRow(Icons.Filled.Lock, "Change Password", "Update your login password",
-                        onClick = { showPasswordDialog = true })
-                }
+                ProfileHeroCard(
+                    name             = state.name,
+                    email            = state.email,
+                    onChangePassword = { showPasswordDialog = true }
+                )
+                Spacer(Modifier.height(10.dp))
             }
 
             // ── Salary ───────────────────────────────────────────
@@ -1108,6 +1108,72 @@ private fun StepDots(current: Int, total: Int) {
 // ─────────────────────────────────────────────────────────────────
 // Reusable Settings components — unchanged public API
 // ─────────────────────────────────────────────────────────────────
+
+// ── Profile hero — premium identity card at the top of Settings ──
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ProfileHeroCard(name: String?, email: String?, onChangePassword: () -> Unit) {
+    val initials = (
+        name?.trim()?.split(Regex("\\s+"))
+            ?.mapNotNull { it.firstOrNull()?.uppercaseChar() }
+            ?.take(2)?.joinToString("")
+            ?.takeIf { it.isNotBlank() }
+            ?: email?.takeIf { it.isNotBlank() }?.take(2)?.uppercase()
+            ?: "U"
+    )
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Brush.linearGradient(GradientHero))
+            .border(0.5.dp, Primary.copy(0.30f), RoundedCornerShape(24.dp))
+            .padding(20.dp)
+    ) {
+        Column {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier
+                        .size(60.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(0.14f))
+                        .border(1.dp, Color.White.copy(0.25f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(initials, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = Color.White)
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        name?.takeIf { it.isNotBlank() } ?: "SpendWise User",
+                        fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White,
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    Text(
+                        email ?: "Not logged in",
+                        fontSize = 12.sp, color = Color.White.copy(0.72f),
+                        maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+            Surface(
+                onClick = onChangePassword,
+                shape = RoundedCornerShape(12.dp),
+                color = Color.White.copy(0.14f)
+            ) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.Lock, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(7.dp))
+                    Text("Change Password", fontSize = 12.sp, color = Color.White, fontWeight = FontWeight.SemiBold)
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun SettingsSection(title: String, content: @Composable () -> Unit) {
