@@ -1,6 +1,18 @@
 package com.spendwise.app.presentation.components
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * Brand identity for a bank, used to render recognizable, premium card
@@ -55,5 +67,26 @@ object BankBrands {
             if (keys.any { n.contains(it) }) return brand
         }
         return null
+    }
+
+    /** Total number of banks recognized (for "+N more" labels). */
+    val supportedCount: Int get() = table.size
+
+    /** A curated set of well-known brands for showcase chip rows. */
+    val showcase: List<BankBrand> = listOf(
+        of("hdfc"), of("icici"), of("axis"), of("sbi"), of("kotak"), of("yes bank")
+    )
+}
+
+/** Small brand-coloured pill used in showcase rows (e.g. "reads from" chips). */
+@Composable
+fun BankBrandChip(brand: BankBrand, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(Brush.linearGradient(brand.gradient))
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+    ) {
+        Text(brand.mark, fontSize = 9.sp, fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1)
     }
 }

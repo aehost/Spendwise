@@ -362,6 +362,7 @@ private fun GmailEmptyStateCard(
 // Gmail Connected Card — rich account list
 // ─────────────────────────────────────────────────────────────────
 
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 private fun GmailConnectedCard(
     accounts: List<com.spendwise.app.data.remote.dto.GmailAccountDto>,
@@ -444,6 +445,37 @@ private fun GmailConnectedCard(
                         HorizontalDivider(
                             color = BorderColor.copy(0.3f),
                             modifier = Modifier.padding(start = 52.dp, top = 6.dp, bottom = 6.dp)
+                        )
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+                HorizontalDivider(color = BorderColor.copy(0.4f))
+                Spacer(Modifier.height(12.dp))
+
+                // "Reads bank emails from" — brand-chip showcase
+                Text(
+                    "READS BANK EMAILS FROM",
+                    fontSize = 9.sp, color = TextMuted, fontWeight = FontWeight.Bold, letterSpacing = 1.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    com.spendwise.app.presentation.components.BankBrands.showcase.forEach { b ->
+                        com.spendwise.app.presentation.components.BankBrandChip(b)
+                    }
+                    Box(
+                        Modifier.clip(RoundedCornerShape(8.dp))
+                            .background(CardBg2)
+                            .border(0.5.dp, BorderColor, RoundedCornerShape(8.dp))
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            "+${com.spendwise.app.presentation.components.BankBrands.supportedCount - 6} more",
+                            fontSize = 9.sp, color = TextSecondary, fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
