@@ -92,22 +92,29 @@ class SettingsViewModel @Inject constructor(
             _state.value = _state.value.copy(gmailError = "Enter a valid Gmail address")
             return
         }
-        if (appPassword.isBlank() || appPassword.length < 8) {
-            _state.value = _state.value.copy(gmailError = "Enter a valid App Password (16 characters from Google Account settings)")
+        // Google App Passwords are exactly 16 letters; users often paste them
+        // with the spaces Google displays ("abcd efgh ijkl mnop") — strip those.
+        val pw = appPassword.replace(Regex("\\s"), "")
+        if (pw.length != 16) {
+            _state.value = _state.value.copy(
+                gmailError = "That doesn't look like an App Password. Use the 16-letter code from " +
+                    "myaccount.google.com/apppasswords — not your normal Gmail password."
+            )
             return
         }
+        val addr = email.trim().lowercase()
         viewModelScope.launch {
             _state.value = _state.value.copy(gmailLoading = true, gmailError = null)
             // Run IMAP test on IO thread; update state back on Main thread
             val result = withContext(Dispatchers.IO) {
                 runCatching {
                     GmailImapClient.fetchBankEmailsSince(
-                        email.trim(), appPassword.trim(),
+                        addr, pw,
                         System.currentTimeMillis() - 3600_000L
                     )
                     val accounts = GmailImapWorker.readAccounts(tokenManager).toMutableList()
-                    if (accounts.none { it.email == email.trim().lowercase() }) {
-                        accounts.add(GmailImapAccount(email.trim().lowercase(), appPassword.trim(), 0L))
+                    if (accounts.none { it.email == addr }) {
+                        accounts.add(GmailImapAccount(addr, pw, 0L))
                         GmailImapWorker.writeAccounts(tokenManager, accounts)
                     }
                     accounts
@@ -123,6 +130,10 @@ class SettingsViewModel @Inject constructor(
             }.onFailure { e ->
                 val raw = e.message ?: ""
                 val msg = when {
+                    raw.contains("IMAP", true) && (raw.contains("disabled", true) ||
+                        raw.contains("not enabled", true) || raw.contains("web browser", true)) ->
+                        "IMAP access is turned off for this Gmail. Enable it:\n" +
+                        "Gmail → Settings → \"Forwarding and POP/IMAP\" → Enable IMAP, then try again."
                     raw.contains("Authentication", true) || raw.contains("AUTHENTICATE", true) ||
                         raw.contains("login", true) || raw.contains("credential", true) || raw.contains("invalid", true) ->
                         "Sign-in failed. Gmail needs a 16-character App Password — not your normal password.\n\n" +
