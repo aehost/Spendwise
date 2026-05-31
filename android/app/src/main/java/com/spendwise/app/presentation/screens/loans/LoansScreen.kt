@@ -11,6 +11,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -65,8 +68,18 @@ fun LoansScreen(vm: LoansViewModel = hiltViewModel()) {
 fun LoanItem(loan: LoanDto, onDelete: (String) -> Unit) {
     Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), colors = CardDefaults.cardColors(containerColor = CardBg), shape = RoundedCornerShape(16.dp)) {
         Column(Modifier.padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text(loan.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                // Brand tile when the loan references a bank, else a neutral EMI tile.
+                val brand = com.spendwise.app.presentation.components.BankBrands.find(loan.name)
+                Box(
+                    Modifier.size(38.dp).clip(RoundedCornerShape(10.dp))
+                        .background(if (brand != null) Brush.linearGradient(brand.gradient) else Brush.linearGradient(GradientRose)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(brand?.mark ?: "EMI", fontSize = 8.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, maxLines = 1)
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(loan.name, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = TextPrimary, modifier = Modifier.weight(1f))
                 Text("${loan.interestRate}% p.a.", fontSize = 12.sp, color = ErrorColor, fontWeight = FontWeight.Medium)
             }
             Spacer(Modifier.height(8.dp))

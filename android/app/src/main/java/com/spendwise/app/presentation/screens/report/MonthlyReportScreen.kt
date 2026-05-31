@@ -102,6 +102,10 @@ fun MonthlyReportScreen(
                 items(report.topMerchants.take(5)) { m ->
                     Card(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 3.dp), colors = CardDefaults.cardColors(containerColor = CardBg)) {
                         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            com.spendwise.app.presentation.components.BankBrands.find(m.merchant)?.let { brand ->
+                                com.spendwise.app.presentation.components.BankBrandChip(brand)
+                                Spacer(Modifier.width(10.dp))
+                            }
                             Column(Modifier.weight(1f)) {
                                 Text(m.merchant, fontSize = 14.sp, fontWeight = FontWeight.Medium, color = TextPrimary)
                                 Text("${m.visitCount} visits • avg ${m.avgAmount.formatCurrency()}", fontSize = 12.sp, color = TextMuted)

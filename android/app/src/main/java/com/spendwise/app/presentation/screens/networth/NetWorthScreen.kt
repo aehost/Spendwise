@@ -316,14 +316,27 @@ private fun TotalRow(label: String, amount: Double, color: Color) {
     }
 }
 
+/** Leading bank-brand tile; renders nothing when [name] isn't a known bank. */
+@Composable
+private fun BrandLeading(name: String) {
+    val brand = com.spendwise.app.presentation.components.BankBrands.find(name) ?: return
+    Box(
+        Modifier.size(30.dp).clip(RoundedCornerShape(8.dp)).background(Brush.linearGradient(brand.gradient)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(brand.mark, fontSize = 7.sp, fontWeight = FontWeight.ExtraBold, color = Color.White, maxLines = 1)
+    }
+    Spacer(Modifier.width(10.dp))
+}
+
 @Composable
 private fun BankAccountRow(account: BankAccountDto) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        BrandLeading(account.name)
+        Column(Modifier.weight(1f)) {
             Text(account.name, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             if (!account.lastFour.isNullOrBlank()) {
                 Text("••••${account.lastFour}", fontSize = 11.sp, color = TextMuted)
@@ -352,10 +365,10 @@ private fun InvestmentRow(inv: InvestmentDto) {
 private fun CreditCardRow(cc: CreditCardDto) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        BrandLeading(cc.name)
+        Column(Modifier.weight(1f)) {
             Text(cc.name, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             if (!cc.lastFour.isNullOrBlank()) {
                 Text("••••${cc.lastFour}", fontSize = 11.sp, color = TextMuted)
@@ -369,10 +382,10 @@ private fun CreditCardRow(cc: CreditCardDto) {
 private fun LoanRow(loan: LoanDto) {
     Row(
         Modifier.fillMaxWidth().padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment     = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Column {
+        BrandLeading(loan.name)
+        Column(Modifier.weight(1f)) {
             Text(loan.name, fontSize = 13.sp, color = TextPrimary, fontWeight = FontWeight.Medium)
             Text("${loan.interestRate}% • ${loan.monthsRemaining}mo left", fontSize = 11.sp, color = TextMuted)
         }
